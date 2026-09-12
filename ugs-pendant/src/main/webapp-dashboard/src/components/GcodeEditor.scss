@@ -46,6 +46,20 @@
     cursor: pointer;
     padding: 0;
   }
+
+  .gcodeEditorFontSize {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+
+    .gcodeEditorFontSizeValue {
+      color: #9aa0a4;
+      font-size: 0.8rem;
+      min-width: 3.2em;
+      text-align: center;
+    }
+  }
 }
 
 .gcodeEditorContent {

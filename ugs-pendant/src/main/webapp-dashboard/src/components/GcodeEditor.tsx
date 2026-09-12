@@ -5,9 +5,10 @@ import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { Button, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFloppyDisk, faFileExport, faForward } from "@fortawesome/free-solid-svg-icons";
+import { faFloppyDisk, faFileExport, faForward, faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
+import { useEditorFontSize } from "../hooks/useEditorFontSize";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
 import { runFromLine } from "../services/files";
 import { uiActions } from "../store/uiSlice";
@@ -16,9 +17,11 @@ import SaveAsModal from "./SaveAsModal";
 import ConfirmDialog from "./ConfirmDialog";
 import "./GcodeEditor.scss";
 
+// Font-size is deliberately not set here - it's owned entirely by the
+// fontSizeCompartment below (see useEditorFontSize's own comment on why).
 const editorTheme = EditorView.theme(
   {
-    "&": { height: "100%", fontSize: "0.9rem", backgroundColor: "#111213" },
+    "&": { height: "100%", backgroundColor: "#111213" },
     ".cm-content": { fontFamily: "monospace" },
     ".cm-gutters": { backgroundColor: "#111213", color: "#5b6062", border: "none" },
     ".cm-activeLine": { backgroundColor: "#1c1e1f" },
@@ -121,6 +124,11 @@ const GcodeEditor = () => {
   // whole editor (that would also blow away undo history/cursor position) - a
   // Compartment lets it be reconfigured in place from the effect below.
   const editableCompartmentRef = useRef(new Compartment());
+  // Same Compartment pattern, for the font-size control below - independent
+  // of the whole-page Zoom (see useEditorFontSize's own comment).
+  const fontSizeCompartmentRef = useRef(new Compartment());
+  const { fontSize, increase: increaseFontSize, decrease: decreaseFontSize, canIncrease, canDecrease } =
+    useEditorFontSize();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -164,6 +172,7 @@ const GcodeEditor = () => {
               gcodeSyntaxHighlighting,
               editorTheme,
               editableCompartmentRef.current.of(EditorView.editable.of(isEditable)),
+              fontSizeCompartmentRef.current.of(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
               dimThroughField,
               EditorView.updateListener.of((update) => {
                 if (update.docChanged) setIsDirty(true);
@@ -203,6 +212,12 @@ const GcodeEditor = () => {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: setDimThroughLine.of(dimThroughLine) });
   }, [dimThroughLine]);
+
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: fontSizeCompartmentRef.current.reconfigure(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
+    });
+  }, [fontSize]);
 
   const handleSave = () => {
     if (!viewRef.current || !fileName) return;
@@ -304,6 +319,16 @@ const GcodeEditor = () => {
         >
           <FontAwesomeIcon icon={faFloppyDisk} /> Save {isSaving && <Spinner size="sm" />}
         </Button>
+
+        <div className="gcodeEditorFontSize" title="Gcode text size - independent of the page Zoom, always rendered at its actual size">
+          <Button variant="secondary" size="sm" disabled={!canDecrease} onClick={decreaseFontSize} title="Smaller text">
+            <FontAwesomeIcon icon={faMinus} />
+          </Button>
+          <span className="gcodeEditorFontSizeValue">{fontSize}px</span>
+          <Button variant="secondary" size="sm" disabled={!canIncrease} onClick={increaseFontSize} title="Larger text">
+            <FontAwesomeIcon icon={faPlus} />
+          </Button>
+        </div>
       </div>
 
       <div className="gcodeEditorContent">
