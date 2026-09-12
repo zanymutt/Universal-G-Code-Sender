@@ -4,6 +4,8 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-12
 
+- On narrow/portrait screens (tested against an iPad-portrait-sized viewport), replaced the old side-by-side layout collapsing into a squeezed, barely-usable stack with a proper phone/tablet-style tab bar (Position / Program / Machine) - each page now gets the screen's full height instead of a fraction of it.
+- Added an independent gcode text size control (+/-) in the Edit tab, separate from the page's overall Zoom - lets the editor stay at a comfortably readable size even when the rest of the UI is zoomed smaller to fit a given screen.
 - Fixed the new modal status row (WCS dropdown + G/M code chips) not showing anything but the WCS dropdown's fallback and tool number right after connecting, only filling in once a work offset was changed or the page was reloaded - the very first status fetch could race the controller's own connection handshake.
 - Added a work offset (WCS) dropdown next to the coordinate display, and a row of chips showing the rest of the active gcode modal state (motion mode, units, distance/feed mode, plane, spindle mode, tool number) - similar to what FluidNC's own web UI shows, restyled to this dashboard's theme.
 - Fixed the Macros/Probe tabs, the macro editor, and both gcode editors falling back to a plain white scrollbar instead of matching the rest of the dark dashboard - most noticeable in Split mode.
