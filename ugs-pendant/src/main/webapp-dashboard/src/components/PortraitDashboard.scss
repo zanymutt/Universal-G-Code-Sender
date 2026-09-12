@@ -1,0 +1,71 @@
+@import "../_scrollbar";
+
+.portraitDashboard {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.portraitDashboardPage {
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+
+  &[hidden] {
+    display: none;
+  }
+}
+
+// Program (CenterPanel) and Machine (RightRail) already manage their own
+// padding/scrolling exactly as they do in the landscape layout - only
+// Position needs it added here, the same treatment .dashboardLeft gives it
+// there.
+.portraitDashboardPosition {
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  @include darkScrollbar;
+}
+
+.portraitDashboardJog {
+  padding-top: 10px;
+  border-top: 1px solid #2f3132;
+}
+
+.portraitTabBar {
+  flex: 0 0 auto;
+  display: flex;
+  border-top: 1px solid #2f3132;
+  background-color: #1c1e1f;
+  // Clears the home-bar/gesture-nav area on a phone/tablet without a
+  // physical bottom bezel (iPad included) - a no-op everywhere else.
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.portraitTabBarButton {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  color: #8a8f92;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  svg {
+    font-size: 1.15rem;
+  }
+
+  &.active {
+    color: #4ade80;
+  }
+}

@@ -66,20 +66,3 @@
   letter-spacing: 0.05em;
   margin-bottom: 8px;
 }
-
-// Below this, side-by-side rails no longer fit a touchscreen comfortably;
-// stack everything and let the page scroll instead of clipping content.
-@media (max-width: 900px) {
-  .dashboardBody {
-    grid-template-columns: 1fr;
-    overflow: auto;
-  }
-
-  .dashboardCenter {
-    min-height: 320px;
-  }
-
-  .dashboardRight {
-    min-height: 320px;
-  }
-}
