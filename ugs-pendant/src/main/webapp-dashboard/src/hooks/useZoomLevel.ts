@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 const STORAGE_KEY = "ugs-dashboard-zoom";
 const MIN_ZOOM = 70;
 const MAX_ZOOM = 150;
-const STEP = 10;
+const STEP = 5;
 const DEFAULT_ZOOM = 100;
 
 function readStoredZoom(): number {
