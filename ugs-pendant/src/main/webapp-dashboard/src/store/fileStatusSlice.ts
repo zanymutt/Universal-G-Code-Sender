@@ -7,7 +7,19 @@ export const fetchFileStatus = createAsyncThunk(
   getFileStatus
 );
 
-const initialState: FileStatus = {
+// socketMiddleware dispatches fetchFileStatus() on every single CommandEvent
+// (not just periodically) - during a fast job's final lines, commands can
+// complete faster than a single request's round trip, so multiple GETs end
+// up in flight at once with no guarantee they resolve in the order they were
+// sent. Without latestRequestId below, whichever happened to resolve *last*
+// would win regardless of which was actually the most recent line - GcodeEditor's
+// scroll-to-current-line and dim-through-line both trust this value completely,
+// so an out-of-order response could show (or scroll to) a stale line, or skip
+// straight past the true final line to IDLE without ever reflecting it,
+// leaving the last scroll correction uncorrected.
+type FileStatusState = FileStatus & { latestRequestId: string | null };
+
+const initialState: FileStatusState = {
   fileName: "",
   rowCount: 0,
   completedRowCount: 0,
@@ -15,6 +27,7 @@ const initialState: FileStatus = {
   sendDuration: 0,
   sendRemainingDuration: 0,
   lastCompletedLineNumber: -1,
+  latestRequestId: null,
 };
 
 const statusSlice = createSlice({
@@ -32,14 +45,20 @@ const statusSlice = createSlice({
     },
   },
   extraReducers(builder) {
-    builder.addCase(fetchFileStatus.pending, (state) => {
-      return state;
+    builder.addCase(fetchFileStatus.pending, (state, action) => {
+      state.latestRequestId = action.meta.requestId;
     });
-    builder.addCase(fetchFileStatus.fulfilled, (_state, action) => {
-      return action.payload;
+    builder.addCase(fetchFileStatus.fulfilled, (state, action) => {
+      // A response from a request that's no longer the latest one dispatched
+      // - some newer request (possibly already resolved, possibly still in
+      // flight) supersedes it, so applying this one now would mean going
+      // *backward*. Silently ignored rather than reflected, however briefly.
+      if (action.meta.requestId !== state.latestRequestId) return;
+      return { ...action.payload, latestRequestId: state.latestRequestId };
     });
-    builder.addCase(fetchFileStatus.rejected, () => {
-      return initialState;
+    builder.addCase(fetchFileStatus.rejected, (state, action) => {
+      if (action.meta.requestId !== state.latestRequestId) return;
+      return { ...initialState, latestRequestId: state.latestRequestId };
     });
   },
 });
