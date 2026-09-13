@@ -16,11 +16,14 @@
 $modalStatusHeight: 30px;
 
 .modalStatusWcs {
-  // Equal-share flex-grow (same pattern as StepSize/FeedRate's segmented
-  // rows) instead of content-sized, so the dropdown and the chips after it
-  // stretch to use the row's full width instead of leaving it packed to
-  // the left with empty space on the right.
-  flex: 1 1 0;
+  // A bigger flex-grow share than the read-only chips (1.4 vs 1, same base
+  // pattern as StepSize/FeedRate's segmented rows otherwise) - this is the
+  // one item in the row that needs room for both a label *and* an icon, so
+  // an equal share left it too tight to fit "G54" once the caret was added
+  // (confirmed: the label was squeezed all the way down to 0 width at some
+  // window sizes). The chips giving up a few px each is unnoticeable next
+  // to their own short 2-3 character codes.
+  flex: 1.7 1 0;
   min-width: 0;
 
   // The box styling (padding/border/background) lives on this wrapper -
@@ -45,7 +48,14 @@ $modalStatusHeight: 30px;
   background-color: #232526;
   border: 1px solid rgba(74, 222, 128, 0.35);
   border-radius: 4px;
-  padding: 0 8px;
+  padding: 0 4px;
+  // Belt and suspenders: whatever the toggle's own content does, it must
+  // never visually spill past this box into the next chip. Confirmed that's
+  // exactly what happened without this - a device narrow enough that "G54"
+  // plus the caret icon couldn't both fit their natural size overflowed the
+  // button (and this wrapper) rather than shrinking, since flex children
+  // default to a min-width based on their own content unless told otherwise.
+  overflow: hidden;
 
   &:has(.dropdown-toggle:hover),
   &:focus-within {
@@ -67,18 +77,49 @@ $modalStatusHeight: 30px;
     background-color: transparent;
     border: none;
     padding: 0;
+    // Matches .modalStatusChip's own font-size (was 0.85rem) - a little
+    // extra breathing room for the caret alongside it, and no reason for
+    // this one to run larger than the read-only chips next to it anyway.
     color: #4ade80;
     font-weight: 700;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+
+    .modalStatusWcsLabel {
+      // Deliberately NOT min-width: 0 + overflow: hidden here (text-overflow:
+      // ellipsis needs the latter) - confirmed that combination makes this
+      // flex item render well under its own content width even when the row
+      // has plenty of room to spare (a genuine engine quirk, isolated by
+      // toggling each property alone vs. together), which is what was
+      // squeezing "G54" down to an unreadable sliver. The wrapper's own
+      // overflow: hidden above is still there as the actual safety net - if
+      // this ever doesn't fit, it clips at the box edge (no ellipsis, but
+      // also no bleeding into the next chip) rather than growing the button.
+      white-space: nowrap;
+    }
 
     .modalStatusWcsCaret {
       // A real chevron icon instead of the previous small unicode glyph -
       // reads as "this opens a menu" at a glance rather than blending into
       // the panel, and its own muted (non-green) color further sets it
-      // apart from the "G54" label next to it.
+      // apart from the "G54" label next to it. Pushed to the far right by
+      // the label's own margin-right: auto, rather than justify-content:
+      // space-between on the button - that put equal trust in both
+      // children never overflowing, when only the label (never more than
+      // "G59.1") should ever need to give up space.
+      //
+      // Explicit width/height, not font-size: this project doesn't bundle
+      // FontAwesome's own base CSS (the .svg-inline--fa rules that size an
+      // icon as an em box off its font-size), so a bare font-size here did
+      // nothing and the icon rendered at the SVG's unconstrained default
+      // (~16px) - large enough, in this tight a box, to squeeze the label
+      // next to it down to 0 width. Confirmed via computed styles that
+      // .modalStatusWcsCheck (the dropdown menu's checkmark) has the same
+      // gap, just not visibly broken there since that menu has room to
+      // spare - not fixed here since it's not user-visible as a bug.
+      width: 7px;
+      height: 7px;
+      margin-left: 3px;
       color: #9aa0a6;
-      font-size: 0.65rem;
-      margin-left: 6px;
       flex-shrink: 0;
     }
 
