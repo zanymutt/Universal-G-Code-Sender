@@ -8,6 +8,9 @@ type Props = {
   confirmVariant?: string;
   onConfirm: () => void;
   onCancel: () => void;
+  // Every other caller wants the default muted gray - only set for the one
+  // caller that asked for it (GcodeEditor's unsaved-changes prompt).
+  cancelVariant?: string;
   // An optional middle option, between Cancel and Confirm, for the rare
   // three-way choice (e.g. GcodeEditor's unsaved-changes-before-run prompt:
   // Cancel / Save / Save and run) - both need to be given together, or
@@ -28,6 +31,7 @@ const ConfirmDialog = ({
   confirmVariant,
   onConfirm,
   onCancel,
+  cancelVariant,
   secondaryLabel,
   secondaryVariant,
   onSecondary,
@@ -43,7 +47,7 @@ const ConfirmDialog = ({
           affecting the single-line messages every other caller passes */}
       <Modal.Body style={{ whiteSpace: "pre-line" }}>{message}</Modal.Body>
       <Modal.Footer>
-        <Button variant="secondary" onClick={onCancel} disabled={actionsDisabled}>
+        <Button variant={cancelVariant ?? "secondary"} onClick={onCancel} disabled={actionsDisabled}>
           Cancel
         </Button>
         {secondaryLabel && onSecondary && (

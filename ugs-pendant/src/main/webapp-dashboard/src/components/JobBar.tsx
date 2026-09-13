@@ -120,10 +120,12 @@ const JobBar = () => {
           (unsavedSaveError ? `\n\n${unsavedSaveError}` : "")
         }
         onCancel={() => setShowUnsavedConfirm(false)}
+        cancelVariant="danger"
         secondaryLabel="Save"
+        secondaryVariant="primary"
         onSecondary={handleSaveOnly}
         confirmLabel="Save and run"
-        confirmVariant="success"
+        confirmVariant="primary"
         onConfirm={handleSaveAndRun}
         actionsDisabled={isSavingBeforeRun}
       />
