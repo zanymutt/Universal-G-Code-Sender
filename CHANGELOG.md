@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-12
 
+- Fixed the gcode text size control not actually updating the macro editor's gcode field until it happened to remount - it now updates immediately, matching the main editor.
 - Added a separate text size control (+/-) for the console, independent of the gcode editor's - the console header next to Verbose.
 - The gcode text size control now also applies to the macro editor's gcode field, not just the main Edit tab.
 - Changed the page Zoom's step from 10% to 5%, for finer control over how much of the screen the dashboard fills.
