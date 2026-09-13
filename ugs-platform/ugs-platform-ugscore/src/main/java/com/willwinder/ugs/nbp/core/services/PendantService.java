@@ -27,8 +27,12 @@ import com.willwinder.universalgcodesender.utils.Settings;
 import org.openide.util.lookup.ServiceProvider;
 
 import java.awt.Desktop;
+import java.io.IOException;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.Locale;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -62,20 +66,85 @@ public class PendantService {
     }
 
     /**
-     * Opens the touchscreen dashboard in the system's default browser, pointed at this same
-     * machine (not one of the LAN URLs from {@link PendantUI#getUrlList()}, which deliberately
-     * excludes the loopback address since those are meant for other devices on the network) -
-     * lets a kiosk/touchscreen setup launch straight into the dashboard instead of requiring a
-     * second, manual "open the browser and type the address" step every time.
+     * Opens the touchscreen dashboard in a browser, pointed at this same machine (not one of the
+     * LAN URLs from {@link PendantUI#getUrlList()}, which deliberately excludes the loopback
+     * address since those are meant for other devices on the network) - lets a kiosk/touchscreen
+     * setup launch straight into the dashboard instead of requiring a second, manual "open the
+     * browser and type the address" step every time.
      */
     private void openDashboardInBrowser() {
+        String url = "http://localhost:" + getPort() + PendantUI.DASHBOARD_CONTEXT_PATH;
+
+        if (backend.getSettings().isOpenDashboardInAppMode() && launchChromiumAppWindow(url)) {
+            return;
+        }
+
+        openInDefaultBrowser(url);
+    }
+
+    /**
+     * Tries each known Chrome/Edge install location for the current OS, in order, until one
+     * launches successfully in "app mode" - a window with no address bar or tabs (unlike
+     * {@link Desktop#browse}, which always opens a normal tab in whatever the default browser
+     * is). This is a Chrome-specific command-line flag, not a web standard, so there's no
+     * equivalent for Firefox/Safari - {@link #openInDefaultBrowser} is always the fallback if no
+     * Chromium browser is found.
+     *
+     * @return true if a browser process was actually started
+     */
+    private boolean launchChromiumAppWindow(String url) {
+        for (String command : chromiumCommandsForCurrentOs()) {
+            try {
+                new ProcessBuilder(command, "--app=" + url).start();
+                return true;
+            } catch (IOException e) {
+                LOGGER.finer(() -> "Couldn't launch " + command + " in app mode, trying the next candidate");
+            }
+        }
+
+        LOGGER.warning("No Chrome/Edge install found for app-mode launch - falling back to the default browser");
+        return false;
+    }
+
+    private List<String> chromiumCommandsForCurrentOs() {
+        List<String> candidates = new ArrayList<>();
+        String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+
+        if (os.contains("win")) {
+            addIfEnvSet(candidates, "ProgramFiles", "\\Google\\Chrome\\Application\\chrome.exe");
+            addIfEnvSet(candidates, "ProgramFiles(x86)", "\\Google\\Chrome\\Application\\chrome.exe");
+            addIfEnvSet(candidates, "LocalAppData", "\\Google\\Chrome\\Application\\chrome.exe");
+            addIfEnvSet(candidates, "ProgramFiles(x86)", "\\Microsoft\\Edge\\Application\\msedge.exe");
+            addIfEnvSet(candidates, "ProgramFiles", "\\Microsoft\\Edge\\Application\\msedge.exe");
+        } else if (os.contains("mac")) {
+            candidates.add("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome");
+            candidates.add("/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge");
+        } else {
+            candidates.add("google-chrome-stable");
+            candidates.add("google-chrome");
+            candidates.add("chromium-browser");
+            candidates.add("chromium");
+            candidates.add("microsoft-edge-stable");
+            candidates.add("microsoft-edge");
+        }
+
+        return candidates;
+    }
+
+    private void addIfEnvSet(List<String> candidates, String envVar, String suffix) {
+        String base = System.getenv(envVar);
+        if (base != null) {
+            candidates.add(base + suffix);
+        }
+    }
+
+    private void openInDefaultBrowser(String url) {
         if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             LOGGER.warning("Can't auto-open the dashboard in a browser - not supported on this platform");
             return;
         }
 
         try {
-            String url = "http://localhost:" + getPort() + PendantUI.DASHBOARD_CONTEXT_PATH;
             Desktop.getDesktop().browse(new URI(url));
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Could not auto-open the dashboard in a browser", e);

@@ -94,6 +94,7 @@ public class Settings {
     private boolean autoStartPendant = false;
     private int pendantPort = 8080;
     private boolean autoOpenDashboardInBrowser = false;
+    private boolean openDashboardInAppMode = false;
 
     private final AutoLevelSettings autoLevelSettings = new AutoLevelSettings();
     private final ProbeSettings probeSettings = new ProbeSettings();
@@ -590,6 +591,15 @@ public class Settings {
 
     public void setAutoOpenDashboardInBrowser(boolean autoOpenDashboardInBrowser) {
         this.autoOpenDashboardInBrowser = autoOpenDashboardInBrowser;
+        changed();
+    }
+
+    public boolean isOpenDashboardInAppMode() {
+        return openDashboardInAppMode;
+    }
+
+    public void setOpenDashboardInAppMode(boolean openDashboardInAppMode) {
+        this.openDashboardInAppMode = openDashboardInAppMode;
         changed();
     }
 
