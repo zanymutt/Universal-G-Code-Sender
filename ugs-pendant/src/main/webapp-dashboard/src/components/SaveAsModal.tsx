@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button, ButtonGroup, Form, Modal, Spinner, ToggleButton } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
-import { saveToDevice, supportsSaveFilePicker } from "../services/download";
+import { isLocalAccess, saveToDevice, supportsSaveFilePicker } from "../services/download";
 
 type SaveMode = "workspace" | "device";
 
@@ -21,6 +21,10 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
   const [error, setError] = useState<string | null>(null);
   const workspaceDirectory = useAppSelector((state) => state.settings.workspaceDirectory);
   const hasFilePicker = supportsSaveFilePicker();
+  // Only the literal localhost/loopback address counts - see isLocalAccess's
+  // own comment. "device" is never reachable as a mode at all in that case
+  // (the toggle offering it isn't rendered below), not just hidden once picked.
+  const canSaveToDevice = isLocalAccess();
 
   const handleSave = () => {
     if (!filename.trim() || isSaving) return;
@@ -28,7 +32,7 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
     setError(null);
 
     const result =
-      mode === "device"
+      mode === "device" && canSaveToDevice
         ? saveToDevice(filename.trim(), getContent())
         : onSaveToWorkspace(filename.trim()).then(() => true);
 
@@ -46,30 +50,37 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
         <Modal.Title>Save as</Modal.Title>
       </Modal.Header>
       <Modal.Body>
-        <ButtonGroup className="mb-2 w-100">
-          <ToggleButton
-            id="save-as-mode-workspace"
-            type="radio"
-            variant="outline-secondary"
-            name="save-as-mode"
-            value="workspace"
-            checked={mode === "workspace"}
-            onChange={() => setMode("workspace")}
-          >
-            Save to UGS
-          </ToggleButton>
-          <ToggleButton
-            id="save-as-mode-device"
-            type="radio"
-            variant="outline-secondary"
-            name="save-as-mode"
-            value="device"
-            checked={mode === "device"}
-            onChange={() => setMode("device")}
-          >
-            Save to this device
-          </ToggleButton>
-        </ButtonGroup>
+        {/* Viewed from a different device than the one running UGS (the
+            normal case for this dashboard), "save to this device" can't be
+            offered cleanly - see isLocalAccess's own comment - so the choice
+            itself is skipped rather than showing an option that's liable to
+            confuse or fail once picked. */}
+        {canSaveToDevice && (
+          <ButtonGroup className="mb-2 w-100">
+            <ToggleButton
+              id="save-as-mode-workspace"
+              type="radio"
+              variant="outline-secondary"
+              name="save-as-mode"
+              value="workspace"
+              checked={mode === "workspace"}
+              onChange={() => setMode("workspace")}
+            >
+              Save to UGS
+            </ToggleButton>
+            <ToggleButton
+              id="save-as-mode-device"
+              type="radio"
+              variant="outline-secondary"
+              name="save-as-mode"
+              value="device"
+              checked={mode === "device"}
+              onChange={() => setMode("device")}
+            >
+              Save to this device
+            </ToggleButton>
+          </ButtonGroup>
+        )}
 
         <Form.Control
           type="text"
