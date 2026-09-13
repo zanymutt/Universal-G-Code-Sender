@@ -73,3 +73,53 @@
     max-width: 100%;
   }
 }
+
+// Bootstrap's modal defaults to a white dialog on every theme, same problem
+// as .form-control above - every dialog in this app (Open, Save as, confirm
+// prompts, the alarm popup) was rendering as a bright white card against an
+// otherwise all-dark UI. Themed globally here rather than per-component
+// since react-bootstrap portals every Modal to the end of <body>, outside
+// any component's own themed wrapper, and every modal in the app wants the
+// same treatment anyway.
+.modal-content {
+  background-color: #1c1e1f;
+  border: 1px solid #2f3132;
+  color: #e5e7eb;
+}
+
+.modal-header {
+  border-bottom-color: #2f3132;
+
+  .btn-close {
+    // Bootstrap's close icon is a dark SVG meant for a light header -
+    // inverted so it's visible against this dark one.
+    filter: invert(1) grayscale(1) brightness(1.5);
+  }
+}
+
+.modal-footer {
+  border-top-color: #2f3132;
+}
+
+.modal-title {
+  color: #e5e7eb;
+}
+
+// The Open dialog's workspace file list, styled to match everywhere else in
+// the app that shows a tappable list (e.g. the macro list).
+.list-group-item {
+  background-color: #1c1e1f;
+  border-color: #2f3132;
+  color: #e5e7eb;
+
+  &.list-group-item-action:hover,
+  &.list-group-item-action:focus {
+    background-color: #2a2c2d;
+    color: #e5e7eb;
+  }
+
+  &.disabled {
+    background-color: #1c1e1f;
+    color: #6b7280;
+  }
+}

@@ -66,12 +66,15 @@ const OpenFileModal = ({ handleClose }: Props) => {
   };
 
   return (
-    <Modal show={true} fullscreen={true} onHide={handleClose}>
+    <Modal show={true} onHide={handleClose} centered>
       <Modal.Header closeButton>
         <Modal.Title>Open file</Modal.Title>
       </Modal.Header>
 
-      <Modal.Body style={{ padding: 0 }}>
+      {/* Was fullscreen - a popup sized to fit its content (below, capped
+          and scrollable so a long workspace file list can't grow the modal
+          past a reasonable height) instead. */}
+      <Modal.Body style={{ padding: 0, maxHeight: "60vh", overflowY: "auto" }}>
         {!workspaceFileList?.length && (
           <Container style={{ paddingTop: "24px" }}>
             <p>
