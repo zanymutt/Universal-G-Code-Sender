@@ -4,6 +4,8 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- The Top/Left/Right/Bottom/3D visualizer view buttons now work before any file is loaded (they used to silently do nothing, framing on the loaded toolpath's bounds which didn't exist yet) - they frame the empty grid instead.
+- Gave the WCS dropdown a visibly different resting look (lighter fill, a faint always-on green border, a real chevron icon) instead of blending into the read-only chips next to it - it was easy to miss that it was a control at all.
 - Fixed the WCS dropdown toggle rendering far narrower than the chips next to it (clipping its own text and caret) after the switch away from a native `<select>`, and equalized the left/center and center/right column gutters (previously the left one was 10px wider) - freeing up a little more width for the left column's own content.
 - Fixed the WCS dropdown's open list not showing which work coordinate system is currently active - a native `<select>`'s own option list is OS/browser chrome outside CSS's reach, and its default "selected" highlighting wasn't visible against this dark theme. Replaced it with a fully-styled dropdown that marks the active entry with a checkmark and highlight.
 - Fixed the WCS dropdown rendering visibly shorter than the chips next to it in the modal status row.
