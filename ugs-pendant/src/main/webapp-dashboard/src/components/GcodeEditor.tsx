@@ -113,8 +113,27 @@ const currentRunLineField = StateField.define<DecorationSet>({
 function scrollLineIntoView(view: EditorView, line: number, stillCurrent: () => boolean, retries = 3) {
   const pos = view.state.doc.line(line).from;
   const attempt = (remaining: number) => {
+    // Re-checked on every retry, not just once up front - during an actual
+    // run this is called again on essentially every completed command, so a
+    // still-in-flight older sequence (from a line a few commands back) can
+    // otherwise fire one of its own later retries *after* a newer call
+    // already scrolled to the real current line, undoing it back toward the
+    // stale target. stillCurrent (see call sites) checks against the latest
+    // requested line, not just whether the view itself is still alive.
     if (!stillCurrent()) return;
     view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+    // scrollIntoView's own "center" math is computed against a virtualized
+    // document's height, most of which - near either end of a long file -
+    // is still an estimate rather than a real measurement; confirmed on
+    // real hardware this can overshoot past the document's actual end,
+    // leaving blank space below the last real line instead of the last few
+    // lines filling the panel. Clamping to the scroller's own real, current
+    // range can only ever pull an overshoot back, never disturb a
+    // legitimately-centered position, so it's safe unconditionally.
+    const maxScrollTop = Math.max(0, view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight);
+    if (view.scrollDOM.scrollTop > maxScrollTop) {
+      view.scrollDOM.scrollTop = maxScrollTop;
+    }
     if (remaining > 1) requestAnimationFrame(() => attempt(remaining - 1));
   };
   attempt(retries);
@@ -287,7 +306,11 @@ const GcodeEditor = () => {
           const observer = new ResizeObserver((entries) => {
             if (cancelled || entries[0].contentRect.height === 0) return;
             observer.disconnect();
-            scrollLineIntoView(view, initialLine, () => !cancelled && viewRef.current === view);
+            scrollLineIntoView(
+              view,
+              initialLine,
+              () => !cancelled && viewRef.current === view && currentRunLineRef.current === initialLine
+            );
           });
           observer.observe(view.scrollDOM);
           scrollObserverRef.current = observer;
@@ -337,7 +360,11 @@ const GcodeEditor = () => {
 
     view.dispatch({ effects: setCurrentRunLine.of(currentRunLine) });
     if (currentRunLine > 0 && currentRunLine <= view.state.doc.lines) {
-      scrollLineIntoView(view, currentRunLine, () => viewRef.current === view);
+      scrollLineIntoView(
+        view,
+        currentRunLine,
+        () => viewRef.current === view && currentRunLineRef.current === currentRunLine
+      );
     }
   }, [currentRunLine]);
 
