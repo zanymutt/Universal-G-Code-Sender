@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Changed the Open dialog from a fullscreen overlay to a normal-sized popup, and themed every dialog in the app (Open, Save as, confirm prompts, the alarm popup) to match the rest of the dark UI instead of Bootstrap's default white modal.
 - Made the visualizer's X/Y extent readout and the top bar's Zoom percentage brighter and slightly bigger - both were a fairly low-contrast gray against the dark background.
 - Replaced the WCS dropdown's chevron icon with a plain text arrow, same as before the icon was introduced - simpler, and removes the FontAwesome-icon-sizing dependency that kept causing overlap/clipping regressions in this specific spot.
 - Fixed the WCS dropdown menu not visibly opening at all - the overflow: hidden added to stop the label/caret from spilling into the next chip was on the same box that also held the menu, clipping it to that box's ~30px height every time it opened.
