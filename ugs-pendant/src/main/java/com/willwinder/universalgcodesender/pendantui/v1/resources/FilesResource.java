@@ -23,8 +23,6 @@ import com.willwinder.universalgcodesender.services.RunFromService;
 import com.willwinder.universalgcodesender.services.SendProgressService;
 import com.willwinder.universalgcodesender.pendantui.v1.model.FileStatus;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileList;
-import com.willwinder.universalgcodesender.services.BackendFileLoader;
-import com.willwinder.universalgcodesender.services.FileLoader;
 import com.willwinder.universalgcodesender.services.LookupService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -71,9 +69,17 @@ public class FilesResource {
             file.delete();
         }
 
-        FileLoader fileLoader = LookupService.lookupOptional(FileLoader.class)
-                .orElseGet(() -> new BackendFileLoader(backendAPI));
-        fileLoader.openFile(renamedFile);
+        // backendAPI.setGcodeFile directly, not the LookupService.lookupOptional(FileLoader.class)
+        // indirection this used to go through (see saveFileContent's own comment on why that's
+        // risky) - every dashboard-driven file operation now stays off the interactive desktop
+        // path uniformly, not just saves. That mirroring (opening pendant-selected files in the
+        // desktop's own editor too) was the original intent of the FileLoader indirection, but it
+        // left a desktop editor tab that the dashboard's own closeFile()/later reopens have no way
+        // to keep in sync with - confirmed causing both the freeze (already fixed) and confusing
+        // stale-tab behavior (an old file/name lingering in the desktop editor after the dashboard
+        // moved on). ugs-cli already behaves this way (it registers no FileLoader of its own), so
+        // this brings the platform edition's dashboard/pendant API in line with that.
+        backendAPI.setGcodeFile(renamedFile);
     }
 
     @POST
@@ -125,7 +131,17 @@ public class FilesResource {
     @POST
     @Path("openWorkspaceFile")
     public void openWorkspaceFile(@QueryParam("file") String file) throws Exception {
-        backendAPI.openWorkspaceFile(file);
+        // Not backendAPI.openWorkspaceFile(file) - that method (ugs-core, shared by every edition)
+        // still goes through the interactive FileLoader indirection itself. Replicating its
+        // validation here and calling setGcodeFile directly, the same as uploadAndOpen above,
+        // keeps this endpoint off the interactive path without changing what openWorkspaceFile
+        // means for any other caller - there happens to be none today, but this way that method's
+        // own behavior isn't being silently redefined out from under a future one.
+        if (!backendAPI.getWorkspaceFileList().contains(file)) {
+            throw new NotFoundException("Couldn't find the file '" + file + "' in workspace directory");
+        }
+        String workspaceDirectory = backendAPI.getSettings().getWorkspaceDirectory();
+        backendAPI.setGcodeFile(new File(workspaceDirectory, file));
     }
 
     @GET
