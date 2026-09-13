@@ -145,8 +145,26 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 12px;
     margin-bottom: 6px;
     flex: 0 0 auto;
+  }
+
+  // Pushes this and Verbose after it into a right-aligned group together,
+  // leaving the heading on its own at the start - an auto margin wins over
+  // the header's own space-between either way.
+  .centerPanelConsoleFontSize {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+
+    .centerPanelConsoleFontSizeValue {
+      color: #9aa0a4;
+      font-size: 0.8rem;
+      min-width: 3.2em;
+      text-align: center;
+    }
   }
 
   .centerPanelHeading {

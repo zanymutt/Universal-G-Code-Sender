@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
-import { Nav, Form } from "react-bootstrap";
+import { Nav, Form, Button } from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import Visualizer3D from "./Visualizer3D";
 import GcodeEditor from "./GcodeEditor";
 import ConsolePanel from "./ConsolePanel";
@@ -7,6 +9,7 @@ import MacroEditor from "./MacroEditor";
 import ProbePanel from "./ProbePanel";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
+import { useConsoleFontSize } from "../hooks/useConsoleFontSize";
 import { consoleActions } from "../store/consoleSlice";
 import { uiActions, CenterView, PaneContent } from "../store/uiSlice";
 import "./CenterPanel.scss";
@@ -29,6 +32,18 @@ const PANE_LABELS: { content: PaneContent; label: string }[] = [
 const CenterPanel = () => {
   const dispatch = useAppDispatch();
   const verboseEnabled = useAppSelector((state) => state.console.verboseEnabled);
+  // Owned here (not inside ConsolePanel) since the +/- control lives in this
+  // header, next to Verbose - passed down as a prop so there's one source of
+  // truth instead of two separate hook instances silently drifting apart
+  // (each reads/writes the same localStorage key, but neither would notice
+  // the other's change without a shared React state to trigger a re-render).
+  const {
+    fontSize: consoleFontSize,
+    increase: increaseConsoleFontSize,
+    decrease: decreaseConsoleFontSize,
+    canIncrease: canIncreaseConsoleFontSize,
+    canDecrease: canDecreaseConsoleFontSize,
+  } = useConsoleFontSize();
   // Lifted to Redux (rather than local state) so the RightRail's macro edit
   // button can jump here to the Macros tab without CenterPanel and RightRail
   // needing to know about each other, and so the split pane assignments
@@ -212,6 +227,27 @@ const CenterPanel = () => {
       <div className="centerPanelConsole" style={{ flexBasis: consoleHeight }}>
         <div className="centerPanelConsoleHeader">
           <h6 className="centerPanelHeading">Console</h6>
+          <div className="centerPanelConsoleFontSize">
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!canDecreaseConsoleFontSize}
+              onClick={decreaseConsoleFontSize}
+              title="Smaller text"
+            >
+              <FontAwesomeIcon icon={faMinus} />
+            </Button>
+            <span className="centerPanelConsoleFontSizeValue">{consoleFontSize}px</span>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!canIncreaseConsoleFontSize}
+              onClick={increaseConsoleFontSize}
+              title="Larger text"
+            >
+              <FontAwesomeIcon icon={faPlus} />
+            </Button>
+          </div>
           <Form.Check
             type="switch"
             id="verbose-toggle"
@@ -224,7 +260,7 @@ const CenterPanel = () => {
             onChange={(e) => dispatch(consoleActions.setVerboseEnabled(e.target.checked))}
           />
         </div>
-        <ConsolePanel />
+        <ConsolePanel fontSize={consoleFontSize} />
       </div>
     </div>
   );

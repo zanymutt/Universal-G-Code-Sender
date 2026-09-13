@@ -4,7 +4,11 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { sendGcode } from "../services/machine";
 import "./ConsolePanel.scss";
 
-const ConsolePanel = () => {
+type Props = {
+  fontSize: number;
+};
+
+const ConsolePanel = ({ fontSize }: Props) => {
   const currentState = useAppSelector((state) => state.status.state);
   const [gcodeCommand, setGcodeCommand] = useState("");
   const messages = useAppSelector((state) => state.console.messages);
@@ -38,7 +42,7 @@ const ConsolePanel = () => {
 
   return (
     <div className="consolePanel">
-      <div className="console" ref={consoleRef}>
+      <div className="console" ref={consoleRef} style={{ fontSize: `${fontSize}px` }}>
         {messages.length === 0 ? (
           <div style={{ color: "#888" }}>
             Controller console output will appear here.

@@ -18,7 +18,8 @@
   border-radius: 6px;
   padding: 12px;
   font-family: monospace;
-  font-size: 0.85rem;
+  // Font-size comes from the fontSize prop (see useConsoleFontSize) instead
+  // of a fixed value here.
   white-space: pre-wrap;
   word-break: break-word;
   // Same slim scrollbar treatment as .rightRail/.dashboardLeft, for a
