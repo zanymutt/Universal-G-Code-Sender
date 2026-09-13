@@ -157,9 +157,21 @@ public class FilesResource {
         File gcodeFile = currentGcodeFile();
         Files.writeString(gcodeFile.toPath(), content);
 
-        FileLoader fileLoader = LookupService.lookupOptional(FileLoader.class)
-                .orElseGet(() -> new BackendFileLoader(backendAPI));
-        fileLoader.openFile(gcodeFile);
+        // backendAPI.setGcodeFile directly, not the LookupService.lookupOptional(FileLoader.class)
+        // indirection saveFileContentAs/uploadAndOpen use - on the platform edition that resolves
+        // to OpenFileActionLoader, which replays the full interactive "Open File" menu action
+        // (EditorUtils.closeOpenEditors(), then the file's OpenCookie) on the Swing EDT. That's
+        // fine for a genuinely new file the user just picked, but here the file is already the
+        // one loaded - this call exists purely to make the backend re-parse the edit just written,
+        // not to "open" anything new. Confirmed the interactive path can block the whole app: if
+        // a desktop editor tab for this same file was left open from an earlier reload (which
+        // c.open() itself creates) with even a trivial pending state, closeOpenEditors() can pop a
+        // native "save changes?" dialog on the EDT - invisible and unanswerable from a remote
+        // dashboard session, so every request after it (including the "Run" button, which waits on
+        // this same save to finish first) hangs forever. setGcodeFile does everything send() itself
+        // actually depends on (re-dispatches FileStateEvent.OPENING_FILE and reprocesses into
+        // processedGcodeFile - see GUIBackend#setGcodeFile) without touching the desktop UI at all.
+        backendAPI.setGcodeFile(gcodeFile);
     }
 
     @POST
@@ -183,9 +195,10 @@ public class FilesResource {
         File targetFile = new File(targetDirectory, ensureExtension(filename, currentFile));
         Files.writeString(targetFile.toPath(), content);
 
-        FileLoader fileLoader = LookupService.lookupOptional(FileLoader.class)
-                .orElseGet(() -> new BackendFileLoader(backendAPI));
-        fileLoader.openFile(targetFile);
+        // Same reasoning as saveFileContent above - a new file on disk, but as far as the
+        // backend/dashboard are concerned this is still just "reload with fresh content", not an
+        // interactive file-open the desktop GUI needs to mirror.
+        backendAPI.setGcodeFile(targetFile);
     }
 
     /**
