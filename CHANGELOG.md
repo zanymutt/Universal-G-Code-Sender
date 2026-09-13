@@ -4,6 +4,8 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Fixed the WCS dropdown rendering visibly shorter than the chips next to it in the modal status row.
+- Fixed the visualizer's grid lines not actually falling on round work-coordinate numbers - they now snap to true 10mm lines anchored at 0,0, matching the ruler tick labels.
 - Added mm ruler tick labels along the visualizer grid's bottom/left edges, matching whatever's actually in view.
 - The WCS dropdown/modal status row now stretches to fill the full line width instead of sitting packed to the left with unused space.
 
