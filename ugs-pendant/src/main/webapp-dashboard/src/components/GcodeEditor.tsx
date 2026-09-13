@@ -10,6 +10,7 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useEditorFontSize } from "../hooks/useEditorFontSize";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
+import { registerEditorSaveHandler } from "../services/editorSaveBridge";
 import { runFromLine } from "../services/files";
 import { uiActions } from "../store/uiSlice";
 import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
@@ -234,6 +235,14 @@ const GcodeEditor = () => {
   const [cursorLine, setCursorLine] = useState(1);
   const [showRunFromConfirm, setShowRunFromConfirm] = useState(false);
 
+  // Mirrors isDirty into uiSlice too (see its own comment) - every place that
+  // would otherwise call setIsDirty directly goes through this instead, so
+  // the two can never drift apart.
+  const setDirty = (dirty: boolean) => {
+    setIsDirty(dirty);
+    dispatch(uiActions.setEditorIsDirty(dirty));
+  };
+
   useEffect(() => {
     if (!editorContainerRef.current || !fileName) {
       return;
@@ -241,7 +250,7 @@ const GcodeEditor = () => {
 
     setIsLoading(true);
     setError(null);
-    setIsDirty(false);
+    setDirty(false);
     setCursorLine(1);
     dispatch(uiActions.setEditorCursorLine(1));
     // Mirrors the backend's own auto-reset-on-open (RunFromService resets to
@@ -271,7 +280,7 @@ const GcodeEditor = () => {
               dimThroughField,
               currentRunLineField,
               EditorView.updateListener.of((update) => {
-                if (update.docChanged) setIsDirty(true);
+                if (update.docChanged) setDirty(true);
                 if (update.selectionSet || update.docChanged) {
                   const line = update.state.doc.lineAt(update.state.selection.main.head).number;
                   setCursorLine(line);
@@ -374,18 +383,36 @@ const GcodeEditor = () => {
     });
   }, [fontSize]);
 
+  const doSave = (): Promise<void> => {
+    if (!viewRef.current || !fileName) return Promise.reject(new Error("No gcode file is open to save"));
+    return saveFileContent(viewRef.current.state.doc.toString()).then(() => setDirty(false));
+  };
+
+  // Kept current every render (fileName/setDirty above would otherwise go
+  // stale inside a mount-only effect) so the wrapper registered below can
+  // stay registered exactly once for the component's whole lifetime while
+  // still always calling whatever doSave currently is.
+  const doSaveRef = useRef(doSave);
+  doSaveRef.current = doSave;
+
+  // Lets the job bar (see editorSaveBridge's own comment) trigger the exact
+  // same save this component's own Save button does, from anywhere in the
+  // layout.
+  useEffect(() => {
+    registerEditorSaveHandler(() => doSaveRef.current());
+    return () => registerEditorSaveHandler(null);
+  }, []);
+
   const handleSave = () => {
-    if (!viewRef.current || !fileName) return;
     setIsSaving(true);
-    saveFileContent(viewRef.current.state.doc.toString())
-      .then(() => setIsDirty(false))
+    doSave()
       .catch(() => setError("Couldn't save this file."))
       .finally(() => setIsSaving(false));
   };
 
   const handleSaveAsToWorkspace = (newFilename: string) => {
     if (!viewRef.current) return Promise.reject();
-    return saveFileContentAs(newFilename, viewRef.current.state.doc.toString()).then(() => setIsDirty(false));
+    return saveFileContentAs(newFilename, viewRef.current.state.doc.toString()).then(() => setDirty(false));
   };
 
   // CodeMirror's line numbers are 1-based. Desktop's own "Start program

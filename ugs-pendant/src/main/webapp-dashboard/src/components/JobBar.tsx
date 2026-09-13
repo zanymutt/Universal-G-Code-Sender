@@ -12,8 +12,10 @@ import { useEffect, useState } from "react";
 import { fetchFileStatus } from "../store/fileStatusSlice";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { closeFile, pause, runFromLine, send, stop } from "../services/files";
+import { saveEditorContent } from "../services/editorSaveBridge";
 import { uiActions } from "../store/uiSlice";
 import OpenFileModal from "./OpenFileModal";
+import ConfirmDialog from "./ConfirmDialog";
 import "./JobBar.scss";
 
 const getProgressVariant = (state: string) => {
@@ -43,10 +45,46 @@ const JobBar = () => {
   const fileStatus = useAppSelector((state) => state.fileStatus);
   const status = useAppSelector((state) => state.status);
   const armedRunFromLine = useAppSelector((state) => state.ui.runFromLine);
+  const editorIsDirty = useAppSelector((state) => state.ui.editorIsDirty);
   const [showOpenFile, setShowOpenFile] = useState(false);
+  const [showUnsavedConfirm, setShowUnsavedConfirm] = useState(false);
+  const [isSavingBeforeRun, setIsSavingBeforeRun] = useState(false);
+  const [unsavedSaveError, setUnsavedSaveError] = useState<string | null>(null);
 
   const resetRunFromLine = () => {
     runFromLine(0).then(() => dispatch(uiActions.setRunFromLine(0)));
+  };
+
+  // The backend runs whatever's saved on disk, not the editor's live buffer
+  // (confirmed: running with unsaved edits silently ran the stale, on-disk
+  // version) - Start warns instead, rather than either silently running
+  // stale gcode or silently saving on the user's behalf.
+  const handleStartClick = () => {
+    if (editorIsDirty) {
+      setUnsavedSaveError(null);
+      setShowUnsavedConfirm(true);
+    } else {
+      send();
+    }
+  };
+
+  const handleSaveOnly = () => {
+    setIsSavingBeforeRun(true);
+    saveEditorContent()
+      .then(() => setShowUnsavedConfirm(false))
+      .catch(() => setUnsavedSaveError("Couldn't save the file."))
+      .finally(() => setIsSavingBeforeRun(false));
+  };
+
+  const handleSaveAndRun = () => {
+    setIsSavingBeforeRun(true);
+    saveEditorContent()
+      .then(() => {
+        setShowUnsavedConfirm(false);
+        send();
+      })
+      .catch(() => setUnsavedSaveError("Couldn't save the file."))
+      .finally(() => setIsSavingBeforeRun(false));
   };
 
   useEffect(() => {
@@ -72,6 +110,23 @@ const JobBar = () => {
   return (
     <div className="jobBar">
       {showOpenFile && <OpenFileModal handleClose={() => setShowOpenFile(false)} />}
+
+      <ConfirmDialog
+        show={showUnsavedConfirm}
+        title="Unsaved changes"
+        message={
+          "The gcode editor has unsaved changes - running now would send the version still saved on " +
+          "disk, not what's currently in the editor." +
+          (unsavedSaveError ? `\n\n${unsavedSaveError}` : "")
+        }
+        onCancel={() => setShowUnsavedConfirm(false)}
+        secondaryLabel="Save"
+        onSecondary={handleSaveOnly}
+        confirmLabel="Save and run"
+        confirmVariant="success"
+        onConfirm={handleSaveAndRun}
+        actionsDisabled={isSavingBeforeRun}
+      />
 
       <div className="jobFile">{getFileName(fileStatus.fileName)}</div>
 
@@ -122,7 +177,7 @@ const JobBar = () => {
         <Button
           variant="success"
           disabled={fileStatus.fileName === "" || (status.state !== "IDLE" && status.state !== "HOLD")}
-          onClick={() => send()}
+          onClick={handleStartClick}
         >
           <FontAwesomeIcon icon={faPlay} /> Start
         </Button>

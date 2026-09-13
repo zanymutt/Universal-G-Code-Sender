@@ -33,6 +33,12 @@ type UiState = {
   // of that file existing and come back empty, with nothing left to
   // trigger a retry once it's actually ready.
   toolpathVersion: number;
+  // Mirrors GcodeEditor's own local isDirty state - lives here too (not only
+  // there) so the job bar's Start button, which GcodeEditor knows nothing
+  // about, can warn before running: the backend runs whatever's saved on
+  // disk, not the editor's live buffer, so starting with unsaved edits
+  // silently runs stale gcode otherwise.
+  editorIsDirty: boolean;
 };
 
 const initialState: UiState = {
@@ -42,6 +48,7 @@ const initialState: UiState = {
   runFromLine: 0,
   editorCursorLine: 0,
   toolpathVersion: 0,
+  editorIsDirty: false,
 };
 
 const uiSlice = createSlice({
@@ -74,6 +81,9 @@ const uiSlice = createSlice({
     },
     bumpToolpathVersion: (state) => {
       state.toolpathVersion += 1;
+    },
+    setEditorIsDirty: (state, action: { payload: boolean }) => {
+      state.editorIsDirty = action.payload;
     },
   },
 });
