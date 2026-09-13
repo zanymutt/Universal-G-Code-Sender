@@ -62,6 +62,8 @@ public class ConnectionSettingsPanel extends AbstractUGSSettings {
     private final Checkbox autoStartPendant = new Checkbox(
             Localization.getString("sender.autostartpendant"));
     private final JTextField pendantPort = new JTextField();
+    private final Checkbox autoOpenDashboardInBrowser = new Checkbox(
+            Localization.getString("sender.autoopendashboard"));
     private final JComboBox<Language> languageCombo = new JComboBox<>(AvailableLanguages.getAvailableLanguages().toArray(new Language[0]));
     private final JComboBox<String> connectionDriver = new JComboBox<>(ConnectionDriver.getPrettyNames());
     private final JTextField workspaceDirectory = new JTextField();
@@ -100,6 +102,7 @@ public class ConnectionSettingsPanel extends AbstractUGSSettings {
         settings.setShowNightlyWarning(showNightlyWarning.getValue());
         settings.setAutoStartPendant(autoStartPendant.getValue());
         settings.setPendantPort(Integer.parseInt(pendantPort.getText()));
+        settings.setAutoOpenDashboardInBrowser(autoOpenDashboardInBrowser.getValue());
         settings.setLanguage(((Language) languageCombo.getSelectedItem()).getLanguageCode());
         settings.setConnectionDriver(ConnectionDriver.prettyNameToEnum(connectionDriver.getSelectedItem().toString()));
         settings.setWorkspaceDirectory(workspaceDirectory.getText());
@@ -152,6 +155,9 @@ public class ConnectionSettingsPanel extends AbstractUGSSettings {
         pendantPort.setText(String.valueOf(s.getPendantPort()));
         add(new JLabel(Localization.getString("settings.pendantPort")), "gapleft 56");
         add(pendantPort, "grow, wrap");
+
+        autoOpenDashboardInBrowser.setSelected(s.isAutoOpenDashboardInBrowser());
+        add(autoOpenDashboardInBrowser, "spanx, wrap");
 
         for (int i = 0; i < languageCombo.getItemCount(); i++) {
             Language l = languageCombo.getItemAt(i);

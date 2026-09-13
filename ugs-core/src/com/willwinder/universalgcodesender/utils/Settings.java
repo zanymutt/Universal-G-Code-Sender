@@ -93,6 +93,7 @@ public class Settings {
     private boolean showSerialPortWarning = true;
     private boolean autoStartPendant = false;
     private int pendantPort = 8080;
+    private boolean autoOpenDashboardInBrowser = false;
 
     private final AutoLevelSettings autoLevelSettings = new AutoLevelSettings();
     private final ProbeSettings probeSettings = new ProbeSettings();
@@ -580,6 +581,15 @@ public class Settings {
 
     public void setPendantPort(int pendantPort) {
         this.pendantPort = pendantPort;
+        changed();
+    }
+
+    public boolean isAutoOpenDashboardInBrowser() {
+        return autoOpenDashboardInBrowser;
+    }
+
+    public void setAutoOpenDashboardInBrowser(boolean autoOpenDashboardInBrowser) {
+        this.autoOpenDashboardInBrowser = autoOpenDashboardInBrowser;
         changed();
     }
 

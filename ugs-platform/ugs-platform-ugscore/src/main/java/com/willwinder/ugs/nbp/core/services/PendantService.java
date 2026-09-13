@@ -26,7 +26,10 @@ import com.willwinder.universalgcodesender.services.LookupService;
 import com.willwinder.universalgcodesender.utils.Settings;
 import org.openide.util.lookup.ServiceProvider;
 
+import java.awt.Desktop;
+import java.net.URI;
 import java.util.Collection;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
@@ -52,6 +55,30 @@ public class PendantService {
         Settings settings = backend.getSettings();
         if (settings.isAutoStartPendant()) {
             startPendant();
+            if (settings.isAutoOpenDashboardInBrowser()) {
+                openDashboardInBrowser();
+            }
+        }
+    }
+
+    /**
+     * Opens the touchscreen dashboard in the system's default browser, pointed at this same
+     * machine (not one of the LAN URLs from {@link PendantUI#getUrlList()}, which deliberately
+     * excludes the loopback address since those are meant for other devices on the network) -
+     * lets a kiosk/touchscreen setup launch straight into the dashboard instead of requiring a
+     * second, manual "open the browser and type the address" step every time.
+     */
+    private void openDashboardInBrowser() {
+        if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            LOGGER.warning("Can't auto-open the dashboard in a browser - not supported on this platform");
+            return;
+        }
+
+        try {
+            String url = "http://localhost:" + getPort() + PendantUI.DASHBOARD_CONTEXT_PATH;
+            Desktop.getDesktop().browse(new URI(url));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Could not auto-open the dashboard in a browser", e);
         }
     }
 
