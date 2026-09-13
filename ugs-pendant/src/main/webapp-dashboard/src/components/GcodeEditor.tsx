@@ -74,6 +74,52 @@ const dimThroughField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
+// Highlights the single line currently running (0 = none) - matches
+// lastCompletedLineNumber, the same "just-completed command" convention the
+// visualizer's own live yellow highlight already uses (see Visualizer3D.tsx),
+// not the next line about to run. That line also falls inside dimThroughLine's
+// own inclusive range above (during a run they're driven by the same value -
+// see currentRunLine below), so it would otherwise get dimmed like every
+// other already-run line; .cm-currentRunLine.cm-dimmedLine below overrides
+// that specifically, so the current line reads as active/highlighted, not
+// grayed out along with the rest of what's already run.
+const setCurrentRunLine = StateEffect.define<number>();
+const currentRunLineMark = Decoration.line({ class: "cm-currentRunLine" });
+
+const currentRunLineField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (!effect.is(setCurrentRunLine)) continue;
+      if (effect.value <= 0 || effect.value > tr.state.doc.lines) return Decoration.none;
+      return Decoration.set([currentRunLineMark.range(tr.state.doc.line(effect.value).from)]);
+    }
+    return decorations.map(tr.changes);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+// scrollIntoView's centering, computed against a virtualized document's
+// estimated (not-yet-measured) line heights, can land short on a big jump to
+// a distant, previously-unrendered line - confirmed via testing: a jump from
+// line ~1 to line 141 of a 144-line file landed at scrollTop 0 on the first
+// dispatch alone. A couple of rAF-spaced re-dispatches let CodeMirror's own
+// measurement correct itself and the scroll position converge. stillCurrent
+// guards each retry against the view having been replaced/destroyed by then
+// (a new file loading, or this component unmounting) - checked fresh before
+// every dispatch, not just once up front, since retries span multiple frames.
+function scrollLineIntoView(view: EditorView, line: number, stillCurrent: () => boolean, retries = 3) {
+  const pos = view.state.doc.line(line).from;
+  const attempt = (remaining: number) => {
+    if (!stillCurrent()) return;
+    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "center" }) });
+    if (remaining > 1) requestAnimationFrame(() => attempt(remaining - 1));
+  };
+  attempt(retries);
+}
+
 const GcodeEditor = () => {
   const dispatch = useAppDispatch();
   const fileStatus = useAppSelector((state) => state.fileStatus);
@@ -117,6 +163,15 @@ const GcodeEditor = () => {
       : armedRunFromLine > 0
         ? armedRunFromLine - 1
         : 0;
+  // Not just dimThroughLine reused directly - the two agree during an actual
+  // run (both driven by lastCompletedLineNumber then), but dimThroughLine
+  // also covers the "armed run-from, not yet started" case, which has no
+  // currently-running line at all (0 = none, matching setCurrentRunLine's
+  // own "nothing highlighted" convention).
+  const currentRunLine =
+    currentState === "RUN" || currentState === "HOLD" || currentState === "CHECK"
+      ? fileStatus.lastCompletedLineNumber
+      : 0;
 
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -129,6 +184,27 @@ const GcodeEditor = () => {
   const fontSizeCompartmentRef = useRef(new Compartment());
   const { fontSize, increase: increaseFontSize, decrease: decreaseFontSize, canIncrease, canDecrease } =
     useEditorFontSize();
+  // dimThroughField/currentRunLineField both start empty (Decoration.none)
+  // and rely on a dispatched effect to populate them - normally the one
+  // below, keyed on [dimThroughLine]/[currentRunLine]. But the editor's own
+  // creation (right below) is itself async (getFileContent().then(...)), so
+  // if a job is already RUN/HOLD/CHECK the moment this file first opens
+  // (e.g. the page was reloaded mid-job), that effect can fire, find
+  // viewRef.current still null, and no-op - with nothing left to retry it
+  // since the value it would have dispatched never changes again once the
+  // job's already at that line. Latest-value refs (rather than the
+  // getFileContent().then() closure's own, possibly-stale-by-then capture)
+  // let the editor apply the correct initial decorations itself, right after
+  // it's actually created.
+  const dimThroughLineRef = useRef(dimThroughLine);
+  dimThroughLineRef.current = dimThroughLine;
+  const currentRunLineRef = useRef(currentRunLine);
+  currentRunLineRef.current = currentRunLine;
+  // The one below, watching for the editor to actually become visible so
+  // the initial scroll-to-current-line can be applied correctly - torn down
+  // in the same cleanup that destroys the view, in case it's still waiting
+  // (never became visible) when the file changes again.
+  const scrollObserverRef = useRef<ResizeObserver | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
@@ -174,6 +250,7 @@ const GcodeEditor = () => {
               editableCompartmentRef.current.of(EditorView.editable.of(isEditable)),
               fontSizeCompartmentRef.current.of(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
               dimThroughField,
+              currentRunLineField,
               EditorView.updateListener.of((update) => {
                 if (update.docChanged) setIsDirty(true);
                 if (update.selectionSet || update.docChanged) {
@@ -186,12 +263,43 @@ const GcodeEditor = () => {
           }),
           parent: editorContainerRef.current,
         });
+
+        // See dimThroughLineRef/currentRunLineRef's own comment above -
+        // applies whatever's actually current right now, not whatever
+        // dimThroughLine/currentRunLine happened to be when this effect was
+        // first scheduled (this callback's own closure), in case a job was
+        // already RUN/HOLD/CHECK before this file even finished loading.
+        const initialLine = currentRunLineRef.current;
+        viewRef.current.dispatch({
+          effects: [setDimThroughLine.of(dimThroughLineRef.current), setCurrentRunLine.of(initialLine)],
+        });
+        // Scrolling needs to wait for the editor to actually have a size,
+        // not just a layout tick - this file can finish loading (and this
+        // whole callback run) while the Edit tab isn't the visible one yet,
+        // in which case the container is display:none and reports a height
+        // of 0 for as long as it stays hidden, however many frames pass (a
+        // plain requestAnimationFrame delay confirmed this: still 0 a frame
+        // later). A ResizeObserver fires the moment the container actually
+        // gets a real size - immediately if it's already visible now, or
+        // later, exactly when the user switches to the Edit tab.
+        if (initialLine > 0 && initialLine <= viewRef.current.state.doc.lines) {
+          const view = viewRef.current;
+          const observer = new ResizeObserver((entries) => {
+            if (cancelled || entries[0].contentRect.height === 0) return;
+            observer.disconnect();
+            scrollLineIntoView(view, initialLine, () => !cancelled && viewRef.current === view);
+          });
+          observer.observe(view.scrollDOM);
+          scrollObserverRef.current = observer;
+        }
       })
       .catch(() => !cancelled && setError("Couldn't load this file for editing."))
       .finally(() => !cancelled && setIsLoading(false));
 
     return () => {
       cancelled = true;
+      scrollObserverRef.current?.disconnect();
+      scrollObserverRef.current = null;
       viewRef.current?.destroy();
       viewRef.current = null;
     };
@@ -212,6 +320,26 @@ const GcodeEditor = () => {
   useEffect(() => {
     viewRef.current?.dispatch({ effects: setDimThroughLine.of(dimThroughLine) });
   }, [dimThroughLine]);
+
+  // Highlights the running line and scrolls it toward the vertical center of
+  // the editor, following along as the job progresses - the same "Follow"
+  // idea desktop's editor has by default, ported here since our editor and
+  // the dashboard's visualizer are two separate views instead of one.
+  // scrollIntoView's own centering is already naturally clamped by the real
+  // document bounds - near the start of the file there isn't enough content
+  // above the running line to actually center it (it sits lower until there
+  // is), and near the end there isn't enough below (it sits higher) - no
+  // special-casing needed for either edge, CodeMirror won't scroll past
+  // either end of the document trying to satisfy y: "center".
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    view.dispatch({ effects: setCurrentRunLine.of(currentRunLine) });
+    if (currentRunLine > 0 && currentRunLine <= view.state.doc.lines) {
+      scrollLineIntoView(view, currentRunLine, () => viewRef.current === view);
+    }
+  }, [currentRunLine]);
 
   useEffect(() => {
     viewRef.current?.dispatch({

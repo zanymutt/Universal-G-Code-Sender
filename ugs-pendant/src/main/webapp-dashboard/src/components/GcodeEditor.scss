@@ -79,6 +79,20 @@
   .cm-dimmedLine {
     opacity: 0.4;
   }
+
+  // The line currently running (see currentRunLineField) - same yellow the
+  // visualizer's own live highlight uses, at low opacity so the line's
+  // syntax highlighting stays readable through it.
+  .cm-currentRunLine {
+    background-color: rgba(237, 255, 0, 0.15);
+  }
+
+  // Falls inside dimThroughLine's own range too (see currentRunLineField's
+  // comment) - restores full opacity so it reads as active, not grayed out
+  // along with the rest of what's already run.
+  .cm-currentRunLine.cm-dimmedLine {
+    opacity: 1;
+  }
 }
 
 .gcodeEditorLoading {
