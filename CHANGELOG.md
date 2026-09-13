@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Added a second setting under "Open dashboard in browser on startup" - "Open without browser UI (Chrome/Edge app mode)" - that launches Chrome or Edge with no address bar or tabs instead of a normal browser tab, closer to how the platform's own windows look. Falls back to a normal tab if neither browser is found.
 - Added a setting (Tools > Options > Connection, next to "Auto start pendant on startup") to also open the dashboard in the system's default browser as soon as it starts, so launching UGS is the only step needed instead of launching it and then separately opening a browser to the address every time. Off by default, and only takes effect when "Auto start pendant on startup" is also on, since that's what actually starts the server this opens.
 - Added a web app manifest so the dashboard can be "installed" (Chrome/Edge's Install app, or iPad/iOS's Add to Home Screen) and opens without the browser's own address bar and tabs, like a real app - previously it always kept that browser chrome no matter how it was launched.
 - Changed the Open dialog from a fullscreen overlay to a normal-sized popup, and themed every dialog in the app (Open, Save as, confirm prompts, the alarm popup) to match the rest of the dark UI instead of Bootstrap's default white modal.
