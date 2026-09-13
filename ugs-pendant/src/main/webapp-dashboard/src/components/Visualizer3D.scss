@@ -19,8 +19,13 @@
   }
 
   .visualizer3DBounds {
-    color: #8a8f92;
-    font-size: 0.8rem;
+    // Brighter and a touch bigger than the original #8a8f92/0.8rem - that
+    // was low-contrast enough against the dark toolbar to be hard to read
+    // at a glance, for a readout (the toolpath's actual X/Y extent) worth
+    // seeing clearly rather than treating as decorative label text.
+    color: #c3c8cb;
+    font-size: 0.85rem;
+    font-weight: 600;
     white-space: nowrap;
   }
 

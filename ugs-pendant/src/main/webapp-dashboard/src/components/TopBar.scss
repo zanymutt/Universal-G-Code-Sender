@@ -14,8 +14,13 @@
   }
 
   .topBarZoomLevel {
-    color: #9aa0a4;
-    font-size: 0.8rem;
+    // Brighter and a touch bigger than the original #9aa0a4/0.8rem - low
+    // contrast enough against the dark top bar to be hard to read at a
+    // glance, for a setting worth confirming clearly rather than treating
+    // as decorative label text.
+    color: #c3c8cb;
+    font-size: 0.85rem;
+    font-weight: 600;
     min-width: 2.8em;
     text-align: center;
   }
