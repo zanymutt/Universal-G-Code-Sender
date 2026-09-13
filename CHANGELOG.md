@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-12
 
+- The gcode editor now highlights the currently-running line in yellow (matching the visualizer's own live highlight) and auto-scrolls to keep it centered as the job progresses, naturally settling toward the top/bottom near the start/end of the file where centering isn't possible.
 - Fixed the gcode text size control not actually updating the macro editor's gcode field until it happened to remount - it now updates immediately, matching the main editor.
 - Added a separate text size control (+/-) for the console, independent of the gcode editor's - the console header next to Verbose.
 - The gcode text size control now also applies to the macro editor's gcode field, not just the main Edit tab.
