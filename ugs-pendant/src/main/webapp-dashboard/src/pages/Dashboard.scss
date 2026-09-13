@@ -34,9 +34,12 @@
   // needing an internal scrollbar for the sake of a few px of breathing room.
   gap: 10px;
   overflow-y: auto;
-  // Same slim scrollbar treatment as .rightRail, so it doesn't sit on top of
-  // content (the jog buttons) and looks consistent across every column.
-  padding-right: 10px;
+  // No padding-right reserved for the scrollbar here (unlike .rightRail) -
+  // that used to stack on top of the grid's own 16px column gap, making
+  // this side visibly wider than the center-to-right gap. A thin,
+  // low-contrast scrollbar (below) very occasionally overlapping the last
+  // couple px of a jog button is a smaller cost than that mismatch, and
+  // frees up a little extra width for this column's own content.
   scrollbar-width: thin;
   scrollbar-color: #3a3d3e transparent;
 

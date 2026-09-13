@@ -23,15 +23,44 @@ $modalStatusHeight: 30px;
   flex: 1 1 0;
   min-width: 0;
 
+  // The box styling (padding/border/background) lives on this wrapper -
+  // the actual flex item in .modalStatusRow - rather than on the toggle
+  // button nested inside it. With flex-basis: 0 and box-sizing: border-box
+  // (Bootstrap's global reset), a border-box can never shrink below its own
+  // padding+border, so that becomes an unavoidable floor on the item's flex
+  // base size. .modalStatusChip already carries its padding/border directly
+  // on the flex item; when the toggle button had them instead, this wrapper's
+  // true floor was 0 while every chip's was ~18px, so equal flex-grow gave
+  // the wrapper a much smaller final share than the chips (confirmed via a
+  // side-by-side comparison of otherwise-identical test elements) - the
+  // toggle ended up squeezed too narrow to fit its own text and caret.
+  height: $modalStatusHeight;
+  background-color: #111213;
+  border: 1px solid #2f3132;
+  border-radius: 4px;
+  padding: 0 8px;
+
+  &:has(.dropdown-toggle:hover),
+  &:focus-within {
+    border-color: #4ade80;
+    box-shadow: 0 0 0 0.2rem rgba(74, 222, 128, 0.25);
+  }
+
+  &:has(.dropdown-toggle:disabled) {
+    border-color: #2f3132;
+  }
+
   .dropdown-toggle {
     width: 100%;
-    height: $modalStatusHeight;
-    background-color: #111213;
-    border: 1px solid #2f3132;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    background-color: transparent;
+    border: none;
+    padding: 0;
     color: #4ade80;
     font-weight: 700;
     font-size: 0.85rem;
-    padding: 0 8px;
 
     // Bootstrap's own caret is a border-triangle that inherits the
     // button's (here, green) text color - fine on a plain button, but
@@ -52,15 +81,12 @@ $modalStatusHeight: 30px;
     &:hover,
     &:focus,
     &:active {
-      background-color: #111213 !important;
-      border-color: #4ade80 !important;
+      background-color: transparent !important;
       color: #4ade80 !important;
-      box-shadow: 0 0 0 0.2rem rgba(74, 222, 128, 0.25) !important;
+      box-shadow: none !important;
     }
 
     &:disabled {
-      background-color: #111213;
-      border-color: #2f3132;
       color: #6b7280;
     }
   }
