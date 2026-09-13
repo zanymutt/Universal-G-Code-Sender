@@ -1,4 +1,6 @@
-import { Form } from "react-bootstrap";
+import { Dropdown } from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faCheck } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { sendGcode } from "../services/machine";
 import "./ModalStatusRow.scss";
@@ -25,22 +27,35 @@ const ModalStatusRow = () => {
     return <></>;
   }
 
+  const currentWcs = status.coordinateSystem || "G54";
+
   return (
     <div className="modalStatusRow">
-      <Form.Select
-        size="sm"
-        className="modalStatusWcs"
-        value={status.coordinateSystem || "G54"}
-        disabled={!canAdjust}
-        onChange={(e) => sendGcode(e.currentTarget.value)}
-        title="Active work coordinate system"
-      >
-        {WCS_OPTIONS.map((wcs) => (
-          <option key={wcs} value={wcs}>
-            {wcs}
-          </option>
-        ))}
-      </Form.Select>
+      {/* A plain <select>'s open option list is native OS/browser chrome -
+          largely outside CSS's reach, and confirmed not visibly marking
+          the current selection at all in this dark theme (the browser's
+          own default "selected" treatment wasn't visible against it). A
+          react-bootstrap Dropdown instead renders its menu as ordinary
+          page content, so every part of it - including an explicit
+          checkmark on the active entry, not just relying on Bootstrap's
+          own .active styling - is guaranteed to render exactly as styled. */}
+      <Dropdown className="modalStatusWcs" onSelect={(wcs) => wcs && sendGcode(wcs)}>
+        <Dropdown.Toggle
+          id="modal-status-wcs-toggle"
+          disabled={!canAdjust}
+          title="Active work coordinate system"
+        >
+          {currentWcs}
+        </Dropdown.Toggle>
+        <Dropdown.Menu>
+          {WCS_OPTIONS.map((wcs) => (
+            <Dropdown.Item key={wcs} eventKey={wcs} active={wcs === currentWcs}>
+              <FontAwesomeIcon icon={faCheck} className="modalStatusWcsCheck" />
+              {wcs}
+            </Dropdown.Item>
+          ))}
+        </Dropdown.Menu>
+      </Dropdown>
 
       {[status.motionMode, status.units, status.distanceMode, status.feedMode, status.plane, status.spindleMode]
         .filter(Boolean)

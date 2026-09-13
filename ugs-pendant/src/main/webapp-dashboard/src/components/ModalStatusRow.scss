@@ -17,39 +17,100 @@ $modalStatusHeight: 30px;
 
 .modalStatusWcs {
   // Equal-share flex-grow (same pattern as StepSize/FeedRate's segmented
-  // rows) instead of content-sized, so the WCS select and the chips after
-  // it stretch to use the row's full width instead of leaving it packed
-  // to the left with empty space on the right.
+  // rows) instead of content-sized, so the dropdown and the chips after it
+  // stretch to use the row's full width instead of leaving it packed to
+  // the left with empty space on the right.
   flex: 1 1 0;
   min-width: 0;
-  height: $modalStatusHeight;
-  min-height: unset;
-  text-align: center;
-  background-color: #111213;
-  border-color: #2f3132;
-  color: #4ade80;
-  font-weight: 700;
-  font-size: 0.85rem;
-  // No vertical padding - height alone centers a <select>'s own text
-  // vertically. Bootstrap's .form-select-sm still reserves its full
-  // default padding/icon size for the dropdown arrow, which on a value
-  // this short (G54, G59.1) is most of the control's width - shrunk to
-  // just enough room for a smaller arrow so this doesn't dominate the row
-  // every other chip has to share space on.
-  padding: 0 20px 0 8px;
-  background-size: 12px 10px;
-  background-position: right 6px center;
 
-  &:focus {
+  .dropdown-toggle {
+    width: 100%;
+    height: $modalStatusHeight;
     background-color: #111213;
-    border-color: #4ade80;
+    border: 1px solid #2f3132;
     color: #4ade80;
-    box-shadow: 0 0 0 0.2rem rgba(74, 222, 128, 0.25);
+    font-weight: 700;
+    font-size: 0.85rem;
+    padding: 0 8px;
+
+    // Bootstrap's own caret is a border-triangle that inherits the
+    // button's (here, green) text color - fine on a plain button, but
+    // easy to mistake for part of the "G54" text at this size. A thin
+    // muted chevron glyph instead, same idea as the dark scrollbar
+    // elsewhere in this app: small, deliberate departures from Bootstrap's
+    // defaults where they don't read clearly in this theme.
+    &::after {
+      display: inline-block;
+      content: "\25BE";
+      border: none;
+      vertical-align: 0;
+      margin-left: 6px;
+      color: #6b7280;
+      font-size: 0.7rem;
+    }
+
+    &:hover,
+    &:focus,
+    &:active {
+      background-color: #111213 !important;
+      border-color: #4ade80 !important;
+      color: #4ade80 !important;
+      box-shadow: 0 0 0 0.2rem rgba(74, 222, 128, 0.25) !important;
+    }
+
+    &:disabled {
+      background-color: #111213;
+      border-color: #2f3132;
+      color: #6b7280;
+    }
   }
 
-  &:disabled {
-    background-color: #111213;
-    color: #6b7280;
+  // Ordinary page content instead of a <select>'s native, OS-rendered
+  // option list - confirmed that one didn't visibly mark the current
+  // selection at all against this dark theme. Every part of this menu is
+  // plain DOM/CSS instead, so it's guaranteed to render exactly as styled,
+  // including which entry is active (see .dropdown-item.active below).
+  .dropdown-menu {
+    min-width: 0;
+    background-color: #1c1e1f;
+    border-color: #2f3132;
+    padding: 4px;
+  }
+
+  .dropdown-item {
+    display: flex;
+    align-items: center;
+    border-radius: 4px;
+    padding: 6px 10px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: #c3c8cb;
+
+    .modalStatusWcsCheck {
+      color: #4ade80;
+      font-size: 0.75rem;
+      margin-right: 8px;
+      // Reserves the checkmark's own space on every row (active or not) so
+      // the "G54"/"G59.1" text lines up the same regardless of which one
+      // currently has it, instead of jumping left/right as the active row
+      // changes.
+      visibility: hidden;
+    }
+
+    &:hover,
+    &:focus {
+      background-color: #2a2c2d;
+      color: #e5e7eb;
+    }
+
+    &.active {
+      background-color: rgba(74, 222, 128, 0.15);
+      color: #4ade80;
+
+      .modalStatusWcsCheck {
+        visibility: visible;
+      }
+    }
   }
 }
 
