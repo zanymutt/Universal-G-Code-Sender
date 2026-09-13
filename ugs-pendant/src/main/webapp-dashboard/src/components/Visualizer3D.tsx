@@ -44,6 +44,38 @@ const createAxisLabel = (text: string, color: string) => {
   return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
 };
 
+// A small mm-coordinate label for the grid's ruler ticks - a wider, shorter
+// canvas than createAxisLabel's (a number reads wider than it is tall,
+// unlike a single "X"/"Y" letter), and left plain/gray rather than colored
+// since there can be many of these at once along each edge.
+const createTickLabel = (text: string) => {
+  const canvas = document.createElement("canvas");
+  canvas.width = 128;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.font = "bold 40px sans-serif";
+    ctx.fillStyle = "#8a8f92";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 64, 32);
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  return new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, depthTest: false }));
+};
+
+// Picks a "nice" tick spacing (1/2/5 x a power of ten) that lands roughly
+// targetTicks times across the grid, the same approach chart axes use -
+// without it, a fixed interval would either clutter a small grid or leave a
+// huge one with only one or two labels.
+const pickTickInterval = (size: number, targetTicks = 8) => {
+  const raw = size / targetTicks;
+  const magnitude = Math.pow(10, Math.floor(Math.log10(raw)));
+  const normalized = raw / magnitude;
+  const niceNormalized = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return niceNormalized * magnitude;
+};
+
 // getToolpath() already reflects an armed "run from" line - the backend
 // reads the processed file (see VisualizerResource.getToolpath), which
 // applyCommandProcessor/RunFromProcessor itself rewrites, skipped commands
@@ -143,10 +175,19 @@ const Visualizer3D = () => {
   const gridRef = useRef<THREE.GridHelper | null>(null);
   const xLabelRef = useRef<THREE.Sprite | null>(null);
   const yLabelRef = useRef<THREE.Sprite | null>(null);
+  // Rebuilt from scratch every time the grid resizes (see applyGridExtent) -
+  // how many there are, and where, depends on the current grid size.
+  const tickLabelsRef = useRef<THREE.Sprite[]>([]);
   // Set inside the one-time setup effect below (it closes over the scene/refs it
   // needs); called from the toolpath-loading effect to resize/recenter the grid
   // to the loaded file, or put it back to the default size once nothing is loaded.
   const applyGridExtentRef = useRef((_size: number, _centerX: number, _centerY: number) => {});
+  // Set inside the same setup effect as applyGridExtentRef, but called
+  // separately from setView (see its own comment) rather than from
+  // applyGridExtent, since it needs the freshly-computed frustum size that
+  // only exists by the time setView runs, not whatever applyGridExtent's
+  // own (differently-sized) grid happens to be.
+  const updateTickLabelsRef = useRef((_centerX: number, _centerY: number, _halfExtent: number) => {});
   const [isEmpty, setIsEmpty] = useState(false);
   const [bounds, setBounds] = useState<Bounds | null>(null);
   const workCoord = useAppSelector((state) => state.status.workCoord);
@@ -245,6 +286,7 @@ const Visualizer3D = () => {
     // perspective camera, distance no longer causes any parallax/foreshortening,
     // which is the whole point of switching to it for Top/Left/Right/Bottom.
     frustumSizeRef.current = sphere.radius * 2.4 || 100;
+    updateTickLabelsRef.current(center.x, center.y, frustumSizeRef.current / 2);
     // Reset any zoom left over from however the user last scrolled/pinched the
     // previous view, so every preset starts from the same predictable framing.
     camera.zoom = 1;
@@ -399,6 +441,56 @@ const Visualizer3D = () => {
     applyGridExtentRef.current = applyGridExtent;
     applyGridExtent(DEFAULT_GRID_SIZE, 0, 0);
 
+    // mm ruler ticks along the grid's bottom/left edges, at (roughly) the
+    // actual edge of what the camera currently shows - not the grid's own
+    // (deliberately much larger, padded-for-context) extent. Those two look
+    // like they should be the same thing but aren't: applyGridExtent's own
+    // `size` includes GRID_PADDING on every side so the grid still reads as
+    // a grid around the part rather than hugging it, while the camera only
+    // frames the part itself - ticks placed at the grid's own edge landed
+    // almost entirely outside the visible area, confirmed via logging
+    // before switching to this. halfExtent is passed in by the caller
+    // (setView, using its own freshly-computed frustumSizeRef) rather than
+    // computed from the grid, and reused as both the X and Y range for
+    // simplicity - not exactly the visible width in every view (Left/Right
+    // in particular don't map screen axes to world X/Y the same way Top
+    // does), but a reasonable one that's usually at least roughly right,
+    // rather than the previous "usually entirely off-screen."
+    const updateTickLabels = (centerX: number, centerY: number, halfExtent: number) => {
+      tickLabelsRef.current.forEach((sprite) => {
+        scene.remove(sprite);
+        sprite.material.map?.dispose();
+        sprite.material.dispose();
+      });
+      tickLabelsRef.current = [];
+
+      const interval = pickTickInterval(halfExtent * 2);
+      const tickScale = Math.max(halfExtent * 0.07, 5);
+      // Inset from the boundary, not offset past it - halfExtent is tied
+      // directly to the camera's own visible edge now (see this function's
+      // own comment), not a padded grid with margin to spare, so a label
+      // placed beyond it just gets clipped off-screen (confirmed: that's
+      // exactly what was happening here before this used +tickScale).
+      const firstXTick = Math.ceil((centerX - halfExtent) / interval) * interval;
+      for (let x = firstXTick; x <= centerX + halfExtent + 1e-6; x += interval) {
+        const label = createTickLabel(String(Math.round(x)));
+        label.position.set(x, centerY - halfExtent + tickScale * 0.8, 0.5);
+        label.scale.set(tickScale, tickScale * 0.5, 1);
+        scene.add(label);
+        tickLabelsRef.current.push(label);
+      }
+      const firstYTick = Math.ceil((centerY - halfExtent) / interval) * interval;
+      for (let y = firstYTick; y <= centerY + halfExtent + 1e-6; y += interval) {
+        const label = createTickLabel(String(Math.round(y)));
+        label.position.set(centerX - halfExtent + tickScale * 1.2, y, 0.5);
+        label.scale.set(tickScale, tickScale * 0.5, 1);
+        scene.add(label);
+        tickLabelsRef.current.push(label);
+      }
+    };
+    updateTickLabelsRef.current = updateTickLabels;
+    updateTickLabels(0, 0, DEFAULT_GRID_SIZE / 2);
+
     // A cone pointing straight down at the tool position, tip-first - closer to
     // how an actual bit/torch looks than a plain ball. ConeGeometry's tip points
     // along +Y by default; rotate it onto -Z (down, since Z is up in this scene)
@@ -455,6 +547,11 @@ const Visualizer3D = () => {
       xLabel.material.dispose();
       yLabel.material.map?.dispose();
       yLabel.material.dispose();
+      tickLabelsRef.current.forEach((sprite) => {
+        sprite.material.map?.dispose();
+        sprite.material.dispose();
+      });
+      tickLabelsRef.current = [];
       xAxisLine.geometry.dispose();
       xAxisLine.material.dispose();
       yAxisLine.geometry.dispose();
@@ -497,6 +594,7 @@ const Visualizer3D = () => {
       if (segments.length === 0) {
         setIsEmpty(true);
         applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
+        updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
         return;
       }
 
@@ -549,6 +647,7 @@ const Visualizer3D = () => {
     }).catch(() => {
       setIsEmpty(true);
       applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
+      updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileName, armedRunFromLine, toolpathVersion]);
