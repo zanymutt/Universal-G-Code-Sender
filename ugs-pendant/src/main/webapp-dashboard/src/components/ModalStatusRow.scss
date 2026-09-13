@@ -7,21 +7,26 @@
 }
 
 .modalStatusWcs {
-  width: auto;
-  flex: 0 0 auto;
+  // Equal-share flex-grow (same pattern as StepSize/FeedRate's segmented
+  // rows) instead of content-sized, so the WCS select and the chips after
+  // it stretch to use the row's full width instead of leaving it packed
+  // to the left with empty space on the right.
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
   background-color: #111213;
   border-color: #2f3132;
   color: #4ade80;
   font-weight: 700;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
   // Bootstrap's .form-select-sm still reserves its full default padding/
   // icon size for the dropdown arrow, which on a value this short (G54,
   // G59.1) is most of the control's width - shrunk to just enough room for
   // a smaller arrow so this doesn't dominate the row every other chip has
   // to share space on.
-  padding: 2px 18px 2px 6px;
+  padding: 4px 20px 4px 8px;
   background-size: 12px 10px;
-  background-position: right 4px center;
+  background-position: right 6px center;
   min-height: unset;
 
   &:focus {
@@ -38,12 +43,14 @@
 }
 
 .modalStatusChip {
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
   background-color: #111213;
   border: 1px solid #2f3132;
   border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 0.72rem;
+  padding: 4px 8px;
+  font-size: 0.8rem;
   font-weight: 700;
   color: #8a8f92;
 }
