@@ -4,6 +4,8 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-12
 
+- In the visualizer's Top/Left/Right/Bottom flat views, swapped left-click/one-finger to pan and right-click/two-finger to tilt (rotate) - the reverse of the free 3D view, which is unchanged.
+- Fixed a black gap appearing below the last line, and the highlighted line briefly jumping around, when the current-running-line highlight (below) reached near the end of a file during an actual run.
 - The gcode editor now highlights the currently-running line in yellow (matching the visualizer's own live highlight) and auto-scrolls to keep it centered as the job progresses, naturally settling toward the top/bottom near the start/end of the file where centering isn't possible.
 - Fixed the gcode text size control not actually updating the macro editor's gcode field until it happened to remount - it now updates immediately, matching the main editor.
 - Added a separate text size control (+/-) for the console, independent of the gcode editor's - the console header next to Verbose.
