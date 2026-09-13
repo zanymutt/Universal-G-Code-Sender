@@ -279,6 +279,23 @@ const Visualizer3D = () => {
     controlsRef.current?.dispose();
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    // Top/Left/Right/Bottom are flat, orthographic reference views - what
+    // you mostly want to do there is slide the part around (pan) to line
+    // it up, with rotating (checking it's not actually tilted in 3D) as the
+    // occasional secondary action, the reverse of the 3D view's own
+    // OrbitControls defaults (left = rotate, right = pan), which are left
+    // untouched here since they're already right for that view.
+    if (preset !== "3d") {
+      controls.mouseButtons = {
+        LEFT: THREE.MOUSE.PAN,
+        MIDDLE: THREE.MOUSE.DOLLY,
+        RIGHT: THREE.MOUSE.ROTATE,
+      };
+      controls.touches = {
+        ONE: THREE.TOUCH.PAN,
+        TWO: THREE.TOUCH.DOLLY_ROTATE,
+      };
+    }
     controls.target.copy(center);
     controls.update();
     controlsRef.current = controls;
