@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Fixed the WCS dropdown menu not visibly opening at all - the overflow: hidden added to stop the label/caret from spilling into the next chip was on the same box that also held the menu, clipping it to that box's ~30px height every time it opened.
 - Fixed the WCS dropdown's "G54" label overlapping the next chip ("G0") - the previous affordance change (lighter fill, chevron icon) accidentally dropped the toggle's transparent-background override, and separately the chevron rendered much larger than intended because this project doesn't bundle FontAwesome's own icon-sizing CSS, both of which left no room for the label text.
 - The Top/Left/Right/Bottom/3D visualizer view buttons now work before any file is loaded (they used to silently do nothing, framing on the loaded toolpath's bounds which didn't exist yet) - they frame the empty grid instead.
 - Gave the WCS dropdown a visibly different resting look (lighter fill, a faint always-on green border, a real chevron icon) instead of blending into the read-only chips next to it - it was easy to miss that it was a control at all.
