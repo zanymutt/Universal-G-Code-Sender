@@ -409,14 +409,30 @@ const Visualizer3D = () => {
         scene.remove(gridRef.current);
         gridRef.current.dispose();
       }
-      const divisions = Math.max(1, Math.round(size / GRID_CELL_SIZE));
-      const grid = new THREE.GridHelper(size, divisions, 0x2f3132, 0x2f3132);
+      // GridHelper(size, divisions) divides its own size evenly into
+      // `divisions` cells and is positioned wherever asked - neither of
+      // those, on their own, land its lines on true multiples of
+      // GRID_CELL_SIZE relative to work-coordinate zero: `size` isn't
+      // necessarily a whole multiple of it (divisions was only ever
+      // *rounded* to the nearest one, so each cell was only approximately
+      // 10mm), and centerX/centerY are the part's own bounding-box center,
+      // an arbitrary position with no reason to fall on a cell boundary
+      // itself. Snapping the requested size/center out to the nearest
+      // GRID_CELL_SIZE boundary first fixes both at once: an exact whole
+      // number of exactly-10mm cells, positioned so a line falls exactly on
+      // every multiple of 10 (0, 10, 20, -10, ...), confirmed visually
+      // against the tick labels below, which were already computed that way.
+      const half = size / 2;
+      const snappedHalf = Math.ceil(half / GRID_CELL_SIZE) * GRID_CELL_SIZE;
+      const snappedSize = snappedHalf * 2;
+      const snappedCenterX = Math.round(centerX / GRID_CELL_SIZE) * GRID_CELL_SIZE;
+      const snappedCenterY = Math.round(centerY / GRID_CELL_SIZE) * GRID_CELL_SIZE;
+      const divisions = snappedSize / GRID_CELL_SIZE;
+      const grid = new THREE.GridHelper(snappedSize, divisions, 0x2f3132, 0x2f3132);
       grid.rotation.x = Math.PI / 2;
-      grid.position.set(centerX, centerY, 0);
+      grid.position.set(snappedCenterX, snappedCenterY, 0);
       scene.add(grid);
       gridRef.current = grid;
-
-      const half = size / 2;
       // These mark true work-coordinate zero (X0/Y0), not wherever the grid itself
       // is currently centered - the grid recenters on the loaded job, but zero
       // doesn't move just because the job isn't drawn around it. The X line runs
