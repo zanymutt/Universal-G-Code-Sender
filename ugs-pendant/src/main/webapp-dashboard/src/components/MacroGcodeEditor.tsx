@@ -1,13 +1,20 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { EditorState } from "@codemirror/state";
+import { Compartment, EditorState } from "@codemirror/state";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { useEditorFontSize } from "../hooks/useEditorFontSize";
 import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
 import "./MacroGcodeEditor.scss";
 
+// Font-size is deliberately not set here - see fontSizeCompartment below and
+// useEditorFontSize's own comment on why. Shares that one setting/storage
+// key with the main gcode editor rather than getting its own - there's no
+// reason to want the macro editor's gcode at a different size, and Split
+// mode can show both editors at once, where two independent settings could
+// visibly disagree on-screen at the same time.
 const editorTheme = EditorView.theme(
   {
-    "&": { height: "100%", fontSize: "0.85rem", backgroundColor: "#1c1e1f" },
+    "&": { height: "100%", backgroundColor: "#1c1e1f" },
     ".cm-content": { fontFamily: "monospace" },
     ".cm-gutters": { backgroundColor: "#1c1e1f", color: "#5b6062", border: "none" },
     ".cm-activeLine": { backgroundColor: "#232526" },
@@ -47,6 +54,8 @@ const MacroGcodeEditor = forwardRef<MacroGcodeEditorHandle, Props>(({ initialVal
   const viewRef = useRef<EditorView | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const fontSizeCompartmentRef = useRef(new Compartment());
+  const { fontSize } = useEditorFontSize();
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -62,6 +71,7 @@ const MacroGcodeEditor = forwardRef<MacroGcodeEditorHandle, Props>(({ initialVal
           gcodeLanguage,
           gcodeSyntaxHighlighting,
           editorTheme,
+          fontSizeCompartmentRef.current.of(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
           EditorView.updateListener.of((update) => {
             if (update.docChanged) onChangeRef.current(update.state.doc.toString());
           }),
@@ -77,6 +87,16 @@ const MacroGcodeEditor = forwardRef<MacroGcodeEditorHandle, Props>(({ initialVal
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Live-updates if the shared font-size setting changes while this editor
+  // is already mounted - most visibly reachable via Split mode, which can
+  // show the Macros pane (this editor) and the Edit tab (with the actual
+  // +/- control) on screen at the same time.
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: fontSizeCompartmentRef.current.reconfigure(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
+    });
+  }, [fontSize]);
 
   useImperativeHandle(ref, () => ({
     insertAtCursor(text: string) {
