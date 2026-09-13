@@ -1,6 +1,6 @@
 import { Dropdown } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCheck, faChevronDown } from "@fortawesome/free-solid-svg-icons";
+import { faCheck } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { sendGcode } from "../services/machine";
 import "./ModalStatusRow.scss";
@@ -45,8 +45,7 @@ const ModalStatusRow = () => {
           disabled={!canAdjust}
           title="Active work coordinate system"
         >
-          <span className="modalStatusWcsLabel">{currentWcs}</span>
-          <FontAwesomeIcon icon={faChevronDown} className="modalStatusWcsCaret" />
+          {currentWcs}
         </Dropdown.Toggle>
         <Dropdown.Menu>
           {WCS_OPTIONS.map((wcs) => (

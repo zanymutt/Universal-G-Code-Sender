@@ -18,11 +18,12 @@ $modalStatusHeight: 30px;
 .modalStatusWcs {
   // A bigger flex-grow share than the read-only chips (1.4 vs 1, same base
   // pattern as StepSize/FeedRate's segmented rows otherwise) - this is the
-  // one item in the row that needs room for both a label *and* an icon, so
-  // an equal share left it too tight to fit "G54" once the caret was added
-  // (confirmed: the label was squeezed all the way down to 0 width at some
-  // window sizes). The chips giving up a few px each is unnoticeable next
-  // to their own short 2-3 character codes.
+  // one item in the row that needs room for both its text *and* a caret, so
+  // an equal share left too little room for both (confirmed empirically:
+  // "G54" alone at this row's usual per-item width already uses nearly all
+  // of a chip's own content space, before adding anything else). The chips
+  // giving up a few px each is unnoticeable next to their own short 2-3
+  // character codes.
   flex: 1.7 1 0;
   min-width: 0;
 
@@ -48,7 +49,7 @@ $modalStatusHeight: 30px;
   background-color: #232526;
   border: 1px solid rgba(74, 222, 128, 0.35);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 8px;
 
   &:has(.dropdown-toggle:hover),
   &:focus-within {
@@ -66,22 +67,10 @@ $modalStatusHeight: 30px;
     height: 100%;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     background-color: transparent;
     border: none;
     padding: 0;
-    // Belt and suspenders: whatever this button's own content does, it must
-    // never visually spill past its own box into the next chip. Confirmed
-    // that's exactly what happened without this - a device narrow enough
-    // that "G54" plus the caret icon couldn't both fit their natural size
-    // overflowed the button rather than shrinking, since flex children
-    // default to a min-width based on their own content unless told
-    // otherwise. This lives on the button itself, not the .modalStatusWcs
-    // wrapper around it - .dropdown-menu is also a child of that wrapper,
-    // and clipping *it* to the wrapper's own ~30px height was what made
-    // the open menu invisible (confirmed via its computed layout box being
-    // correct - display: block, class "show" - despite nothing showing on
-    // screen).
     overflow: hidden;
     // Matches .modalStatusChip's own font-size (was 0.85rem) - a little
     // extra breathing room for the caret alongside it, and no reason for
@@ -89,44 +78,23 @@ $modalStatusHeight: 30px;
     color: #4ade80;
     font-weight: 700;
     font-size: 0.8rem;
+    white-space: nowrap;
 
-    .modalStatusWcsLabel {
-      // Deliberately NOT min-width: 0 + overflow: hidden here (text-overflow:
-      // ellipsis needs the latter) - confirmed that combination makes this
-      // flex item render well under its own content width even when the row
-      // has plenty of room to spare (a genuine engine quirk, isolated by
-      // toggling each property alone vs. together), which is what was
-      // squeezing "G54" down to an unreadable sliver. The wrapper's own
-      // overflow: hidden above is still there as the actual safety net - if
-      // this ever doesn't fit, it clips at the box edge (no ellipsis, but
-      // also no bleeding into the next chip) rather than growing the button.
-      white-space: nowrap;
-    }
-
-    .modalStatusWcsCaret {
-      // A real chevron icon instead of the previous small unicode glyph -
-      // reads as "this opens a menu" at a glance rather than blending into
-      // the panel, and its own muted (non-green) color further sets it
-      // apart from the "G54" label next to it. Pushed to the far right by
-      // the label's own margin-right: auto, rather than justify-content:
-      // space-between on the button - that put equal trust in both
-      // children never overflowing, when only the label (never more than
-      // "G59.1") should ever need to give up space.
-      //
-      // Explicit width/height, not font-size: this project doesn't bundle
-      // FontAwesome's own base CSS (the .svg-inline--fa rules that size an
-      // icon as an em box off its font-size), so a bare font-size here did
-      // nothing and the icon rendered at the SVG's unconstrained default
-      // (~16px) - large enough, in this tight a box, to squeeze the label
-      // next to it down to 0 width. Confirmed via computed styles that
-      // .modalStatusWcsCheck (the dropdown menu's checkmark) has the same
-      // gap, just not visibly broken there since that menu has room to
-      // spare - not fixed here since it's not user-visible as a bug.
-      width: 7px;
-      height: 7px;
-      margin-left: 3px;
+    // A plain text glyph, not an icon component - this project doesn't
+    // bundle FontAwesome's own base CSS (the rules that size an icon as an
+    // em box off font-size), so a FontAwesome icon here previously rendered
+    // at its unconstrained SVG default (~16px), plenty big enough in this
+    // small a box to push "G54" out past the edge into the next chip. A
+    // plain character in ::after has no such dependency - font-size sizes
+    // it exactly the same way it sizes the "G54" text next to it.
+    &::after {
+      display: inline-block;
+      content: "\25BE";
+      border: none;
+      vertical-align: 0;
+      margin-left: 4px;
       color: #9aa0a6;
-      flex-shrink: 0;
+      font-size: 0.7rem;
     }
 
     &:hover,
@@ -140,7 +108,7 @@ $modalStatusHeight: 30px;
     &:disabled {
       color: #6b7280;
 
-      .modalStatusWcsCaret {
+      &::after {
         color: #55595c;
       }
     }
