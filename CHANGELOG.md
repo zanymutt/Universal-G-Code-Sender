@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Added a web app manifest so the dashboard can be "installed" (Chrome/Edge's Install app, or iPad/iOS's Add to Home Screen) and opens without the browser's own address bar and tabs, like a real app - previously it always kept that browser chrome no matter how it was launched.
 - Changed the Open dialog from a fullscreen overlay to a normal-sized popup, and themed every dialog in the app (Open, Save as, confirm prompts, the alarm popup) to match the rest of the dark UI instead of Bootstrap's default white modal.
 - Made the visualizer's X/Y extent readout and the top bar's Zoom percentage brighter and slightly bigger - both were a fairly low-contrast gray against the dark background.
 - Replaced the WCS dropdown's chevron icon with a plain text arrow, same as before the icon was introduced - simpler, and removes the FontAwesome-icon-sizing dependency that kept causing overlap/clipping regressions in this specific spot.
