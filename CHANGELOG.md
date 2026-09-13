@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Fixed the WCS dropdown's open list not showing which work coordinate system is currently active - a native `<select>`'s own option list is OS/browser chrome outside CSS's reach, and its default "selected" highlighting wasn't visible against this dark theme. Replaced it with a fully-styled dropdown that marks the active entry with a checkmark and highlight.
 - Fixed the WCS dropdown rendering visibly shorter than the chips next to it in the modal status row.
 - Fixed the visualizer's grid lines not actually falling on round work-coordinate numbers - they now snap to true 10mm lines anchored at 0,0, matching the ruler tick labels.
 - Added mm ruler tick labels along the visualizer grid's bottom/left edges, matching whatever's actually in view.
