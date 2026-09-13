@@ -35,8 +35,15 @@ $modalStatusHeight: 30px;
   // side-by-side comparison of otherwise-identical test elements) - the
   // toggle ended up squeezed too narrow to fit its own text and caret.
   height: $modalStatusHeight;
-  background-color: #111213;
-  border: 1px solid #2f3132;
+  // A visibly lighter fill than the read-only chips below (#111213), the
+  // same idea as Toolbox's buttons standing out from the panel behind
+  // them - this is the one thing in the row you can actually tap, and
+  // matching the chips' own resting look (previously just a green label
+  // plus a small muted caret, easy to mistake for one more readout) didn't
+  // make that obvious. The border stays a faint green at rest too, rather
+  // than only appearing on hover/focus, as another always-visible cue.
+  background-color: #232526;
+  border: 1px solid rgba(74, 222, 128, 0.35);
   border-radius: 4px;
   padding: 0 8px;
 
@@ -47,6 +54,7 @@ $modalStatusHeight: 30px;
   }
 
   &:has(.dropdown-toggle:disabled) {
+    background-color: #111213;
     border-color: #2f3132;
   }
 
@@ -55,6 +63,7 @@ $modalStatusHeight: 30px;
     height: 100%;
     display: flex;
     align-items: center;
+    justify-content: space-between;
     background-color: transparent;
     border: none;
     padding: 0;
@@ -62,20 +71,15 @@ $modalStatusHeight: 30px;
     font-weight: 700;
     font-size: 0.85rem;
 
-    // Bootstrap's own caret is a border-triangle that inherits the
-    // button's (here, green) text color - fine on a plain button, but
-    // easy to mistake for part of the "G54" text at this size. A thin
-    // muted chevron glyph instead, same idea as the dark scrollbar
-    // elsewhere in this app: small, deliberate departures from Bootstrap's
-    // defaults where they don't read clearly in this theme.
-    &::after {
-      display: inline-block;
-      content: "\25BE";
-      border: none;
-      vertical-align: 0;
+    .modalStatusWcsCaret {
+      // A real chevron icon instead of the previous small unicode glyph -
+      // reads as "this opens a menu" at a glance rather than blending into
+      // the panel, and its own muted (non-green) color further sets it
+      // apart from the "G54" label next to it.
+      color: #9aa0a6;
+      font-size: 0.65rem;
       margin-left: 6px;
-      color: #6b7280;
-      font-size: 0.7rem;
+      flex-shrink: 0;
     }
 
     &:hover,
@@ -88,6 +92,10 @@ $modalStatusHeight: 30px;
 
     &:disabled {
       color: #6b7280;
+
+      .modalStatusWcsCaret {
+        color: #55595c;
+      }
     }
   }
 

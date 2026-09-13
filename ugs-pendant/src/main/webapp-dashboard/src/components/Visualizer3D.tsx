@@ -611,6 +611,12 @@ const Visualizer3D = () => {
         setIsEmpty(true);
         applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
         updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
+        // Without this, the Top/Left/Right/Bottom/3D buttons silently did
+        // nothing until a file was loaded - setView bails out with no
+        // bounds sphere to frame on. A sphere centered on the empty grid
+        // itself (matching its DEFAULT_GRID_SIZE) keeps them working before
+        // anything's been opened, framing the grid instead of a part.
+        boundsSphereRef.current = new THREE.Sphere(new THREE.Vector3(0, 0, 0), DEFAULT_GRID_SIZE / 2.4);
         return;
       }
 
@@ -664,6 +670,7 @@ const Visualizer3D = () => {
       setIsEmpty(true);
       applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
       updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
+      boundsSphereRef.current = new THREE.Sphere(new THREE.Vector3(0, 0, 0), DEFAULT_GRID_SIZE / 2.4);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileName, armedRunFromLine, toolpathVersion]);
