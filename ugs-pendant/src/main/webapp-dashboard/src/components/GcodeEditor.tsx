@@ -102,15 +102,27 @@ const currentRunLineField = StateField.define<DecorationSet>({
   provide: (field) => EditorView.decorations.from(field),
 });
 
-// scrollIntoView's centering, computed against a virtualized document's
-// estimated (not-yet-measured) line heights, can land short on a big jump to
-// a distant, previously-unrendered line - confirmed via testing: a jump from
-// line ~1 to line 141 of a 144-line file landed at scrollTop 0 on the first
-// dispatch alone. A couple of rAF-spaced re-dispatches let CodeMirror's own
-// measurement correct itself and the scroll position converge. stillCurrent
-// guards each retry against the view having been replaced/destroyed by then
-// (a new file loading, or this component unmounting) - checked fresh before
-// every dispatch, not just once up front, since retries span multiple frames.
+// Second attempt at this (see git history for the first) - y: "center" was
+// the actual mistake, not just a rough edge needing a clamp. Centering a
+// line requires CodeMirror to know how much content sits both *above and
+// below* it, including whatever's still virtualized/unmeasured - for a
+// large jump into never-rendered territory (a fast job's final lines,
+// arriving faster than measurement can settle) that estimate is exactly
+// the thing confirmed unreliable, in both directions: short (scrollTop 0
+// after jumping from line ~1 to 141 of 144) and long (scrolled past the
+// real end, leaving blank space below the last line - the black bar this
+// was originally reported against). A clamp against the scroller's own
+// scrollHeight only helps when scrollHeight itself is already correct,
+// which is precisely what's in question near either edge.
+//
+// y: "nearest" doesn't have this problem: it only needs to know whether the
+// target is above or below the *current* viewport and by how much, not the
+// full document's shape on both sides - and it's a genuine no-op whenever
+// the target is already visible, which is most calls during a real run
+// (consecutive lines are usually still on-screen from the last one).
+// Fewer, smaller scrolls means less exposure to virtualization measurement
+// lagging behind in the first place, not just a better-clamped correction
+// after the fact.
 function scrollLineIntoView(view: EditorView, line: number, stillCurrent: () => boolean, retries = 3) {
   const pos = view.state.doc.line(line).from;
   const attempt = (remaining: number) => {
@@ -122,15 +134,10 @@ function scrollLineIntoView(view: EditorView, line: number, stillCurrent: () => 
     // stale target. stillCurrent (see call sites) checks against the latest
     // requested line, not just whether the view itself is still alive.
     if (!stillCurrent()) return;
-    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "center" }) });
-    // scrollIntoView's own "center" math is computed against a virtualized
-    // document's height, most of which - near either end of a long file -
-    // is still an estimate rather than a real measurement; confirmed on
-    // real hardware this can overshoot past the document's actual end,
-    // leaving blank space below the last real line instead of the last few
-    // lines filling the panel. Clamping to the scroller's own real, current
-    // range can only ever pull an overshoot back, never disturb a
-    // legitimately-centered position, so it's safe unconditionally.
+    view.dispatch({ effects: EditorView.scrollIntoView(pos, { y: "nearest", yMargin: 80 }) });
+    // Belt and suspenders, cheap to keep: still clamps an overshoot past the
+    // real end on the rare big jump (e.g. this component's own initial
+    // mount mid-run) where scrollHeight briefly overestimates.
     const maxScrollTop = Math.max(0, view.scrollDOM.scrollHeight - view.scrollDOM.clientHeight);
     if (view.scrollDOM.scrollTop > maxScrollTop) {
       view.scrollDOM.scrollTop = maxScrollTop;
@@ -353,16 +360,12 @@ const GcodeEditor = () => {
     viewRef.current?.dispatch({ effects: setDimThroughLine.of(dimThroughLine) });
   }, [dimThroughLine]);
 
-  // Highlights the running line and scrolls it toward the vertical center of
-  // the editor, following along as the job progresses - the same "Follow"
-  // idea desktop's editor has by default, ported here since our editor and
-  // the dashboard's visualizer are two separate views instead of one.
-  // scrollIntoView's own centering is already naturally clamped by the real
-  // document bounds - near the start of the file there isn't enough content
-  // above the running line to actually center it (it sits lower until there
-  // is), and near the end there isn't enough below (it sits higher) - no
-  // special-casing needed for either edge, CodeMirror won't scroll past
-  // either end of the document trying to satisfy y: "center".
+  // Highlights the running line and keeps it in view (scrolling only the
+  // minimum needed, not forcing it back to center every time - see
+  // scrollLineIntoView's own comment) as the job progresses - the same
+  // "Follow" idea desktop's editor has by default, ported here since our
+  // editor and the dashboard's visualizer are two separate views instead of
+  // one.
   useEffect(() => {
     const view = viewRef.current;
     if (!view) return;

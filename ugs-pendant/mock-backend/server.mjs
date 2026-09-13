@@ -331,6 +331,39 @@ const server = createServer((req, res) => {
     broadcast({ eventType: "AlarmEvent", event: { alarm: type } });
     return json(res, {});
   }
+  // Mock-only hook for stress-testing the dashboard editor's scroll-to-
+  // current-line/dim-through-line behavior against a fast, real-timing run
+  // (the thing that's actually hard to reproduce by hand) - broadcasts
+  // CommandEvents at intervalMs apart through every line of the active
+  // file, exactly like a real controller completing commands quickly would,
+  // then returns to IDLE. e.g.:
+  //   curl "http://localhost:8080/debug/simulateRun?intervalMs=15"
+  if (p === "/debug/simulateRun") {
+    const intervalMs = Number(url.searchParams.get("intervalMs")) || 15;
+    const totalLines = fileStatus.rowCount;
+    status.state = "RUN";
+    fileStatus.completedRowCount = 0;
+    fileStatus.lastCompletedLineNumber = -1;
+    let line = 0;
+    const timer = setInterval(() => {
+      line++;
+      fileStatus.completedRowCount = line;
+      fileStatus.lastCompletedLineNumber = line;
+      fileStatus.remainingRowCount = totalLines - line;
+      broadcast({
+        eventType: "CommandEvent",
+        event: { commandEventType: "COMMAND_COMPLETE", command: { command: "", response: "ok", isError: false, isOk: true } },
+      });
+      if (line >= totalLines) {
+        clearInterval(timer);
+        status.state = "IDLE";
+        // The existing 500ms periodic ControllerStatusEvent broadcast (see
+        // wss.on("connection") below) picks up this state flip on its own -
+        // no need to duplicate it here.
+      }
+    }, intervalMs);
+    return json(res, { simulating: true, totalLines, intervalMs });
+  }
   if (p.startsWith("/api/v1/machine/")) return json(res, {});
   if (p === "/api/v1/files/getFileStatus") return json(res, fileStatus);
   if (p === "/api/v1/files/getWorkspaceFileList") return json(res, { fileList: Object.keys(files) });
