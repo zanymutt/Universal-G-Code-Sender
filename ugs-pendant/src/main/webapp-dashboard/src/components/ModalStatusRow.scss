@@ -49,13 +49,6 @@ $modalStatusHeight: 30px;
   border: 1px solid rgba(74, 222, 128, 0.35);
   border-radius: 4px;
   padding: 0 4px;
-  // Belt and suspenders: whatever the toggle's own content does, it must
-  // never visually spill past this box into the next chip. Confirmed that's
-  // exactly what happened without this - a device narrow enough that "G54"
-  // plus the caret icon couldn't both fit their natural size overflowed the
-  // button (and this wrapper) rather than shrinking, since flex children
-  // default to a min-width based on their own content unless told otherwise.
-  overflow: hidden;
 
   &:has(.dropdown-toggle:hover),
   &:focus-within {
@@ -77,6 +70,19 @@ $modalStatusHeight: 30px;
     background-color: transparent;
     border: none;
     padding: 0;
+    // Belt and suspenders: whatever this button's own content does, it must
+    // never visually spill past its own box into the next chip. Confirmed
+    // that's exactly what happened without this - a device narrow enough
+    // that "G54" plus the caret icon couldn't both fit their natural size
+    // overflowed the button rather than shrinking, since flex children
+    // default to a min-width based on their own content unless told
+    // otherwise. This lives on the button itself, not the .modalStatusWcs
+    // wrapper around it - .dropdown-menu is also a child of that wrapper,
+    // and clipping *it* to the wrapper's own ~30px height was what made
+    // the open menu invisible (confirmed via its computed layout box being
+    // correct - display: block, class "show" - despite nothing showing on
+    // screen).
+    overflow: hidden;
     // Matches .modalStatusChip's own font-size (was 0.85rem) - a little
     // extra breathing room for the caret alongside it, and no reason for
     // this one to run larger than the read-only chips next to it anyway.
