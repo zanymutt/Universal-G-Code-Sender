@@ -2,6 +2,11 @@
 
 Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. The classic pendant (`/`) is unaffected unless noted.
 
+## 2026-09-13
+
+- Added mm ruler tick labels along the visualizer grid's bottom/left edges, matching whatever's actually in view.
+- The WCS dropdown/modal status row now stretches to fill the full line width instead of sitting packed to the left with unused space.
+
 ## 2026-09-12
 
 - In the visualizer's Top/Left/Right/Bottom flat views, swapped left-click/one-finger to pan and right-click/two-finger to tilt (rotate) - the reverse of the free 3D view, which is unchanged.
