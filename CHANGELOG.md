@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Fixed the workspace directory listing (used by both the pendant and the dashboard) only recognizing .gcode/.nc/.tap files - it now matches the same 7 extensions the desktop's own Open File dialog always has (also .cnc/.gc/.ngc/.txt), so a folder of e.g. .ngc files no longer shows up as empty there while working fine in the desktop UI.
 - Redesigned the dashboard's Open file browser: a search box to filter by name, a Recent/Name sort toggle, and each row now shows file size and last-modified time. Rows are also noticeably shorter than before, so a small workspace directory no longer takes up most of a small touchscreen the way it used to.
 - Fixed a fetch race that could leave the visualizer blank after a reopen even though the backend correctly had a file loaded - closing (nothing to parse) resolves faster than opening (has to read and parse the file), so a stale "empty" response from a just-preceding close could arrive *after* a subsequent open's real one and silently overwrite it. Stress-tested with rapid close/reopen cycles against the same file with no blank state.
 - Fixed upload/open/save/etc. silently treating a failed backend request as a success (fetch() only rejects on a genuine network error, not an HTTP error status) - a failed open used to look identical to one that just did nothing, with no way to tell a real error happened, let alone what it was. The Open dialog now shows an actual error message when this happens.
