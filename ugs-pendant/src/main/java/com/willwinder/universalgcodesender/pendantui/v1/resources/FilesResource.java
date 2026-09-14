@@ -46,6 +46,7 @@ import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 @Tag(name = "Files", description = "Endpoints for loading files and handling files")
 @Path("/files")
@@ -63,7 +64,23 @@ public class FilesResource {
     public void open(
             @FormDataParam("file") FormDataContentDisposition disposition, @FormDataParam("file") File file) throws Exception {
         String originalFileName = disposition.getFileName();
-        File renamedFile = new File(file.getParentFile(), originalFileName);
+        // A fresh subdirectory per upload, not the same target path every time a
+        // file with this name is uploaded (renaming/overwriting a same-named file
+        // used to fail here, intermittently, after a few upload/close cycles) -
+        // on Windows, overwriting (or even renaming over) a path some other
+        // handle still has open can fail outright, unlike Unix. Re-uploading the
+        // same filename a second time - re-editing the same job, or just
+        // re-picking it after closing - is an entirely normal thing to do and
+        // shouldn't depend on whatever handle the *previous* upload's own
+        // processing (GcodeStreamReader, the editor's getFileContent, etc.) left
+        // behind having been released in time. The original filename is kept
+        // (not made unique itself) purely for display - fileStatus/the editor
+        // only ever show the last path segment.
+        File uploadDir = new File(file.getParentFile(), "upload_" + UUID.randomUUID());
+        if (!uploadDir.mkdirs()) {
+            throw new IOException("Couldn't create a directory for the uploaded file: " + uploadDir);
+        }
+        File renamedFile = new File(uploadDir, originalFileName);
         if (!file.renameTo(renamedFile)) {
             Files.copy(file.toPath(), renamedFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
             file.delete();

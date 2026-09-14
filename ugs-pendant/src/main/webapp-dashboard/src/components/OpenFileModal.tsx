@@ -21,6 +21,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
   const dispatch = useAppDispatch();
   const [workspaceFileList, setWorkspaceFileList] = useState<string[]>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
   // Uploading only makes sense from the same machine running UGS - it lands
   // in a disposable server-side temp copy (see FilesResource#open's own
   // comment), which on a remote session there's no way to get back to after
@@ -40,16 +41,24 @@ const OpenFileModal = ({ handleClose }: Props) => {
 
   const alertClicked = (file: string) => {
     setIsLoading(true);
+    setError(null);
     openWorkspaceFile(file)
       .then(() => {
         refreshFileState(dispatch);
         handleClose();
       })
+      // Previously nothing here at all - a failed open (the backend threw)
+      // used to look identical to a successful one that just didn't do
+      // anything, with no way to tell what actually happened. Left open
+      // (not handleClose()) so the error is still visible, not dismissed
+      // along with the modal.
+      .catch(() => setError(`Couldn't open "${file}".`))
       .finally(() => setIsLoading(false));
   };
 
   const onUploadFile = () => {
-    return new Promise((resolve) => {
+    setError(null);
+    return new Promise((resolve, reject) => {
       const input = document.createElement("input");
       input.accept = ".cnc,.nc,.ngc,.tap,.txt,.gcode";
       input.type = "file";
@@ -61,12 +70,17 @@ const OpenFileModal = ({ handleClose }: Props) => {
         const files = e?.target?.files ?? [];
         if (files.length === 0) {
           resolve(1);
+          return;
         }
 
-        for (const file of files) {
-          await uploadAndOpen(file);
+        try {
+          for (const file of files) {
+            await uploadAndOpen(file);
+          }
+          resolve(1);
+        } catch (err) {
+          reject(err);
         }
-        resolve(1);
       };
       input.click();
     })
@@ -74,6 +88,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
         refreshFileState(dispatch);
         handleClose();
       })
+      .catch(() => setError("Couldn't open that file."))
       .finally(() => {
         setIsLoading(false);
       });
@@ -84,6 +99,10 @@ const OpenFileModal = ({ handleClose }: Props) => {
       <Modal.Header closeButton>
         <Modal.Title>Open file</Modal.Title>
       </Modal.Header>
+
+      {error && (
+        <div style={{ color: "#ff6b6b", padding: "8px 16px 0" }}>{error}</div>
+      )}
 
       {/* Was fullscreen - a popup sized to fit its content (below, capped
           and scrollable so a long workspace file list can't grow the modal

@@ -1,6 +1,20 @@
 import { FileStatus } from "../model/FileStatus";
 import { WorkspaceFileList } from "../model/WorkspaceFileList";
 
+// fetch() only rejects on a genuine network failure - an HTTP error status
+// (a backend exception, e.g.) still resolves normally, so every one of these
+// used to silently treat a failed request as a success. Confirmed that's not
+// hypothetical: a failed open/upload with nothing checking response.ok left
+// the dashboard looking like it just did nothing (or showed stale state)
+// with no way to tell a real backend error happened at all, let alone what
+// it was.
+async function checkOk(response: Response): Promise<void> {
+  if (!response.ok) {
+    const body = await response.text().catch(() => "");
+    throw new Error(`Request to ${response.url} failed (${response.status})${body ? `: ${body}` : ""}`);
+  }
+}
+
 export const getFileStatus = () => {
   return fetch("/api/v1/files/getFileStatus")
     .then((response) => response.text())
@@ -20,7 +34,7 @@ export const send = () => {
     method: "POST",
   };
 
-  return fetch(url, request).then();
+  return fetch(url, request).then(checkOk);
 };
 
 // Only primes the backend to skip to this line next time send() is called -
@@ -29,15 +43,15 @@ export const runFromLine = (line: number): Promise<void> => {
   const request = {
     method: "POST",
   };
-  return fetch(`/api/v1/files/runFromLine?line=${line}`, request).then();
+  return fetch(`/api/v1/files/runFromLine?line=${line}`, request).then(checkOk);
 };
 
 export const stop = () => {
-  return fetch("/api/v1/files/cancel").then();
+  return fetch("/api/v1/files/cancel").then(checkOk);
 };
 
 export const pause = () => {
-  return fetch("/api/v1/files/pause").then();
+  return fetch("/api/v1/files/pause").then(checkOk);
 };
 
 export const getWorkspaceFileList = (): Promise<WorkspaceFileList> => {
@@ -53,18 +67,14 @@ export const openWorkspaceFile = (fileName: string): Promise<void> => {
   return fetch(
     `/api/v1/files/openWorkspaceFile?file=${fileName}`,
     request
-  ).then();
+  ).then(checkOk);
 };
 
 export const closeFile = (): Promise<void> => {
   const request = {
     method: "POST",
   };
-  return fetch("/api/v1/files/closeFile", request).then((response) => {
-    if (!response.ok) {
-      throw new Error(`Couldn't close file (${response.status})`);
-    }
-  });
+  return fetch("/api/v1/files/closeFile", request).then(checkOk);
 };
 
 export const uploadAndOpen = (file: File): Promise<void> => {
@@ -75,5 +85,5 @@ export const uploadAndOpen = (file: File): Promise<void> => {
     method: "POST",
     body: formData,
   };
-  return fetch(`/api/v1/files/uploadAndOpen`, request).then();
+  return fetch(`/api/v1/files/uploadAndOpen`, request).then(checkOk);
 };
