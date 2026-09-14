@@ -605,7 +605,20 @@ const Visualizer3D = () => {
       toolpathLinesRef.current = null;
     }
 
+    // Same class of bug fileStatusSlice was already fixed for (see its own
+    // comment) - toolpathVersion now bumps on every close/open/save (not
+    // just a websocket push), so overlapping getToolpath() calls are a real
+    // possibility, not just a theoretical one: closing has nothing to parse
+    // and resolves almost immediately, while a real open/reload has to read
+    // and parse the file first - so a close's empty result arriving *after*
+    // a subsequent open's real one silently blanked the visualizer despite
+    // the backend correctly having a file loaded. cancelled, checked in
+    // every branch below, discards a response from a request this effect
+    // itself no longer cares about, the same guard GcodeEditor's own file-
+    // loading effect already uses.
+    let cancelled = false;
     getToolpath().then((segments) => {
+      if (cancelled) return;
       segmentsRef.current = segments;
       if (segments.length === 0) {
         setIsEmpty(true);
@@ -667,11 +680,16 @@ const Visualizer3D = () => {
         setView("3d");
       }
     }).catch(() => {
+      if (cancelled) return;
       setIsEmpty(true);
       applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
       updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
       boundsSphereRef.current = new THREE.Sphere(new THREE.Vector3(0, 0, 0), DEFAULT_GRID_SIZE / 2.4);
     });
+
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileName, armedRunFromLine, toolpathVersion]);
 
