@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Button from "react-bootstrap/Button";
-import ButtonGroup from "react-bootstrap/ButtonGroup";
 import Modal from "react-bootstrap/Modal";
-import ToggleButton from "react-bootstrap/ToggleButton";
 import {
   getWorkspaceFileList,
   openWorkspaceFile,
@@ -10,7 +8,7 @@ import {
 } from "../services/files";
 import { Container, ListGroup, ListGroupItem, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClock, faFile, faFolder, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
+import { faCaretDown, faCaretUp, faFile, faFolder, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { refreshFileState } from "../store/refreshFileState";
 import { isLocalAccess } from "../utils/isLocalAccess";
@@ -143,6 +141,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
   }, [entries, currentNode, isSearching, filter, sortMode]);
 
   const hasAnyFiles = !!entries?.length;
+  const rowClass = `openFileModalItem${isSearching ? " searching" : ""}`;
 
   const openFolder = (name: string) => setCurrentPath((path) => [...path, name]);
   const goToCrumb = (depth: number) => setCurrentPath((path) => path.slice(0, depth));
@@ -203,7 +202,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
   };
 
   return (
-    <Modal show={true} onHide={handleClose} centered>
+    <Modal show={true} onHide={handleClose} centered dialogClassName="openFileModalDialog">
       <Modal.Header closeButton>
         <Modal.Title>Open file</Modal.Title>
       </Modal.Header>
@@ -223,30 +222,6 @@ const OpenFileModal = ({ handleClose }: Props) => {
               onChange={(e) => setFilter(e.target.value)}
             />
           </div>
-          <ButtonGroup size="sm" className="openFileModalSort">
-            <ToggleButton
-              id="open-file-sort-recent"
-              type="radio"
-              variant="outline-secondary"
-              name="open-file-sort"
-              value="recent"
-              checked={sortMode === "recent"}
-              onChange={() => setSortMode("recent")}
-            >
-              <FontAwesomeIcon icon={faClock} /> Recent
-            </ToggleButton>
-            <ToggleButton
-              id="open-file-sort-name"
-              type="radio"
-              variant="outline-secondary"
-              name="open-file-sort"
-              value="name"
-              checked={sortMode === "name"}
-              onChange={() => setSortMode("name")}
-            >
-              Name
-            </ToggleButton>
-          </ButtonGroup>
         </div>
       )}
 
@@ -267,6 +242,30 @@ const OpenFileModal = ({ handleClose }: Props) => {
               </button>
             </span>
           ))}
+        </div>
+      )}
+
+      {/* Outside Modal.Body's own scroll area, same as the toolbar/breadcrumbs
+          above, so the column headers stay put while a long list scrolls
+          under them - the way every desktop file manager's details view does. */}
+      {hasAnyFiles && (
+        <div className={rowClass + " openFileModalColumnHeader"}>
+          <button
+            type="button"
+            className="openFileModalSortBtn"
+            onClick={() => setSortMode("name")}
+          >
+            Name {sortMode === "name" && <FontAwesomeIcon icon={faCaretUp} />}
+          </button>
+          <span className="openFileModalColSize">Size</span>
+          <button
+            type="button"
+            className="openFileModalSortBtn openFileModalColModified"
+            onClick={() => setSortMode("recent")}
+          >
+            Modified {sortMode === "recent" && <FontAwesomeIcon icon={faCaretDown} />}
+          </button>
+          {isSearching && <span className="openFileModalColLocation">Location</span>}
         </div>
       )}
 
@@ -300,12 +299,15 @@ const OpenFileModal = ({ handleClose }: Props) => {
               key={`folder:${name}`}
               action
               onClick={() => openFolder(name)}
-              className="openFileModalItem"
+              className={rowClass}
             >
-              <FontAwesomeIcon icon={faFolder} className="openFileModalItemIcon" />
-              <div className="openFileModalItemText">
-                <div className="openFileModalItemName">{name}</div>
+              <div className="openFileModalItemName">
+                <FontAwesomeIcon icon={faFolder} className="openFileModalItemIcon" />
+                {name}
               </div>
+              <div className="openFileModalDash">&mdash;</div>
+              <div className="openFileModalDash openFileModalColModified">&mdash;</div>
+              {isSearching && <div className="openFileModalColLocation" />}
             </ListGroupItem>
           ))}
           {visibleFiles.map((entry) => (
@@ -313,17 +315,18 @@ const OpenFileModal = ({ handleClose }: Props) => {
               key={entry.path}
               action
               onClick={() => alertClicked(entry.path)}
-              className="openFileModalItem"
+              className={rowClass}
               disabled={isLoading}
             >
-              <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
-              <div className="openFileModalItemText">
-                <div className="openFileModalItemName">{basename(entry.path)}</div>
-                <div className="openFileModalItemMeta">
-                  {isSearching && dirname(entry.path) && <>{dirname(entry.path)} &bull; </>}
-                  {formatSize(entry.size)} &bull; {formatRelativeTime(entry.lastModified)}
-                </div>
+              <div className="openFileModalItemName">
+                <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
+                {basename(entry.path)}
               </div>
+              <div className="openFileModalColSize">{formatSize(entry.size)}</div>
+              <div className="openFileModalColModified">{formatRelativeTime(entry.lastModified)}</div>
+              {isSearching && (
+                <div className="openFileModalColLocation">{dirname(entry.path) || "—"}</div>
+              )}
             </ListGroupItem>
           ))}
         </ListGroup>

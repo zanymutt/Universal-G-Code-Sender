@@ -1,5 +1,12 @@
 @import "../_scrollbar";
 
+// Roughly double the old default (~500px) Bootstrap modal width - three or
+// four columns of real data (name, size, modified, and location while
+// searching) need the room a single narrow stacked-text list never did.
+.openFileModalDialog {
+  max-width: min(920px, 94vw);
+}
+
 .openFileModalToolbar {
   display: flex;
   gap: 8px;
@@ -33,10 +40,6 @@
       color: #6b7280;
     }
   }
-}
-
-.openFileModalSort {
-  flex-shrink: 0;
 }
 
 .openFileModalBreadcrumbs {
@@ -82,34 +85,121 @@
   @include darkScrollbar;
 }
 
+// Shared by both the (non-scrolling) header and every row, so their columns
+// always line up regardless of how each is styled otherwise. Size/Modified
+// are fixed-width and right-aligned like every desktop file manager's
+// details view; Name takes whatever's left. Location (search results only)
+// gets real room since a deep path can be long.
 .openFileModalItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 100px;
+  align-items: center;
+  column-gap: 16px;
+  min-height: 44px;
+  padding: 6px 16px;
+
+  &.searching {
+    grid-template-columns: minmax(0, 1fr) 70px 100px minmax(0, 200px);
+  }
+}
+
+.openFileModalColumnHeader {
+  padding: 6px 16px;
+  border-bottom: 1px solid #2f3132;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #6b7280;
+  // Not a ListGroupItem - min-height/hover treatment don't apply to a header.
+  min-height: 0;
+}
+
+.openFileModalSortBtn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  cursor: pointer;
   display: flex;
   align-items: center;
-  // Noticeably shorter than the old flat 60px-tall single-line rows, so the
-  // same handful of files takes visibly less of the screen - still tall
-  // enough to tap comfortably.
-  min-height: 48px;
-  padding: 6px 16px;
+  gap: 4px;
+
+  &:hover {
+    color: #e5e7eb;
+  }
+}
+
+.openFileModalColSize,
+.openFileModalColModified {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.openFileModalColModified.openFileModalSortBtn {
+  justify-content: flex-end;
+}
+
+.openFileModalColLocation {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #6b7280;
+  font-size: 0.85rem;
 }
 
 .openFileModalItemIcon {
   flex-shrink: 0;
-  margin-right: 12px;
+  margin-right: 10px;
   color: #6b7280;
 }
 
-.openFileModalItemText {
-  min-width: 0;
-  flex: 1;
-}
-
 .openFileModalItemName {
+  display: flex;
+  align-items: center;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.openFileModalItemMeta {
-  font-size: 0.8rem;
-  color: #6b7280;
+.openFileModalColSize,
+.openFileModalDash {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+// Folders don't have a single meaningful size/modified time without
+// recursively stat-ing everything under them, so those cells show a plain
+// dash rather than pretending to - the same convention most file managers
+// use rather than computing (or omitting) folder sizes eagerly.
+.openFileModalDash {
+  text-align: right;
+  color: #4b5157;
+}
+
+.openFileModalColModified {
+  color: #9ca3af;
+  font-size: 0.85rem;
+}
+
+// On a narrow viewport, Size and Location are the columns most easily
+// dropped without losing anything critical - Name and Modified (when
+// searching, still needs Location to tell matches apart) stay.
+@media (max-width: 480px) {
+  .openFileModalItem {
+    grid-template-columns: minmax(0, 1fr) 90px;
+
+    &.searching {
+      grid-template-columns: minmax(0, 1fr) 90px;
+    }
+  }
+
+  .openFileModalColSize,
+  .openFileModalColLocation {
+    display: none;
+  }
 }
