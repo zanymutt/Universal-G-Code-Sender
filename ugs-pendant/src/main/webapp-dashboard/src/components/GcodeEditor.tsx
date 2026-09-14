@@ -12,6 +12,7 @@ import { useEditorFontSize } from "../hooks/useEditorFontSize";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
 import { registerEditorSaveHandler } from "../services/editorSaveBridge";
 import { runFromLine } from "../services/files";
+import { refreshFileState } from "../store/refreshFileState";
 import { uiActions } from "../store/uiSlice";
 import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
 import SaveAsModal from "./SaveAsModal";
@@ -388,7 +389,16 @@ const GcodeEditor = () => {
 
   const doSave = (): Promise<void> => {
     if (!viewRef.current || !fileName) return Promise.reject(new Error("No gcode file is open to save"));
-    return saveFileContent(viewRef.current.state.doc.toString()).then(() => setDirty(false));
+    return saveFileContent(viewRef.current.state.doc.toString()).then(() => {
+      setDirty(false);
+      // Not just for other components (JobBar's Send status, Visualizer3D) -
+      // this session's own websocket push for this same save isn't
+      // guaranteed to have arrived yet either (see refreshFileState's own
+      // comment), so without this the visualizer could still be showing the
+      // pre-edit toolpath for a moment, or indefinitely on a slow/remote
+      // connection.
+      refreshFileState(dispatch);
+    });
   };
 
   // Kept current every render (fileName/setDirty above would otherwise go
@@ -415,7 +425,10 @@ const GcodeEditor = () => {
 
   const handleSaveAsToWorkspace = (newFilename: string) => {
     if (!viewRef.current) return Promise.reject();
-    return saveFileContentAs(newFilename, viewRef.current.state.doc.toString()).then(() => setDirty(false));
+    return saveFileContentAs(newFilename, viewRef.current.state.doc.toString()).then(() => {
+      setDirty(false);
+      refreshFileState(dispatch);
+    });
   };
 
   // CodeMirror's line numbers are 1-based. Desktop's own "Start program

@@ -13,6 +13,7 @@ import { fetchFileStatus } from "../store/fileStatusSlice";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { closeFile, pause, runFromLine, send, stop } from "../services/files";
 import { saveEditorContent } from "../services/editorSaveBridge";
+import { refreshFileState } from "../store/refreshFileState";
 import { uiActions } from "../store/uiSlice";
 import OpenFileModal from "./OpenFileModal";
 import ConfirmDialog from "./ConfirmDialog";
@@ -53,6 +54,10 @@ const JobBar = () => {
 
   const resetRunFromLine = () => {
     runFromLine(0).then(() => dispatch(uiActions.setRunFromLine(0)));
+  };
+
+  const handleCloseFile = () => {
+    closeFile().then(() => refreshFileState(dispatch));
   };
 
   // The backend runs whatever's saved on disk, not the editor's live buffer
@@ -172,7 +177,7 @@ const JobBar = () => {
         <Button
           variant="secondary"
           disabled={fileStatus.fileName === "" || isRunning}
-          onClick={() => closeFile()}
+          onClick={handleCloseFile}
         >
           <FontAwesomeIcon icon={faXmark} /> Close
         </Button>

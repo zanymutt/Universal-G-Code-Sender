@@ -9,14 +9,24 @@ import {
 import { Container, ListGroup, ListGroupItem, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFile, faUpload } from "@fortawesome/free-solid-svg-icons";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import { refreshFileState } from "../store/refreshFileState";
+import { isLocalAccess } from "../utils/isLocalAccess";
 
 type Props = {
   handleClose: () => void;
 };
 
 const OpenFileModal = ({ handleClose }: Props) => {
+  const dispatch = useAppDispatch();
   const [workspaceFileList, setWorkspaceFileList] = useState<string[]>();
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  // Uploading only makes sense from the same machine running UGS - it lands
+  // in a disposable server-side temp copy (see FilesResource#open's own
+  // comment), which on a remote session there's no way to get back to after
+  // closing/reopening at all, unlike a workspace file. Not offering it there
+  // avoids that dead end rather than explaining it after the fact.
+  const canUpload = isLocalAccess();
 
   useEffect(() => {
     getWorkspaceFileList().then((result) =>
@@ -31,7 +41,10 @@ const OpenFileModal = ({ handleClose }: Props) => {
   const alertClicked = (file: string) => {
     setIsLoading(true);
     openWorkspaceFile(file)
-      .then(() => handleClose())
+      .then(() => {
+        refreshFileState(dispatch);
+        handleClose();
+      })
       .finally(() => setIsLoading(false));
   };
 
@@ -58,6 +71,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
       input.click();
     })
       .then(() => {
+        refreshFileState(dispatch);
         handleClose();
       })
       .finally(() => {
@@ -81,7 +95,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
               There are no files in the workspace directory. Please check the
               UGS configuration to get started with your workspace.
             </p>
-            <p>Press open to load a gcode file from this device.</p>
+            {canUpload && <p>Press open to load a gcode file from this device.</p>}
           </Container>
         )}
         <ListGroup variant="flush">
@@ -108,14 +122,16 @@ const OpenFileModal = ({ handleClose }: Props) => {
         <Button variant="secondary" onClick={handleClose} disabled={isLoading}>
           Close
         </Button>
-        <Button
-          variant="primary"
-          disabled={isLoading}
-          onClick={() => onUploadFile()}
-        >
-          <FontAwesomeIcon icon={faUpload} />
-          Open... {isLoading && <Spinner size="sm" />}
-        </Button>
+        {canUpload && (
+          <Button
+            variant="primary"
+            disabled={isLoading}
+            onClick={() => onUploadFile()}
+          >
+            <FontAwesomeIcon icon={faUpload} />
+            Open... {isLoading && <Spinner size="sm" />}
+          </Button>
+        )}
       </Modal.Footer>
     </Modal>
   );
