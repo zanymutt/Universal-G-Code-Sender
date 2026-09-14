@@ -46,6 +46,7 @@ import com.willwinder.universalgcodesender.services.LookupService;
 import com.willwinder.universalgcodesender.services.MessageService;
 import com.willwinder.universalgcodesender.types.GcodeCommand;
 import com.willwinder.universalgcodesender.utils.FirmwareUtils;
+import com.willwinder.universalgcodesender.utils.GcodeFileExtensions;
 import com.willwinder.universalgcodesender.utils.GcodeFileWriter;
 import com.willwinder.universalgcodesender.services.interceptor.CommandInterceptorService;
 import com.willwinder.universalgcodesender.services.interceptor.ToolChangeInterceptor;
@@ -423,9 +424,7 @@ public class GUIBackend implements BackendAPI {
 
         return Arrays.stream(Objects.requireNonNull(folder.listFiles()))
                 .map(File::getName)
-                .filter(name -> StringUtils.endsWithIgnoreCase(name, ".gcode") ||
-                        StringUtils.endsWithIgnoreCase(name, ".nc") ||
-                        StringUtils.endsWithIgnoreCase(name, ".tap"))
+                .filter(GcodeFileExtensions::isGcodeFile)
                 .collect(Collectors.toList());
     }
 

@@ -23,6 +23,8 @@
 
 package com.willwinder.universalgcodesender.uielements.components;
 
+import com.willwinder.universalgcodesender.utils.GcodeFileExtensions;
+
 import javax.swing.JFileChooser;
 import javax.swing.filechooser.FileFilter;
 import java.io.File;
@@ -46,31 +48,13 @@ public class GcodeFileTypeFilter extends FileFilter {
         return fileChooser;
     }
 
-    private static String getExtension(File f) {
-        String ext = null;
-        String s = f.getName();
-        int i = s.lastIndexOf('.');
-
-        if (i > 0 && i < s.length() - 1) {
-            ext = s.substring(i + 1).toLowerCase();
-        }
-        return ext;
-    }
-
     @Override
     public boolean accept(File f) {
         if (f.isDirectory()) {
             return true;
         }
 
-        String extension = getExtension(f);
-        return "cnc".equals(extension) ||
-                "gc".equals(extension) ||
-                "nc".equals(extension) ||
-                "ngc".equals(extension) ||
-                "tap".equals(extension) ||
-                "txt".equals(extension) ||
-                "gcode".equals(extension);
+        return GcodeFileExtensions.isGcodeFile(f.getName());
     }
 
     //The description of this filter

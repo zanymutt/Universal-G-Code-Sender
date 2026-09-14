@@ -99,7 +99,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
     setError(null);
     return new Promise((resolve, reject) => {
       const input = document.createElement("input");
-      input.accept = ".cnc,.nc,.ngc,.tap,.txt,.gcode";
+      input.accept = ".cnc,.gc,.nc,.ngc,.tap,.txt,.gcode";
       input.type = "file";
       input.multiple = false;
 
