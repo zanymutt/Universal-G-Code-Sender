@@ -6,25 +6,28 @@ import java.io.Serializable;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class WorkspaceFileEntry implements Serializable {
-    private String name;
+    // Workspace-relative, "/"-separated - e.g. "CustomerA/2026/lid.nc" for a file in a
+    // subfolder, not just a bare filename, since the workspace directory is now listed
+    // recursively.
+    private String path;
     private long size;
     private long lastModified;
 
     public WorkspaceFileEntry() {
     }
 
-    public WorkspaceFileEntry(String name, long size, long lastModified) {
-        this.name = name;
+    public WorkspaceFileEntry(String path, long size, long lastModified) {
+        this.path = path;
         this.size = size;
         this.lastModified = lastModified;
     }
 
-    public String getName() {
-        return name;
+    public String getPath() {
+        return path;
     }
 
-    public void setName(String name) {
-        this.name = name;
+    public void setPath(String path) {
+        this.path = path;
     }
 
     public long getSize() {

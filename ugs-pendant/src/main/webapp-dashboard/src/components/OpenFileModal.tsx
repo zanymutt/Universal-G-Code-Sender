@@ -10,7 +10,7 @@ import {
 } from "../services/files";
 import { Container, ListGroup, ListGroupItem, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faClock, faFile, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
+import { faClock, faFile, faFolder, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { refreshFileState } from "../store/refreshFileState";
 import { isLocalAccess } from "../utils/isLocalAccess";
@@ -22,6 +22,49 @@ type Props = {
 };
 
 type SortMode = "recent" | "name";
+
+// A folder node only exists if it (or something under it) has at least one
+// gcode file - built fresh from the flat entry list every time it changes,
+// so there's never a dead-end folder with nothing in it to navigate into.
+type TreeNode = {
+  folders: Map<string, TreeNode>;
+  files: WorkspaceFileEntry[];
+};
+
+const buildTree = (entries: WorkspaceFileEntry[]): TreeNode => {
+  const root: TreeNode = { folders: new Map(), files: [] };
+  for (const entry of entries) {
+    const segments = entry.path.split("/");
+    const fileName = segments.pop();
+    if (!fileName) continue;
+    let node = root;
+    for (const segment of segments) {
+      let child = node.folders.get(segment);
+      if (!child) {
+        child = { folders: new Map(), files: [] };
+        node.folders.set(segment, child);
+      }
+      node = child;
+    }
+    node.files.push(entry);
+  }
+  return root;
+};
+
+const getNode = (root: TreeNode, path: string[]): TreeNode | undefined => {
+  let node: TreeNode | undefined = root;
+  for (const segment of path) {
+    node = node?.folders.get(segment);
+    if (!node) return undefined;
+  }
+  return node;
+};
+
+const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
+const dirname = (path: string): string => {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? "" : path.slice(0, i);
+};
 
 const formatSize = (bytes: number): string => {
   if (bytes < 1024) return `${bytes} B`;
@@ -50,6 +93,8 @@ const OpenFileModal = ({ handleClose }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
+  // Folder names, root to the currently browsed folder - e.g. ["CustomerA", "2026"].
+  const [currentPath, setCurrentPath] = useState<string[]>([]);
   // Uploading only makes sense from the same machine running UGS - it lands
   // in a disposable server-side temp copy (see FilesResource#open's own
   // comment), which on a remote session there's no way to get back to after
@@ -63,25 +108,49 @@ const OpenFileModal = ({ handleClose }: Props) => {
       .finally(() => setIsLoadingList(false));
   }, []);
 
-  // Recomputed rather than sorted/filtered once on load - a fresh file just
-  // saved elsewhere and reopened here should show up sorted correctly the
-  // next time this modal opens, and the filter box needs to react live anyway.
-  const visibleEntries = useMemo(() => {
-    const needle = filter.trim().toLowerCase();
-    const filtered = (entries ?? []).filter((entry) =>
-      entry.name.toLowerCase().includes(needle)
-    );
-    return filtered.sort((a, b) =>
+  const tree = useMemo(() => buildTree(entries ?? []), [entries]);
+  const currentNode = useMemo(
+    () => getNode(tree, currentPath) ?? { folders: new Map(), files: [] },
+    [tree, currentPath]
+  );
+  // A non-empty filter searches every file in the whole workspace, not just
+  // the currently browsed folder - with many subfolders, that's normally a
+  // much faster way to find something than clicking down into folders.
+  const isSearching = filter.trim().length > 0;
+
+  const sortFiles = (files: WorkspaceFileEntry[]) =>
+    [...files].sort((a, b) =>
       sortMode === "recent"
         ? b.lastModified - a.lastModified
-        : a.name.toLocaleLowerCase().localeCompare(b.name.toLocaleLowerCase())
+        : basename(a.path).toLocaleLowerCase().localeCompare(basename(b.path).toLocaleLowerCase())
     );
-  }, [entries, filter, sortMode]);
 
-  const alertClicked = (file: string) => {
+  const visibleFolders = useMemo(
+    () =>
+      isSearching
+        ? []
+        : [...currentNode.folders.keys()].sort((a, b) => a.toLocaleLowerCase().localeCompare(b.toLocaleLowerCase())),
+    [currentNode, isSearching]
+  );
+
+  const visibleFiles = useMemo(() => {
+    if (isSearching) {
+      const needle = filter.trim().toLowerCase();
+      return sortFiles((entries ?? []).filter((entry) => entry.path.toLowerCase().includes(needle)));
+    }
+    return sortFiles(currentNode.files);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries, currentNode, isSearching, filter, sortMode]);
+
+  const hasAnyFiles = !!entries?.length;
+
+  const openFolder = (name: string) => setCurrentPath((path) => [...path, name]);
+  const goToCrumb = (depth: number) => setCurrentPath((path) => path.slice(0, depth));
+
+  const alertClicked = (path: string) => {
     setIsLoading(true);
     setError(null);
-    openWorkspaceFile(file)
+    openWorkspaceFile(path)
       .then(() => {
         refreshFileState(dispatch);
         handleClose();
@@ -91,7 +160,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
       // anything, with no way to tell what actually happened. Left open
       // (not handleClose()) so the error is still visible, not dismissed
       // along with the modal.
-      .catch(() => setError(`Couldn't open "${file}".`))
+      .catch(() => setError(`Couldn't open "${basename(path)}".`))
       .finally(() => setIsLoading(false));
   };
 
@@ -133,8 +202,6 @@ const OpenFileModal = ({ handleClose }: Props) => {
       });
   };
 
-  const hasAnyFiles = !!entries?.length;
-
   return (
     <Modal show={true} onHide={handleClose} centered>
       <Modal.Header closeButton>
@@ -151,7 +218,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
             <FontAwesomeIcon icon={faSearch} />
             <input
               type="text"
-              placeholder="Filter files..."
+              placeholder="Search all files..."
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
             />
@@ -183,6 +250,26 @@ const OpenFileModal = ({ handleClose }: Props) => {
         </div>
       )}
 
+      {hasAnyFiles && !isSearching && (
+        <div className="openFileModalBreadcrumbs">
+          <button type="button" onClick={() => goToCrumb(0)} disabled={currentPath.length === 0}>
+            Workspace
+          </button>
+          {currentPath.map((segment, index) => (
+            <span key={index}>
+              <span className="openFileModalCrumbSep">/</span>
+              <button
+                type="button"
+                onClick={() => goToCrumb(index + 1)}
+                disabled={index === currentPath.length - 1}
+              >
+                {segment}
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+
       {/* Sized to fit its content (up to a cap, scrollable beyond that) rather
           than reserving a fixed fraction of the screen regardless of how many
           files there actually are - a handful of files shouldn't fill most of
@@ -202,24 +289,38 @@ const OpenFileModal = ({ handleClose }: Props) => {
             {canUpload && <p>Press open to load a gcode file from this device.</p>}
           </Container>
         )}
-        {!isLoadingList && hasAnyFiles && !visibleEntries.length && (
+        {!isLoadingList && hasAnyFiles && isSearching && !visibleFiles.length && (
           <Container style={{ paddingTop: "24px" }}>
             <p>No files match &quot;{filter}&quot;.</p>
           </Container>
         )}
         <ListGroup variant="flush">
-          {visibleEntries.map((entry) => (
+          {visibleFolders.map((name) => (
             <ListGroupItem
-              key={entry.name}
+              key={`folder:${name}`}
               action
-              onClick={() => alertClicked(entry.name)}
+              onClick={() => openFolder(name)}
+              className="openFileModalItem"
+            >
+              <FontAwesomeIcon icon={faFolder} className="openFileModalItemIcon" />
+              <div className="openFileModalItemText">
+                <div className="openFileModalItemName">{name}</div>
+              </div>
+            </ListGroupItem>
+          ))}
+          {visibleFiles.map((entry) => (
+            <ListGroupItem
+              key={entry.path}
+              action
+              onClick={() => alertClicked(entry.path)}
               className="openFileModalItem"
               disabled={isLoading}
             >
               <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
               <div className="openFileModalItemText">
-                <div className="openFileModalItemName">{entry.name}</div>
+                <div className="openFileModalItemName">{basename(entry.path)}</div>
                 <div className="openFileModalItemMeta">
+                  {isSearching && dirname(entry.path) && <>{dirname(entry.path)} &bull; </>}
                   {formatSize(entry.size)} &bull; {formatRelativeTime(entry.lastModified)}
                 </div>
               </div>

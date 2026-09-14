@@ -39,6 +39,40 @@
   flex-shrink: 0;
 }
 
+.openFileModalBreadcrumbs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 16px;
+  border-bottom: 1px solid #2f3132;
+  font-size: 0.85rem;
+
+  button {
+    background: none;
+    border: none;
+    padding: 2px 4px;
+    color: #6b7280;
+    cursor: pointer;
+
+    // The last crumb (the folder being browsed right now) isn't a link -
+    // nothing above stays disabled/greyed since every ancestor crumb is
+    // still a real place to jump back up to.
+    &:not(:disabled) {
+      color: #4ade80;
+    }
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+}
+
+.openFileModalCrumbSep {
+  color: #3a3d3e;
+  padding: 0 2px;
+}
+
 // Capped well below the old 60vh - a handful of files shouldn't fill most of
 // a small touchscreen, and this still scrolls for a long workspace list.
 .openFileModalBody {

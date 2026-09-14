@@ -60,12 +60,15 @@ export const getWorkspaceFileList = (): Promise<WorkspaceFileList> => {
   );
 };
 
-export const openWorkspaceFile = (fileName: string): Promise<void> => {
+export const openWorkspaceFile = (relativePath: string): Promise<void> => {
   const request = {
     method: "POST",
   };
+  // Encoded - relativePath can now contain "/" (a subfolder path from the
+  // recursive workspace listing) as well as spaces/unicode in real job
+  // names, none of which were ever safe unencoded in a query string.
   return fetch(
-    `/api/v1/files/openWorkspaceFile?file=${fileName}`,
+    `/api/v1/files/openWorkspaceFile?file=${encodeURIComponent(relativePath)}`,
     request
   ).then(checkOk);
 };

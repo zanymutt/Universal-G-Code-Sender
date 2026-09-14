@@ -25,6 +25,7 @@ import com.willwinder.universalgcodesender.pendantui.v1.model.FileStatus;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileEntry;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileList;
 import com.willwinder.universalgcodesender.services.LookupService;
+import com.willwinder.universalgcodesender.utils.GcodeFileExtensions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
@@ -43,12 +44,18 @@ import jakarta.ws.rs.NotFoundException;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Tag(name = "Files", description = "Endpoints for loading files and handling files")
 @Path("/files")
@@ -141,22 +148,14 @@ public class FilesResource {
     @Path("getWorkspaceFileList")
     @Produces(MediaType.APPLICATION_JSON)
     public WorkspaceFileList getWorkspaceFileList() {
-        List<String> workspaceFileList = backendAPI.getWorkspaceFileList();
         WorkspaceFileList result = new WorkspaceFileList();
-        result.setFileList(workspaceFileList);
-
-        // Stat each file directly rather than changing BackendAPI#getWorkspaceFileList's
-        // own return type - that method is shared by every UGS edition and already has a
-        // caller outside this resource (ConnectionSettingsPanel), so only the dashboard's
-        // own endpoint response gains the extra detail.
-        String workspaceDirectory = backendAPI.getSettings().getWorkspaceDirectory();
-        List<WorkspaceFileEntry> fileDetails = workspaceFileList.stream()
-                .map(name -> {
-                    File file = new File(workspaceDirectory, name);
-                    return new WorkspaceFileEntry(name, file.length(), file.lastModified());
-                })
-                .collect(Collectors.toList());
-        result.setFileDetails(fileDetails);
+        // Kept flat/top-level-only, unchanged, for the classic pendant - it has no folder-
+        // browsing UI, so a "/"-separated relative path would just show up as a literal part of
+        // the filename there. Not changing BackendAPI#getWorkspaceFileList's own contract at all.
+        result.setFileList(backendAPI.getWorkspaceFileList());
+        result.setFileDetails(workspaceDirectory()
+                .map(FilesResource::listWorkspaceFilesRecursively)
+                .orElseGet(Collections::emptyList));
         return result;
     }
 
@@ -169,11 +168,78 @@ public class FilesResource {
         // keeps this endpoint off the interactive path without changing what openWorkspaceFile
         // means for any other caller - there happens to be none today, but this way that method's
         // own behavior isn't being silently redefined out from under a future one.
-        if (!backendAPI.getWorkspaceFileList().contains(file)) {
-            throw new NotFoundException("Couldn't find the file '" + file + "' in workspace directory");
+        File workspaceDirectory = workspaceDirectory()
+                .orElseThrow(() -> new NotFoundException("No workspace directory is configured"));
+        backendAPI.setGcodeFile(resolveWorkspaceFile(workspaceDirectory, file));
+    }
+
+    /**
+     * Resolves a client-supplied, workspace-relative path (e.g. "CustomerA/2026/lid.nc", from the
+     * dashboard's recursive file browser) to a real file, rejecting anything that doesn't land
+     * inside the workspace directory once ".." segments and symlinks are resolved. This dashboard
+     * is reachable from other machines on the network, so a path-traversal attempt here isn't a
+     * purely theoretical concern the way it might be for a local-only desktop file dialog.
+     * Validating the resolved path directly (rather than checking membership in an enumerated
+     * list) also means a workspace with more files than {@link #listWorkspaceFilesRecursively}'s
+     * own cap still opens correctly - only its own display list gets truncated, not what can
+     * actually be opened.
+     */
+    private static File resolveWorkspaceFile(File workspaceDirectory, String relativePath) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new BadRequestException("No file specified");
         }
-        String workspaceDirectory = backendAPI.getSettings().getWorkspaceDirectory();
-        backendAPI.setGcodeFile(new File(workspaceDirectory, file));
+        File canonicalWorkspace = workspaceDirectory.getCanonicalFile();
+        File canonicalCandidate = new File(workspaceDirectory, relativePath).getCanonicalFile();
+        if (!canonicalCandidate.getPath().startsWith(canonicalWorkspace.getPath() + File.separator)
+                || !canonicalCandidate.isFile()
+                || !GcodeFileExtensions.isGcodeFile(canonicalCandidate.getName())) {
+            throw new NotFoundException("Couldn't find the file '" + relativePath + "' in workspace directory");
+        }
+        return canonicalCandidate;
+    }
+
+    // Depth/count caps so a very large or oddly-structured network share (a symlink loop, a
+    // share root pointed at something enormous) can't turn a single request into an effectively
+    // unbounded scan - the dashboard's search box is the intended way to find something in a
+    // workspace deep or wide enough to hit either of these.
+    private static final int MAX_WORKSPACE_DEPTH = 12;
+    private static final int MAX_WORKSPACE_FILES = 5000;
+
+    private static List<WorkspaceFileEntry> listWorkspaceFilesRecursively(File workspaceDirectory) {
+        java.nio.file.Path root = workspaceDirectory.toPath();
+        List<WorkspaceFileEntry> entries = new ArrayList<>();
+        try {
+            Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), MAX_WORKSPACE_DEPTH, new SimpleFileVisitor<java.nio.file.Path>() {
+                @Override
+                public FileVisitResult preVisitDirectory(java.nio.file.Path dir, BasicFileAttributes attrs) throws IOException {
+                    // Skips hidden directories (dotfiles, Windows attribute-hidden folders like a
+                    // network share's "$RECYCLE.BIN") - never something a job folder would be.
+                    if (!dir.equals(root) && Files.isHidden(dir)) {
+                        return FileVisitResult.SKIP_SUBTREE;
+                    }
+                    return FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) {
+                    if (GcodeFileExtensions.isGcodeFile(file.getFileName().toString())) {
+                        String relativePath = root.relativize(file).toString().replace(File.separatorChar, '/');
+                        entries.add(new WorkspaceFileEntry(relativePath, attrs.size(), attrs.lastModifiedTime().toMillis()));
+                    }
+                    return entries.size() >= MAX_WORKSPACE_FILES ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+                }
+
+                @Override
+                public FileVisitResult visitFileFailed(java.nio.file.Path file, IOException exc) {
+                    // A single unreadable file/folder (permissions, a stale network link)
+                    // shouldn't abort listing everything else the share does have.
+                    return FileVisitResult.CONTINUE;
+                }
+            });
+        } catch (IOException e) {
+            // Best-effort - return whatever was gathered before the failure rather than nothing.
+        }
+        return entries;
     }
 
     @GET

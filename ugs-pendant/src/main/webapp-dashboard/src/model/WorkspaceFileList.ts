@@ -1,5 +1,7 @@
 export type WorkspaceFileEntry = {
-  name: string;
+  // Workspace-relative, "/"-separated - e.g. "CustomerA/2026/lid.nc" for a
+  // file in a subfolder, not just a bare filename.
+  path: string;
   size: number;
   lastModified: number;
 };

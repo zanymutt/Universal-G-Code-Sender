@@ -60,8 +60,10 @@ const macros = [
   { uuid: "m3", name: "Spindle On", description: undefined, gcode: "M3 S1000" },
 ];
 
-// A small set of files simulating the "workspace directory" - keyed by the bare
-// filename the real backend would use.
+// A small set of files simulating the "workspace directory" - keyed by the
+// workspace-relative path the real backend would use ("/"-separated, some
+// nested a few subfolders deep to exercise the dashboard's folder browsing
+// and recursive search).
 const files = {
   "test-part.nc": `; sample part
 G21 G90
@@ -81,6 +83,11 @@ G0 Z5
   "enclosure-base.tap": "; enclosure base\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\nG1 X100 Y0 F900\n",
   "test-square.gcode": "; test square\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-1 F200\nG1 X10 Y0\nG1 X10 Y10\nG1 X0 Y10\nG1 X0 Y0\n",
   "sign-lettering.nc": "; sign lettering\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-0.5 F150\nG1 X5 Y0 F500\n",
+  "CustomerA/2026/enclosure-lid-v3.nc": "; enclosure lid v3\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\nG1 X100 Y0 F900\n",
+  "CustomerA/2026/enclosure-base-v3.nc": "; enclosure base v3\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\n",
+  "CustomerA/2025/enclosure-lid-v2.nc": "; enclosure lid v2\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\n",
+  "CustomerB/name-plate.ngc": "; name plate\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-0.5 F150\n",
+  "CustomerB/Archive/old-logo.cnc": "; old logo\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-1 F200\n",
 };
 
 let activeFile = "yeheart.gcode";
@@ -373,12 +380,14 @@ const server = createServer((req, res) => {
   if (p.startsWith("/api/v1/machine/")) return json(res, {});
   if (p === "/api/v1/files/getFileStatus") return json(res, fileStatus);
   if (p === "/api/v1/files/getWorkspaceFileList") {
-    const names = Object.keys(files);
+    const paths = Object.keys(files);
     return json(res, {
-      fileList: names,
-      fileDetails: names.map((name, i) => ({
-        name,
-        size: files[name].length,
+      // Real backend keeps this flat/top-level-only for the classic pendant -
+      // approximated here by just taking each entry's last path segment.
+      fileList: paths.map((path) => path.split("/").pop()),
+      fileDetails: paths.map((path, i) => ({
+        path,
+        size: files[path].length,
         // Staggered fake timestamps so "sort by recent" has something real to show.
         lastModified: Date.now() - i * 17 * 60 * 1000,
       })),
