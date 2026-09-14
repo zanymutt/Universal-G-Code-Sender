@@ -19,21 +19,6 @@ type SaveFilePickerWindow = Window & {
 export const supportsSaveFilePicker = () =>
   typeof window !== "undefined" && typeof (window as SaveFilePickerWindow).showSaveFilePicker === "function";
 
-// A remote dashboard session (viewed from a different device than the one
-// actually running UGS - the whole point of this dashboard) can't offer a
-// clean "save to this device" experience: showSaveFilePicker above requires
-// a secure context, and a plain LAN address isn't automatically treated as
-// one the way the literal localhost/loopback address always is, regardless
-// of TLS - confirmed there's no equivalent exception for "same machine, but
-// reached by its LAN IP rather than by that literal hostname". Without it,
-// "save to this device" degrades to a plain browser download, which Chrome
-// can flag and block as risky on an insecure origin - confusing on its own,
-// and confirmed separately that it doesn't tell UGS about the new file
-// either way, unlike "save to UGS" - so only offer it where it's known to
-// work cleanly, rather than a maybe-broken option on every other session.
-export const isLocalAccess = () =>
-  typeof window !== "undefined" && ["localhost", "127.0.0.1", "::1"].includes(window.location.hostname);
-
 function triggerDownload(filename: string, content: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);

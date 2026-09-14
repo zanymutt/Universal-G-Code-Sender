@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Button, ButtonGroup, Form, Modal, Spinner, ToggleButton } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
-import { isLocalAccess, saveToDevice, supportsSaveFilePicker } from "../services/download";
+import { saveToDevice, supportsSaveFilePicker } from "../services/download";
+import { isLocalAccess } from "../utils/isLocalAccess";
 
 type SaveMode = "workspace" | "device";
 
