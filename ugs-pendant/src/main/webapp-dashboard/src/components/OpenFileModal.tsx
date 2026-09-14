@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Button from "react-bootstrap/Button";
+import ButtonGroup from "react-bootstrap/ButtonGroup";
 import Modal from "react-bootstrap/Modal";
+import ToggleButton from "react-bootstrap/ToggleButton";
 import {
   getWorkspaceFileList,
   openWorkspaceFile,
@@ -8,20 +10,46 @@ import {
 } from "../services/files";
 import { Container, ListGroup, ListGroupItem, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFile, faUpload } from "@fortawesome/free-solid-svg-icons";
+import { faClock, faFile, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { refreshFileState } from "../store/refreshFileState";
 import { isLocalAccess } from "../utils/isLocalAccess";
+import { WorkspaceFileEntry } from "../model/WorkspaceFileList";
+import "./OpenFileModal.scss";
 
 type Props = {
   handleClose: () => void;
 };
 
+type SortMode = "recent" | "name";
+
+const formatSize = (bytes: number): string => {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const formatRelativeTime = (epochMs: number): string => {
+  if (!epochMs) return "";
+  const diffSeconds = Math.round((Date.now() - epochMs) / 1000);
+  if (diffSeconds < 60) return "just now";
+  const diffMinutes = Math.round(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  const diffHours = Math.round(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours} hr ago`;
+  const diffDays = Math.round(diffHours / 24);
+  if (diffDays < 30) return `${diffDays}d ago`;
+  return new Date(epochMs).toLocaleDateString();
+};
+
 const OpenFileModal = ({ handleClose }: Props) => {
   const dispatch = useAppDispatch();
-  const [workspaceFileList, setWorkspaceFileList] = useState<string[]>();
+  const [entries, setEntries] = useState<WorkspaceFileEntry[]>();
+  const [isLoadingList, setIsLoadingList] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("");
+  const [sortMode, setSortMode] = useState<SortMode>("recent");
   // Uploading only makes sense from the same machine running UGS - it lands
   // in a disposable server-side temp copy (see FilesResource#open's own
   // comment), which on a remote session there's no way to get back to after
@@ -30,14 +58,25 @@ const OpenFileModal = ({ handleClose }: Props) => {
   const canUpload = isLocalAccess();
 
   useEffect(() => {
-    getWorkspaceFileList().then((result) =>
-      setWorkspaceFileList(
-        result?.fileList.sort((a, b) =>
-          a.toLocaleLowerCase().localeCompare(b.toLocaleLowerCase())
-        )
-      )
+    getWorkspaceFileList()
+      .then((result) => setEntries(result?.fileDetails ?? []))
+      .finally(() => setIsLoadingList(false));
+  }, []);
+
+  // Recomputed rather than sorted/filtered once on load - a fresh file just
+  // saved elsewhere and reopened here should show up sorted correctly the
+  // next time this modal opens, and the filter box needs to react live anyway.
+  const visibleEntries = useMemo(() => {
+    const needle = filter.trim().toLowerCase();
+    const filtered = (entries ?? []).filter((entry) =>
+      entry.name.toLowerCase().includes(needle)
     );
-  }, [setWorkspaceFileList]);
+    return filtered.sort((a, b) =>
+      sortMode === "recent"
+        ? b.lastModified - a.lastModified
+        : a.name.toLocaleLowerCase().localeCompare(b.name.toLocaleLowerCase())
+    );
+  }, [entries, filter, sortMode]);
 
   const alertClicked = (file: string) => {
     setIsLoading(true);
@@ -94,6 +133,8 @@ const OpenFileModal = ({ handleClose }: Props) => {
       });
   };
 
+  const hasAnyFiles = !!entries?.length;
+
   return (
     <Modal show={true} onHide={handleClose} centered>
       <Modal.Header closeButton>
@@ -104,11 +145,55 @@ const OpenFileModal = ({ handleClose }: Props) => {
         <div style={{ color: "#ff6b6b", padding: "8px 16px 0" }}>{error}</div>
       )}
 
-      {/* Was fullscreen - a popup sized to fit its content (below, capped
-          and scrollable so a long workspace file list can't grow the modal
-          past a reasonable height) instead. */}
-      <Modal.Body style={{ padding: 0, maxHeight: "60vh", overflowY: "auto" }}>
-        {!workspaceFileList?.length && (
+      {hasAnyFiles && (
+        <div className="openFileModalToolbar">
+          <div className="openFileModalSearch">
+            <FontAwesomeIcon icon={faSearch} />
+            <input
+              type="text"
+              placeholder="Filter files..."
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+          </div>
+          <ButtonGroup size="sm" className="openFileModalSort">
+            <ToggleButton
+              id="open-file-sort-recent"
+              type="radio"
+              variant="outline-secondary"
+              name="open-file-sort"
+              value="recent"
+              checked={sortMode === "recent"}
+              onChange={() => setSortMode("recent")}
+            >
+              <FontAwesomeIcon icon={faClock} /> Recent
+            </ToggleButton>
+            <ToggleButton
+              id="open-file-sort-name"
+              type="radio"
+              variant="outline-secondary"
+              name="open-file-sort"
+              value="name"
+              checked={sortMode === "name"}
+              onChange={() => setSortMode("name")}
+            >
+              Name
+            </ToggleButton>
+          </ButtonGroup>
+        </div>
+      )}
+
+      {/* Sized to fit its content (up to a cap, scrollable beyond that) rather
+          than reserving a fixed fraction of the screen regardless of how many
+          files there actually are - a handful of files shouldn't fill most of
+          a small touchscreen. */}
+      <Modal.Body className="openFileModalBody">
+        {isLoadingList && (
+          <Container className="text-center" style={{ paddingTop: "24px", paddingBottom: "24px" }}>
+            <Spinner size="sm" />
+          </Container>
+        )}
+        {!isLoadingList && !hasAnyFiles && (
           <Container style={{ paddingTop: "24px" }}>
             <p>
               There are no files in the workspace directory. Please check the
@@ -117,21 +202,27 @@ const OpenFileModal = ({ handleClose }: Props) => {
             {canUpload && <p>Press open to load a gcode file from this device.</p>}
           </Container>
         )}
+        {!isLoadingList && hasAnyFiles && !visibleEntries.length && (
+          <Container style={{ paddingTop: "24px" }}>
+            <p>No files match &quot;{filter}&quot;.</p>
+          </Container>
+        )}
         <ListGroup variant="flush">
-          {workspaceFileList?.map((file) => (
+          {visibleEntries.map((entry) => (
             <ListGroupItem
-              key={file}
+              key={entry.name}
               action
-              onClick={() => alertClicked(file)}
-              style={{ minHeight: "60px" }}
+              onClick={() => alertClicked(entry.name)}
+              className="openFileModalItem"
               disabled={isLoading}
             >
-              <FontAwesomeIcon
-                icon={faFile}
-                size="xl"
-                style={{ marginRight: "10px" }}
-              />{" "}
-              {file}
+              <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
+              <div className="openFileModalItemText">
+                <div className="openFileModalItemName">{entry.name}</div>
+                <div className="openFileModalItemMeta">
+                  {formatSize(entry.size)} &bull; {formatRelativeTime(entry.lastModified)}
+                </div>
+              </div>
             </ListGroupItem>
           ))}
         </ListGroup>

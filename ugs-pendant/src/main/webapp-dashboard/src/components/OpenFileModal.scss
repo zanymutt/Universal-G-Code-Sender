@@ -1,0 +1,81 @@
+@import "../_scrollbar";
+
+.openFileModalToolbar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid #2f3132;
+}
+
+.openFileModalSearch {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background-color: #1c1e1f;
+  border: 1px solid #3a3d3e;
+  border-radius: 0.375rem;
+  color: #6b7280;
+
+  input {
+    flex: 1;
+    min-width: 0;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: #e5e7eb;
+    height: 38px;
+    font-size: 0.95rem;
+
+    &::placeholder {
+      color: #6b7280;
+    }
+  }
+}
+
+.openFileModalSort {
+  flex-shrink: 0;
+}
+
+// Capped well below the old 60vh - a handful of files shouldn't fill most of
+// a small touchscreen, and this still scrolls for a long workspace list.
+.openFileModalBody {
+  padding: 0;
+  max-height: 42vh;
+  overflow-y: auto;
+  @include darkScrollbar;
+}
+
+.openFileModalItem {
+  display: flex;
+  align-items: center;
+  // Noticeably shorter than the old flat 60px-tall single-line rows, so the
+  // same handful of files takes visibly less of the screen - still tall
+  // enough to tap comfortably.
+  min-height: 48px;
+  padding: 6px 16px;
+}
+
+.openFileModalItemIcon {
+  flex-shrink: 0;
+  margin-right: 12px;
+  color: #6b7280;
+}
+
+.openFileModalItemText {
+  min-width: 0;
+  flex: 1;
+}
+
+.openFileModalItemName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openFileModalItemMeta {
+  font-size: 0.8rem;
+  color: #6b7280;
+}

@@ -22,6 +22,7 @@ import com.willwinder.universalgcodesender.model.BackendAPI;
 import com.willwinder.universalgcodesender.services.RunFromService;
 import com.willwinder.universalgcodesender.services.SendProgressService;
 import com.willwinder.universalgcodesender.pendantui.v1.model.FileStatus;
+import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileEntry;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileList;
 import com.willwinder.universalgcodesender.services.LookupService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -47,6 +48,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Tag(name = "Files", description = "Endpoints for loading files and handling files")
 @Path("/files")
@@ -142,6 +144,19 @@ public class FilesResource {
         List<String> workspaceFileList = backendAPI.getWorkspaceFileList();
         WorkspaceFileList result = new WorkspaceFileList();
         result.setFileList(workspaceFileList);
+
+        // Stat each file directly rather than changing BackendAPI#getWorkspaceFileList's
+        // own return type - that method is shared by every UGS edition and already has a
+        // caller outside this resource (ConnectionSettingsPanel), so only the dashboard's
+        // own endpoint response gains the extra detail.
+        String workspaceDirectory = backendAPI.getSettings().getWorkspaceDirectory();
+        List<WorkspaceFileEntry> fileDetails = workspaceFileList.stream()
+                .map(name -> {
+                    File file = new File(workspaceDirectory, name);
+                    return new WorkspaceFileEntry(name, file.length(), file.lastModified());
+                })
+                .collect(Collectors.toList());
+        result.setFileDetails(fileDetails);
         return result;
     }
 

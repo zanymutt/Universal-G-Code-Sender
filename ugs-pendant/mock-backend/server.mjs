@@ -75,6 +75,12 @@ G1 X0 Y0
 G0 Z5
 `,
   "yeheart.gcode": readFileSync(join(__dirname, "yeheart.gcode"), "utf8"),
+  "bracket-v2.nc": "; bracket v2\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-2 F200\nG1 X20 Y0 F600\n",
+  "bracket-v1-old.nc": "; bracket v1\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-2 F200\n",
+  "enclosure-lid.tap": "; enclosure lid\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\nG1 X100 Y0 F900\nG1 X100 Y60\nG1 X0 Y60\nG1 X0 Y0\n",
+  "enclosure-base.tap": "; enclosure base\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-3 F250\nG1 X100 Y0 F900\n",
+  "test-square.gcode": "; test square\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-1 F200\nG1 X10 Y0\nG1 X10 Y10\nG1 X0 Y10\nG1 X0 Y0\n",
+  "sign-lettering.nc": "; sign lettering\nG21 G90\nG0 Z5\nG0 X0 Y0\nG1 Z-0.5 F150\nG1 X5 Y0 F500\n",
 };
 
 let activeFile = "yeheart.gcode";
@@ -366,7 +372,18 @@ const server = createServer((req, res) => {
   }
   if (p.startsWith("/api/v1/machine/")) return json(res, {});
   if (p === "/api/v1/files/getFileStatus") return json(res, fileStatus);
-  if (p === "/api/v1/files/getWorkspaceFileList") return json(res, { fileList: Object.keys(files) });
+  if (p === "/api/v1/files/getWorkspaceFileList") {
+    const names = Object.keys(files);
+    return json(res, {
+      fileList: names,
+      fileDetails: names.map((name, i) => ({
+        name,
+        size: files[name].length,
+        // Staggered fake timestamps so "sort by recent" has something real to show.
+        lastModified: Date.now() - i * 17 * 60 * 1000,
+      })),
+    });
+  }
   if (p === "/api/v1/files/openWorkspaceFile" && req.method === "POST") {
     const file = url.searchParams.get("file");
     if (file && files[file] !== undefined) {
