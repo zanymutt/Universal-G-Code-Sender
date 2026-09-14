@@ -4,6 +4,7 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-09-13
 
+- Reworked the Open file dialog into a wider, multi-column Name/Size/Modified table (with a Location column while searching) instead of a single narrow stacked-text list - sorting now happens by clicking the Name/Modified column headers, matching how Explorer/Finder/Drive already do it.
 - Added recursive folder browsing and search to the dashboard's Open file dialog - a network share organized into subfolders now shows its actual folder structure (with breadcrumbs to navigate it) instead of only whatever sits directly in the configured workspace root, and the search box searches every file in the whole workspace at once regardless of which folder you're browsing.
 - Fixed the workspace directory listing (used by both the pendant and the dashboard) only recognizing .gcode/.nc/.tap files - it now matches the same 7 extensions the desktop's own Open File dialog always has (also .cnc/.gc/.ngc/.txt), so a folder of e.g. .ngc files no longer shows up as empty there while working fine in the desktop UI.
 - Redesigned the dashboard's Open file browser: a search box to filter by name, a Recent/Name sort toggle, and each row now shows file size and last-modified time. Rows are also noticeably shorter than before, so a small workspace directory no longer takes up most of a small touchscreen the way it used to.
