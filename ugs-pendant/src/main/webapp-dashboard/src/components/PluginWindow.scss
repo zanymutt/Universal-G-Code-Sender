@@ -10,14 +10,46 @@
   flex-direction: column;
   background: #1c1e1f;
   border: 1px solid #3a3d3e;
-  border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: 40;
   // Native browser resize handle (bottom-right corner) - deliberately not a
   // hand-rolled resize handler, see PluginWindow.tsx's comment above the
-  // drag-handling section.
+  // drag-handling section. `resize` only has an effect when overflow isn't
+  // `visible`, so this window is clipped to its own box regardless.
   resize: both;
   overflow: hidden;
+  // Deliberately square, not rounded: when the dashboard's own zoom
+  // (useZoomLevel) is away from 100%, .app renders through a fractional
+  // `transform: scale()` (see App.scss). A *rounded* overflow:hidden clip
+  // (border-radius here, which is what actually clips the iframe below,
+  // since `resize`/`overflow` require non-visible overflow to work) around
+  // an iframe with a fractionally-scaled ancestor is a known Chromium
+  // compositing bug (https://issuetracker.google.com/issues/513611535) -
+  // the rounded clip mask and the iframe's own surface (which has an
+  // internal scrollbar, another ingredient in that report) get rasterized
+  // at mismatched resolutions until a later resize forces them back in
+  // sync, which matches this window's actual symptom exactly. Keeping the
+  // clip rectangular (no border-radius) sidesteps that code path entirely.
+  //
+  // Deliberately no `transform` here - an earlier attempt added
+  // `translateZ(0)` to force this window onto its own compositing layer,
+  // as a separate theory for the same blur. Turned out unnecessary once
+  // the real cause (the rounding above) was found, so it was removed for
+  // simplicity, not because it was confirmed to cause the next problem.
+  //
+  // padding-bottom reserves a strip of *this* box's own background below
+  // the iframe (see .pluginWindowFrame - it's flex:1, so it shrinks to
+  // leave this padding visible rather than covering it) so the native
+  // resize grip has somewhere to be hit-tested. Before the border-radius
+  // removal above, the rounded corner clipped the iframe's own square
+  // corner inward just enough to
+  // leave a tiny sliver of this box's background exposed there, which
+  // happened to be enough for the grip to still work; squaring the corner
+  // let the iframe's flush corner fully cover it instead, and a sandboxed
+  // iframe swallows the mousedown rather than letting it reach the
+  // browser's native resize handling. Confirmed live (2026-09-17): with
+  // the corner square and nothing reserved, dragging it did nothing.
+  padding-bottom: 16px;
 }
 
 .pluginWindowHeader {
