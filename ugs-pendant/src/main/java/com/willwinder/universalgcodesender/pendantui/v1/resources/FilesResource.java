@@ -153,10 +153,28 @@ public class FilesResource {
         // browsing UI, so a "/"-separated relative path would just show up as a literal part of
         // the filename there. Not changing BackendAPI#getWorkspaceFileList's own contract at all.
         result.setFileList(backendAPI.getWorkspaceFileList());
-        result.setFileDetails(workspaceDirectory()
-                .map(FilesResource::listWorkspaceFilesRecursively)
-                .orElseGet(Collections::emptyList));
+        WorkspaceScan scan = workspaceDirectory()
+                .map(FilesResource::scanWorkspace)
+                .orElseGet(() -> new WorkspaceScan(Collections.emptyList(), Collections.emptyList()));
+        result.setFileDetails(scan.files());
+        result.setFolderList(scan.folders());
         return result;
+    }
+
+    @POST
+    @Path("createWorkspaceFolder")
+    @Operation(summary = "Create a new folder in the workspace directory (and any missing parent folders " +
+            "on the way to it), for the Save As dialog's \"New folder\" action")
+    public void createWorkspaceFolder(@QueryParam("path") String path) throws IOException {
+        File workspaceDirectory = workspaceDirectory()
+                .orElseThrow(() -> new NotFoundException("No workspace directory is configured"));
+        File target = resolveNewWorkspacePath(workspaceDirectory, path);
+        if (target.isDirectory()) {
+            return; // Already exists - creating a folder that's already there isn't an error.
+        }
+        if (!target.mkdirs()) {
+            throw new IOException("Couldn't create folder '" + path + "'");
+        }
     }
 
     @POST
@@ -198,6 +216,29 @@ public class FilesResource {
         return canonicalCandidate;
     }
 
+    /**
+     * Same path-traversal containment check as {@link #resolveWorkspaceFile}, but for a target
+     * that's expected *not* to exist yet (a new save-as destination, or a folder about to be
+     * created) - so unlike that method, this can't check {@code isFile()}/{@code isDirectory()}
+     * as part of validating it, only that the resolved, canonicalized path still lands inside
+     * the workspace directory once ".." segments are resolved.
+     */
+    private static File resolveNewWorkspacePath(File workspaceDirectory, String relativePath) throws IOException {
+        if (relativePath == null || relativePath.isBlank()) {
+            throw new BadRequestException("No path specified");
+        }
+        File canonicalWorkspace = workspaceDirectory.getCanonicalFile();
+        File candidate = new File(workspaceDirectory, relativePath);
+        // getCanonicalFile() resolves ".." segments without requiring the path to exist yet -
+        // only its existing ancestors need to be real, which the workspace directory itself
+        // always is.
+        File canonicalCandidate = candidate.getCanonicalFile();
+        if (!canonicalCandidate.getPath().startsWith(canonicalWorkspace.getPath() + File.separator)) {
+            throw new BadRequestException("Invalid path '" + relativePath + "'");
+        }
+        return canonicalCandidate;
+    }
+
     // Depth/count caps so a very large or oddly-structured network share (a symlink loop, a
     // share root pointed at something enormous) can't turn a single request into an effectively
     // unbounded scan - the dashboard's search box is the intended way to find something in a
@@ -205,9 +246,14 @@ public class FilesResource {
     private static final int MAX_WORKSPACE_DEPTH = 12;
     private static final int MAX_WORKSPACE_FILES = 5000;
 
-    private static List<WorkspaceFileEntry> listWorkspaceFilesRecursively(File workspaceDirectory) {
+    /** One filesystem walk feeds both the file grid and the folder tree - see {@link #scanWorkspace}. */
+    private record WorkspaceScan(List<WorkspaceFileEntry> files, List<String> folders) {
+    }
+
+    private static WorkspaceScan scanWorkspace(File workspaceDirectory) {
         java.nio.file.Path root = workspaceDirectory.toPath();
-        List<WorkspaceFileEntry> entries = new ArrayList<>();
+        List<WorkspaceFileEntry> files = new ArrayList<>();
+        List<String> folders = new ArrayList<>();
         try {
             Files.walkFileTree(root, EnumSet.noneOf(FileVisitOption.class), MAX_WORKSPACE_DEPTH, new SimpleFileVisitor<java.nio.file.Path>() {
                 @Override
@@ -217,6 +263,11 @@ public class FilesResource {
                     if (!dir.equals(root) && Files.isHidden(dir)) {
                         return FileVisitResult.SKIP_SUBTREE;
                     }
+                    // The root itself isn't a folder a Save As dialog would ever need to list -
+                    // it's already the implicit starting point of the tree.
+                    if (!dir.equals(root)) {
+                        folders.add(root.relativize(dir).toString().replace(File.separatorChar, '/'));
+                    }
                     return FileVisitResult.CONTINUE;
                 }
 
@@ -224,9 +275,9 @@ public class FilesResource {
                 public FileVisitResult visitFile(java.nio.file.Path file, BasicFileAttributes attrs) {
                     if (GcodeFileExtensions.isGcodeFile(file.getFileName().toString())) {
                         String relativePath = root.relativize(file).toString().replace(File.separatorChar, '/');
-                        entries.add(new WorkspaceFileEntry(relativePath, attrs.size(), attrs.lastModifiedTime().toMillis()));
+                        files.add(new WorkspaceFileEntry(relativePath, attrs.size(), attrs.lastModifiedTime().toMillis()));
                     }
-                    return entries.size() >= MAX_WORKSPACE_FILES ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
+                    return files.size() >= MAX_WORKSPACE_FILES ? FileVisitResult.TERMINATE : FileVisitResult.CONTINUE;
                 }
 
                 @Override
@@ -239,7 +290,7 @@ public class FilesResource {
         } catch (IOException e) {
             // Best-effort - return whatever was gathered before the failure rather than nothing.
         }
-        return entries;
+        return new WorkspaceScan(files, folders);
     }
 
     @GET
@@ -300,13 +351,32 @@ public class FilesResource {
     @Consumes(MediaType.TEXT_PLAIN)
     @Operation(summary = "Save the raw gcode text as a new file in the workspace directory, and open it")
     public void saveFileContentAs(@QueryParam("filename") String filename, String content) throws Exception {
-        if (filename == null || filename.isBlank() || !filename.equals(new File(filename).getName())) {
+        if (filename == null || filename.isBlank()) {
             throw new BadRequestException("Invalid filename");
         }
 
         File currentFile = currentGcodeFile();
-        File targetDirectory = workspaceDirectory().orElseGet(currentFile::getParentFile);
-        File targetFile = new File(targetDirectory, ensureExtension(filename, currentFile));
+        Optional<File> workspaceDirectory = workspaceDirectory();
+        String filenameWithExtension = ensureExtension(filename, currentFile);
+        File targetFile;
+        if (workspaceDirectory.isPresent()) {
+            // filename may now be a workspace-relative path with folder segments (e.g.
+            // "CustomerA/2026/lid.gcode", from the Save As dialog's folder tree), not just a
+            // bare name - resolved and validated the same way resolveWorkspaceFile keeps an
+            // *existing* file's path inside the workspace directory.
+            targetFile = resolveNewWorkspacePath(workspaceDirectory.get(), filenameWithExtension);
+            File parent = targetFile.getParentFile();
+            if (!parent.isDirectory()) {
+                throw new NotFoundException("Folder for '" + filename + "' doesn't exist");
+            }
+        } else {
+            // No workspace configured - nowhere to browse folders in, so this only ever
+            // supports a bare filename saved next to whatever's currently loaded, same as before.
+            if (!filenameWithExtension.equals(new File(filenameWithExtension).getName())) {
+                throw new BadRequestException("Invalid filename");
+            }
+            targetFile = new File(currentFile.getParentFile(), filenameWithExtension);
+        }
         Files.writeString(targetFile.toPath(), content);
 
         // Same reasoning as saveFileContent above - a new file on disk, but as far as the

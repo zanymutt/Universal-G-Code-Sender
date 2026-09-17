@@ -1,17 +1,40 @@
 @import "../_scrollbar";
 
-// Roughly double the old default (~500px) Bootstrap modal width - three or
-// four columns of real data (name, size, modified, and location while
-// searching) need the room a single narrow stacked-text list never did.
+// Wide enough for a folder tree column plus a multi-column file grid (or,
+// while searching, the four-column detail list) side by side.
 .openFileModalDialog {
-  max-width: min(920px, 94vw);
+  max-width: min(1040px, 96vw);
 }
 
 .openFileModalToolbar {
   display: flex;
+  align-items: center;
   gap: 8px;
   padding: 10px 16px;
   border-bottom: 1px solid #2f3132;
+}
+
+// Only shown/usable below the tree-pane breakpoint - see openFileModalPanes.
+// Lets the current folder name (and a way to change it) live in the toolbar
+// instead of a permanently docked tree eating width from the file grid.
+.openFileModalMobileTreeToggle {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  background: #1c1e1f;
+  border: 1px solid #3a3d3e;
+  border-radius: 0.375rem;
+  color: #e5e7eb;
+  padding: 0 10px;
+  height: 38px;
+  font-size: 0.85rem;
+  max-width: 40%;
+
+  span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
 }
 
 .openFileModalSearch {
@@ -34,7 +57,7 @@
     outline: none;
     color: #e5e7eb;
     height: 38px;
-    font-size: 0.95rem;
+    font-size: 0.85rem;
 
     &::placeholder {
       color: #6b7280;
@@ -76,13 +99,139 @@
   padding: 0 2px;
 }
 
-// Capped well below the old 60vh - a handful of files shouldn't fill most of
-// a small touchscreen, and this still scrolls for a long workspace list.
+// Taller than before since the body now holds a whole tree+grid layout
+// rather than one flat list - still capped so a small workspace doesn't
+// force a near-fullscreen modal.
 .openFileModalBody {
   padding: 0;
-  max-height: 42vh;
+  height: 52vh;
+  max-height: 520px;
+  overflow: hidden;
+  @include darkScrollbar;
+}
+
+// Left tree / right file-pane split. Both panes scroll independently so a
+// long folder tree and a long file list don't fight each other for space.
+.openFileModalPanes {
+  display: flex;
+  height: 100%;
+}
+
+.openFileModalTreePane {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #2f3132;
+  padding-bottom: 8px;
+  @include darkScrollbar;
+}
+
+// The root ("Workspace") row reuses .folderTreeRow's look but isn't part of
+// the recursive FolderTree component, so its active/hover states are wired
+// up the same way by sharing the class rather than duplicating the rules.
+.folderTreeRoot {
+  margin: 4px 4px 0;
+  font-weight: 500;
+}
+
+.openFileModalFilePane {
+  flex: 1;
+  min-width: 0;
   overflow-y: auto;
   @include darkScrollbar;
+}
+
+.openFileModalEmptyMessage {
+  padding: 24px 16px;
+  color: #9ca3af;
+  font-size: 0.9rem;
+}
+
+// Row above the file list while browsing (hidden during search, which has
+// its own header controls instead): sort on the left, grid/list view choice
+// on the right - kept as one flex row so both stay reachable without
+// spending a whole extra header row on the view toggle alone.
+.openFileModalFileToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 16px 4px;
+}
+
+.openFileModalSortToggle,
+.openFileModalViewToggle {
+  display: flex;
+  gap: 6px;
+
+  button {
+    background: #1c1e1f;
+    border: 1px solid #3a3d3e;
+    border-radius: 0.375rem;
+    color: #9ca3af;
+    font-size: 0.78rem;
+    padding: 4px 10px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+
+    &.active {
+      color: #4ade80;
+      border-color: #2d5a3f;
+    }
+  }
+}
+
+// Windows-explorer-style icon grid: as many columns as fit, each tile a
+// fixed minimum width so names have room to read before truncating.
+.fileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 4px;
+  padding: 12px 16px;
+}
+
+.fileGridTile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 10px 6px;
+  cursor: pointer;
+  color: #e5e7eb;
+
+  &:hover:not(:disabled) {
+    background-color: #26282a;
+    border-color: #3a3d3e;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+}
+
+.fileGridIcon {
+  font-size: 1.6rem;
+  color: #6b7280;
+}
+
+.fileGridName {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+}
+
+.fileGridMeta {
+  color: #6b7280;
+  font-size: 0.68rem;
+  white-space: nowrap;
 }
 
 // Shared by both the (non-scrolling) header and every row, so their columns
@@ -148,7 +297,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #6b7280;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .openFileModalItemIcon {
@@ -164,12 +313,13 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 0.85rem;
 }
 
 .openFileModalColSize,
 .openFileModalDash {
   color: #9ca3af;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 // Folders don't have a single meaningful size/modified time without
@@ -183,7 +333,45 @@
 
 .openFileModalColModified {
   color: #9ca3af;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
+}
+
+// Below this, a permanently docked 220px tree pane leaves too little room
+// for the file grid to be useful, so it collapses into a dropdown opened
+// from the toolbar's folder button instead (see openFileModalMobileTreeToggle
+// and openFileModalTreePane.open below).
+@media (max-width: 560px) {
+  .openFileModalMobileTreeToggle {
+    display: flex;
+  }
+
+  .openFileModalBreadcrumbs {
+    display: none;
+  }
+
+  .openFileModalPanes {
+    position: relative;
+  }
+
+  .openFileModalTreePane {
+    display: none;
+
+    &.open {
+      display: block;
+      position: absolute;
+      z-index: 5;
+      top: 0;
+      left: 0;
+      width: min(280px, 80vw);
+      height: 100%;
+      background: #1c1e1f;
+      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4);
+    }
+  }
+
+  .fileGrid {
+    grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  }
 }
 
 // On a narrow viewport, Size and Location are the columns most easily

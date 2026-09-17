@@ -73,6 +73,16 @@ export const openWorkspaceFile = (relativePath: string): Promise<void> => {
   ).then(checkOk);
 };
 
+export const createWorkspaceFolder = (relativePath: string): Promise<void> => {
+  const request = {
+    method: "POST",
+  };
+  return fetch(
+    `/api/v1/files/createWorkspaceFolder?path=${encodeURIComponent(relativePath)}`,
+    request
+  ).then(checkOk);
+};
+
 export const closeFile = (): Promise<void> => {
   const request = {
     method: "POST",

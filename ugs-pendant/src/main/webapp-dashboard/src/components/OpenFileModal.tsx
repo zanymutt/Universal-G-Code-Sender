@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Button from "react-bootstrap/Button";
 import Modal from "react-bootstrap/Modal";
 import {
@@ -8,11 +8,24 @@ import {
 } from "../services/files";
 import { Container, ListGroup, ListGroupItem, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faCaretDown, faCaretUp, faFile, faFolder, faSearch, faUpload } from "@fortawesome/free-solid-svg-icons";
+import {
+  faCaretDown,
+  faCaretUp,
+  faFile,
+  faFolder,
+  faFolderOpen,
+  faList,
+  faSearch,
+  faThLarge,
+  faUpload,
+} from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { refreshFileState } from "../store/refreshFileState";
 import { isLocalAccess } from "../utils/isLocalAccess";
+import { readLastWorkspaceFolder, writeLastWorkspaceFolder } from "../utils/lastWorkspaceFolder";
+import { scrollActiveFolderIntoView } from "../utils/scrollActiveFolderIntoView";
 import { WorkspaceFileEntry } from "../model/WorkspaceFileList";
+import FolderTree from "./FolderTree";
 import "./OpenFileModal.scss";
 
 type Props = {
@@ -20,6 +33,7 @@ type Props = {
 };
 
 type SortMode = "recent" | "name";
+type ViewMode = "grid" | "list";
 
 // A folder node only exists if it (or something under it) has at least one
 // gcode file - built fresh from the flat entry list every time it changes,
@@ -58,6 +72,25 @@ const getNode = (root: TreeNode, path: string[]): TreeNode | undefined => {
   return node;
 };
 
+// Total file count for a node and everything nested under it, keyed by
+// "/"-joined path so the tree pane can show "(12)" next to a folder without
+// walking it itself on every render.
+const countFiles = (root: TreeNode): Map<string, number> => {
+  const counts = new Map<string, number>();
+  const walk = (node: TreeNode, path: string[]): number => {
+    let total = node.files.length;
+    for (const [name, child] of node.folders) {
+      total += walk(child, [...path, name]);
+    }
+    counts.set(path.join("/"), total);
+    return total;
+  };
+  walk(root, []);
+  return counts;
+};
+
+const keyOf = (path: string[]) => path.join("/");
+
 const basename = (path: string): string => path.slice(path.lastIndexOf("/") + 1);
 const dirname = (path: string): string => {
   const i = path.lastIndexOf("/");
@@ -83,6 +116,20 @@ const formatRelativeTime = (epochMs: number): string => {
   return new Date(epochMs).toLocaleDateString();
 };
 
+// Persisted in localStorage (not the workspace) - it's purely a per-browser
+// UI convenience, so a stale or foreign value here should just be ignored
+// rather than treated as something the backend needs to validate.
+const VIEW_MODE_KEY = "ugsDashboard.openFileModal.viewMode";
+
+const readStoredViewMode = (): ViewMode => {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_KEY);
+    return stored === "list" ? "list" : "grid";
+  } catch {
+    return "grid";
+  }
+};
+
 const OpenFileModal = ({ handleClose }: Props) => {
   const dispatch = useAppDispatch();
   const [entries, setEntries] = useState<WorkspaceFileEntry[]>();
@@ -91,8 +138,17 @@ const OpenFileModal = ({ handleClose }: Props) => {
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("");
   const [sortMode, setSortMode] = useState<SortMode>("recent");
+  const [viewMode, setViewMode] = useState<ViewMode>(readStoredViewMode);
   // Folder names, root to the currently browsed folder - e.g. ["CustomerA", "2026"].
   const [currentPath, setCurrentPath] = useState<string[]>([]);
+  // Which folders are expanded in the left-hand tree, as "/"-joined path
+  // keys - independent of currentPath so a parent can stay open while you
+  // browse a sibling, the way every desktop file manager's tree behaves.
+  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(new Set());
+  // The tree pane collapses into a dropdown on narrow screens (see the
+  // breakpoint in the stylesheet) so the file grid still gets real room;
+  // this tracks whether that dropdown is currently open.
+  const [showTreeMobile, setShowTreeMobile] = useState<boolean>(false);
   // Uploading only makes sense from the same machine running UGS - it lands
   // in a disposable server-side temp copy (see FilesResource#open's own
   // comment), which on a remote session there's no way to get back to after
@@ -107,6 +163,52 @@ const OpenFileModal = ({ handleClose }: Props) => {
   }, []);
 
   const tree = useMemo(() => buildTree(entries ?? []), [entries]);
+  const fileCounts = useMemo(() => countFiles(tree), [tree]);
+
+  // Jump back to the last folder you had open, once we know it's actually
+  // still there - a folder that's since been emptied or renamed just leaves
+  // you at the workspace root instead of on a path that no longer resolves
+  // to anything. Only ever runs once, when the file list first arrives.
+  useEffect(() => {
+    if (!entries) return;
+    const storedPath = readLastWorkspaceFolder();
+    if (!storedPath.length || !getNode(tree, storedPath)) return;
+    setCurrentPath(storedPath);
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i <= storedPath.length; i++) next.add(keyOf(storedPath.slice(0, i)));
+      return next;
+    });
+    // Scrolling the tree pane happens in a separate effect, once this
+    // restored path has actually made it into the DOM - see pendingScrollRef.
+    pendingScrollRef.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
+
+  // Runs after the restore effect above commits currentPath/expandedPaths -
+  // only then does the active row actually exist in the DOM for
+  // scrollIntoView to find. Guarded by pendingScrollRef so this only fires
+  // right after a restore, not on every ordinary click-to-navigate (which
+  // already scrolled there by definition, since you just clicked it).
+  const treePaneRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRef = useRef(false);
+  useEffect(() => {
+    if (!pendingScrollRef.current) return;
+    pendingScrollRef.current = false;
+    scrollActiveFolderIntoView(treePaneRef.current);
+  }, [currentPath]);
+
+  // The tree pane is display:none (not just off-screen) below the mobile
+  // breakpoint until this dropdown opens - scrollIntoView on a display:none
+  // element has no layout to scroll within, so the restore effect's own
+  // scroll attempt above would silently no-op on a narrow screen opened
+  // straight to a remembered subfolder. Re-running it once the pane actually
+  // has layout (right after the dropdown opens) covers that case too.
+  useEffect(() => {
+    if (!showTreeMobile) return;
+    scrollActiveFolderIntoView(treePaneRef.current);
+  }, [showTreeMobile]);
+
   const currentNode = useMemo(
     () => getNode(tree, currentPath) ?? { folders: new Map(), files: [] },
     [tree, currentPath]
@@ -115,6 +217,10 @@ const OpenFileModal = ({ handleClose }: Props) => {
   // the currently browsed folder - with many subfolders, that's normally a
   // much faster way to find something than clicking down into folders.
   const isSearching = filter.trim().length > 0;
+  // The detail (rows-and-columns) layout is always used while searching, so
+  // a match's folder (the Location column) is visible - browsing mode uses
+  // it too when the person has picked List over the default icon Grid.
+  const showDetailList = isSearching || viewMode === "list";
 
   const sortFiles = (files: WorkspaceFileEntry[]) =>
     [...files].sort((a, b) =>
@@ -122,14 +228,6 @@ const OpenFileModal = ({ handleClose }: Props) => {
         ? b.lastModified - a.lastModified
         : basename(a.path).toLocaleLowerCase().localeCompare(basename(b.path).toLocaleLowerCase())
     );
-
-  const visibleFolders = useMemo(
-    () =>
-      isSearching
-        ? []
-        : [...currentNode.folders.keys()].sort((a, b) => a.toLocaleLowerCase().localeCompare(b.toLocaleLowerCase())),
-    [currentNode, isSearching]
-  );
 
   const visibleFiles = useMemo(() => {
     if (isSearching) {
@@ -141,10 +239,49 @@ const OpenFileModal = ({ handleClose }: Props) => {
   }, [entries, currentNode, isSearching, filter, sortMode]);
 
   const hasAnyFiles = !!entries?.length;
+  // isSearching drives the detail rows' 3-vs-4-column grid (see the .searching
+  // modifier in the stylesheet) regardless of *why* the detail layout is
+  // showing, so a plain browsing-mode List view reuses the same 3-column
+  // template as before rather than needing a variant of its own.
   const rowClass = `openFileModalItem${isSearching ? " searching" : ""}`;
 
-  const openFolder = (name: string) => setCurrentPath((path) => [...path, name]);
-  const goToCrumb = (depth: number) => setCurrentPath((path) => path.slice(0, depth));
+  // Selecting a folder - from the tree, the breadcrumbs, or the root link -
+  // always does the same things: browse there, make sure the tree shows it
+  // as expanded down to that depth, drop out of a search (a stale filter
+  // left active after jumping to a folder would just hide that folder's own
+  // files behind an unrelated search term), and remember it for next time.
+  const selectFolder = (path: string[]) => {
+    setCurrentPath(path);
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      for (let i = 1; i <= path.length; i++) next.add(keyOf(path.slice(0, i)));
+      return next;
+    });
+    setFilter("");
+    setShowTreeMobile(false);
+    writeLastWorkspaceFolder(path);
+  };
+
+  const selectViewMode = (mode: ViewMode) => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem(VIEW_MODE_KEY, mode);
+    } catch {
+      // Best-effort, as above.
+    }
+  };
+
+  const toggleExpand = (path: string[]) =>
+    setExpandedPaths((prev) => {
+      const next = new Set(prev);
+      const key = keyOf(path);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
 
   const alertClicked = (path: string) => {
     setIsLoading(true);
@@ -213,6 +350,15 @@ const OpenFileModal = ({ handleClose }: Props) => {
 
       {hasAnyFiles && (
         <div className="openFileModalToolbar">
+          <button
+            type="button"
+            className="openFileModalMobileTreeToggle"
+            onClick={() => setShowTreeMobile((open) => !open)}
+          >
+            <FontAwesomeIcon icon={faFolder} />
+            <span>{currentPath[currentPath.length - 1] ?? "Workspace"}</span>
+            <FontAwesomeIcon icon={showTreeMobile ? faCaretUp : faCaretDown} />
+          </button>
           <div className="openFileModalSearch">
             <FontAwesomeIcon icon={faSearch} />
             <input
@@ -227,7 +373,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
 
       {hasAnyFiles && !isSearching && (
         <div className="openFileModalBreadcrumbs">
-          <button type="button" onClick={() => goToCrumb(0)} disabled={currentPath.length === 0}>
+          <button type="button" onClick={() => selectFolder([])} disabled={currentPath.length === 0}>
             Workspace
           </button>
           {currentPath.map((segment, index) => (
@@ -235,37 +381,13 @@ const OpenFileModal = ({ handleClose }: Props) => {
               <span className="openFileModalCrumbSep">/</span>
               <button
                 type="button"
-                onClick={() => goToCrumb(index + 1)}
+                onClick={() => selectFolder(currentPath.slice(0, index + 1))}
                 disabled={index === currentPath.length - 1}
               >
                 {segment}
               </button>
             </span>
           ))}
-        </div>
-      )}
-
-      {/* Outside Modal.Body's own scroll area, same as the toolbar/breadcrumbs
-          above, so the column headers stay put while a long list scrolls
-          under them - the way every desktop file manager's details view does. */}
-      {hasAnyFiles && (
-        <div className={rowClass + " openFileModalColumnHeader"}>
-          <button
-            type="button"
-            className="openFileModalSortBtn"
-            onClick={() => setSortMode("name")}
-          >
-            Name {sortMode === "name" && <FontAwesomeIcon icon={faCaretUp} />}
-          </button>
-          <span className="openFileModalColSize">Size</span>
-          <button
-            type="button"
-            className="openFileModalSortBtn openFileModalColModified"
-            onClick={() => setSortMode("recent")}
-          >
-            Modified {sortMode === "recent" && <FontAwesomeIcon icon={faCaretDown} />}
-          </button>
-          {isSearching && <span className="openFileModalColLocation">Location</span>}
         </div>
       )}
 
@@ -288,48 +410,156 @@ const OpenFileModal = ({ handleClose }: Props) => {
             {canUpload && <p>Press open to load a gcode file from this device.</p>}
           </Container>
         )}
-        {!isLoadingList && hasAnyFiles && isSearching && !visibleFiles.length && (
-          <Container style={{ paddingTop: "24px" }}>
-            <p>No files match &quot;{filter}&quot;.</p>
-          </Container>
-        )}
-        <ListGroup variant="flush">
-          {visibleFolders.map((name) => (
-            <ListGroupItem
-              key={`folder:${name}`}
-              action
-              onClick={() => openFolder(name)}
-              className={rowClass}
-            >
-              <div className="openFileModalItemName">
-                <FontAwesomeIcon icon={faFolder} className="openFileModalItemIcon" />
-                {name}
+
+        {!isLoadingList && hasAnyFiles && (
+          <div className="openFileModalPanes">
+            <div ref={treePaneRef} className={`openFileModalTreePane${showTreeMobile ? " open" : ""}`}>
+              <div
+                className={`folderTreeRow folderTreeRoot${currentPath.length === 0 ? " active" : ""}`}
+                onClick={() => selectFolder([])}
+              >
+                <FontAwesomeIcon
+                  icon={currentPath.length === 0 ? faFolderOpen : faFolder}
+                  className="folderTreeIcon"
+                />
+                <span className="folderTreeName">Workspace</span>
+                <span className="folderTreeCount">{fileCounts.get("") ?? 0}</span>
               </div>
-              <div className="openFileModalDash">&mdash;</div>
-              <div className="openFileModalDash openFileModalColModified">&mdash;</div>
-              {isSearching && <div className="openFileModalColLocation" />}
-            </ListGroupItem>
-          ))}
-          {visibleFiles.map((entry) => (
-            <ListGroupItem
-              key={entry.path}
-              action
-              onClick={() => alertClicked(entry.path)}
-              className={rowClass}
-              disabled={isLoading}
-            >
-              <div className="openFileModalItemName">
-                <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
-                {basename(entry.path)}
-              </div>
-              <div className="openFileModalColSize">{formatSize(entry.size)}</div>
-              <div className="openFileModalColModified">{formatRelativeTime(entry.lastModified)}</div>
-              {isSearching && (
-                <div className="openFileModalColLocation">{dirname(entry.path) || "—"}</div>
+              <FolderTree
+                root={tree}
+                currentPath={currentPath}
+                expandedPaths={expandedPaths}
+                fileCounts={fileCounts}
+                onSelect={selectFolder}
+                onToggle={toggleExpand}
+              />
+            </div>
+
+            <div className="openFileModalFilePane">
+              {!isSearching && (
+                <div className="openFileModalFileToolbar">
+                  <div className="openFileModalSortToggle">
+                    <button
+                      type="button"
+                      className={sortMode === "name" ? "active" : ""}
+                      onClick={() => setSortMode("name")}
+                    >
+                      Name
+                    </button>
+                    <button
+                      type="button"
+                      className={sortMode === "recent" ? "active" : ""}
+                      onClick={() => setSortMode("recent")}
+                    >
+                      Recent
+                    </button>
+                  </div>
+                  <div className="openFileModalViewToggle">
+                    <button
+                      type="button"
+                      className={viewMode === "grid" ? "active" : ""}
+                      onClick={() => selectViewMode("grid")}
+                      aria-label="Grid view"
+                    >
+                      <FontAwesomeIcon icon={faThLarge} />
+                    </button>
+                    <button
+                      type="button"
+                      className={viewMode === "list" ? "active" : ""}
+                      onClick={() => selectViewMode("list")}
+                      aria-label="List view"
+                    >
+                      <FontAwesomeIcon icon={faList} />
+                    </button>
+                  </div>
+                </div>
               )}
-            </ListGroupItem>
-          ))}
-        </ListGroup>
+
+              {showDetailList && (
+                <div className={rowClass + " openFileModalColumnHeader"}>
+                  {/* Sort is already reachable via the toolbar above while
+                      browsing, so only the search view's header (which has
+                      no toolbar of its own) needs these to be clickable. */}
+                  {isSearching ? (
+                    <>
+                      <button type="button" className="openFileModalSortBtn" onClick={() => setSortMode("name")}>
+                        Name {sortMode === "name" && <FontAwesomeIcon icon={faCaretUp} />}
+                      </button>
+                      <span className="openFileModalColSize">Size</span>
+                      <button
+                        type="button"
+                        className="openFileModalSortBtn openFileModalColModified"
+                        onClick={() => setSortMode("recent")}
+                      >
+                        Modified {sortMode === "recent" && <FontAwesomeIcon icon={faCaretDown} />}
+                      </button>
+                      <span className="openFileModalColLocation">Location</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Name</span>
+                      <span className="openFileModalColSize">Size</span>
+                      <span className="openFileModalColModified">Modified</span>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {isSearching && !visibleFiles.length && (
+                <p className="openFileModalEmptyMessage">No files match &quot;{filter}&quot;.</p>
+              )}
+              {!isSearching && !visibleFiles.length && (
+                <p className="openFileModalEmptyMessage">
+                  No files directly in this folder - check the folders on the left.
+                </p>
+              )}
+
+              {showDetailList ? (
+                <ListGroup variant="flush">
+                  {visibleFiles.map((entry) => (
+                    <ListGroupItem
+                      key={entry.path}
+                      action
+                      onClick={() => alertClicked(entry.path)}
+                      className={rowClass}
+                      disabled={isLoading}
+                    >
+                      <div className="openFileModalItemName">
+                        <FontAwesomeIcon icon={faFile} className="openFileModalItemIcon" />
+                        {basename(entry.path)}
+                      </div>
+                      <div className="openFileModalColSize">{formatSize(entry.size)}</div>
+                      <div className="openFileModalColModified">{formatRelativeTime(entry.lastModified)}</div>
+                      {isSearching && (
+                        <div className="openFileModalColLocation">{dirname(entry.path) || "—"}</div>
+                      )}
+                    </ListGroupItem>
+                  ))}
+                </ListGroup>
+              ) : (
+                <div className="fileGrid">
+                  {visibleFiles.map((entry) => (
+                    <button
+                      key={entry.path}
+                      type="button"
+                      className="fileGridTile"
+                      disabled={isLoading}
+                      onClick={() => alertClicked(entry.path)}
+                    >
+                      <FontAwesomeIcon icon={faFile} className="fileGridIcon" />
+                      <span className="fileGridName" title={basename(entry.path)}>
+                        {basename(entry.path)}
+                      </span>
+                      <span className="fileGridMeta">
+                        {formatSize(entry.size)} &middot; {formatRelativeTime(entry.lastModified)}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </Modal.Body>
 
       <Modal.Footer>

@@ -1,0 +1,137 @@
+@import "../_scrollbar";
+
+// Bootstrap's default <code> color is a bright pink meant for a light
+// background - illegible-adjacent and jarring against this dashboard's dark
+// theme. Pre-existing (the original single-input SaveAsModal already used
+// <code> for its "will be saved to ..." hint), but easy to miss there; this
+// rework uses <code> in several more places (the extension hint this was
+// requested for, the current-folder breadcrumb), which is exactly what
+// makes it worth fixing now rather than carrying the same look forward into
+// more visible spots.
+.saveAsModalDialog code {
+  color: #4ade80;
+  background: rgba(45, 90, 63, 0.15);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+// Wide enough for a folder tree column plus the filename/new-folder controls
+// beside it - narrower than OpenFileModal's dialog since there's no file
+// grid here, just navigation and a couple of controls.
+.saveAsModalDialogWide {
+  max-width: min(680px, 94vw);
+}
+
+.saveAsModalPanes {
+  display: flex;
+  height: 320px;
+  border-top: 1px solid #2f3132;
+  margin: 0 -1rem;
+}
+
+.saveAsModalTreePane {
+  width: 220px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  border-right: 1px solid #2f3132;
+  padding: 8px 0;
+  @include darkScrollbar;
+}
+
+// The root ("Workspace") row reuses .folderTreeRow's look but isn't part of
+// the recursive FolderTree component, same reasoning as OpenFileModal's own
+// folderTreeRoot - shares the class rather than duplicating the rules.
+.folderTreeRoot {
+  margin: 0 4px 0;
+  font-weight: 500;
+}
+
+.saveAsModalRight {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.saveAsModalCurrentPath {
+  color: #9ca3af;
+  font-size: 0.82rem;
+
+  code {
+    color: #e5e7eb;
+  }
+}
+
+.saveAsModalNewFolderButton {
+  align-self: flex-start;
+}
+
+.saveAsModalNewFolderRow {
+  display: flex;
+  gap: 6px;
+}
+
+.saveAsModalFolderError {
+  color: #ff6b6b;
+  font-size: 0.8rem;
+}
+
+// The one element in this column allowed to grow/scroll - everything else
+// (path indicator, new-folder controls, filename input, hint) stays its
+// natural height, and this soaks up whatever's left, long list or short.
+.saveAsModalFileList {
+  flex: 1;
+  min-height: 60px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  @include darkScrollbar;
+}
+
+.saveAsModalFileItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: #9ca3af;
+  font-size: 0.82rem;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: #26282a;
+    border-color: #3a3d3e;
+    color: #e5e7eb;
+  }
+
+  // The currently-typed filename matches this file exactly - a preview of
+  // "this is what you're about to overwrite" before Save is even pressed.
+  &.active {
+    background: rgba(45, 90, 63, 0.2);
+    border-color: #2d5a3f;
+    color: #4ade80;
+  }
+}
+
+.saveAsModalFileIcon {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.saveAsModalFileName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.saveAsModalFileListEmpty {
+  color: #6b7280;
+  font-size: 0.78rem;
+  margin: 4px 0;
+}

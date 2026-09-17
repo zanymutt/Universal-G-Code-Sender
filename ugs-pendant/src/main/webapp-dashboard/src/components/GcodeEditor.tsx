@@ -17,6 +17,7 @@ import { uiActions } from "../store/uiSlice";
 import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
 import SaveAsModal from "./SaveAsModal";
 import ConfirmDialog from "./ConfirmDialog";
+import { getFileName } from "../utils/getFileName";
 import "./GcodeEditor.scss";
 
 // Font-size is deliberately not set here - it's owned entirely by the
@@ -42,8 +43,6 @@ const editorTheme = EditorView.theme(
   },
   { dark: true }
 );
-
-const getFileName = (filePath: string) => filePath.replace(/^.*[\\/]/, "");
 
 // Dims lines 1..N (1-based, inclusive) to show what won't actually run next -
 // either because they've already been sent (live during a job) or because
