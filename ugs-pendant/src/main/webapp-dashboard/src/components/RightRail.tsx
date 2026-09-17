@@ -5,6 +5,7 @@ import Toolbox from "./Toolbox";
 import MacrosPanel from "./MacrosPanel";
 import SpindleCoolantControls from "./SpindleCoolantControls";
 import OverrideControls from "./OverrideControls";
+import PluginListPanel from "./PluginListPanel";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { uiActions } from "../store/uiSlice";
 import "./RightRail.scss";
@@ -33,6 +34,11 @@ const RightRail = () => {
           </Button>
         </div>
         <MacrosPanel />
+      </div>
+
+      <div className="rightRailSection">
+        <h6 className="rightRailHeading">Plugins</h6>
+        <PluginListPanel />
       </div>
 
       <div className="rightRailSection rightRailSpindle">

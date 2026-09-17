@@ -10,6 +10,7 @@ import RightRail from "../components/RightRail";
 import PortraitDashboard from "../components/PortraitDashboard";
 import JobBar from "../components/JobBar";
 import AlarmModal from "../components/AlarmModal";
+import PluginManagerProvider from "../components/PluginManager";
 import "./Dashboard.scss";
 
 const Dashboard = () => {
@@ -21,38 +22,44 @@ const Dashboard = () => {
   const isNarrow = useNarrowLayout();
 
   return (
-    <div className="dashboard">
-      <TopBar />
+    // Wraps the whole layout, not just RightRail, since PortraitDashboard
+    // (the narrow/mobile branch below) mounts its own copy of RightRail too
+    // - both need to reach the same plugin list and open-window state via
+    // usePluginManager(), not independent copies of it.
+    <PluginManagerProvider>
+      <div className="dashboard">
+        <TopBar />
 
-      {isNarrow ? (
-        <PortraitDashboard />
-      ) : (
-        <div className="dashboardBody">
-          <div className="dashboardLeft">
-            <DroPanel />
-            <FeedSpindleReadout />
-            <PinsStatus />
+        {isNarrow ? (
+          <PortraitDashboard />
+        ) : (
+          <div className="dashboardBody">
+            <div className="dashboardLeft">
+              <DroPanel />
+              <FeedSpindleReadout />
+              <PinsStatus />
 
-            <div className="dashboardLeftJog">
-              <h6 className="dashboardSectionHeading">Jog</h6>
-              <JogPad />
+              <div className="dashboardLeftJog">
+                <h6 className="dashboardSectionHeading">Jog</h6>
+                <JogPad />
+              </div>
+            </div>
+
+            <div className="dashboardCenter">
+              <CenterPanel />
+            </div>
+
+            <div className="dashboardRight">
+              <RightRail />
             </div>
           </div>
+        )}
 
-          <div className="dashboardCenter">
-            <CenterPanel />
-          </div>
+        <JobBar />
 
-          <div className="dashboardRight">
-            <RightRail />
-          </div>
-        </div>
-      )}
-
-      <JobBar />
-
-      {status.state === "ALARM" && <AlarmModal />}
-    </div>
+        {status.state === "ALARM" && <AlarmModal />}
+      </div>
+    </PluginManagerProvider>
   );
 };
 

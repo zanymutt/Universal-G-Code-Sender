@@ -1,0 +1,83 @@
+.pluginWindow {
+  position: fixed;
+  width: 420px;
+  height: 320px;
+  min-width: 220px;
+  min-height: 160px;
+  max-width: 96vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #1c1e1f;
+  border: 1px solid #3a3d3e;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  // Native browser resize handle (bottom-right corner) - deliberately not a
+  // hand-rolled resize handler, see PluginWindow.tsx's comment above the
+  // drag-handling section.
+  resize: both;
+  overflow: hidden;
+}
+
+.pluginWindowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  flex-shrink: 0;
+  padding: 0 8px 0 12px;
+  background: #26282a;
+  border-bottom: 1px solid #3a3d3e;
+  cursor: move;
+  // Dragging the header shouldn't also select its own text.
+  user-select: none;
+  touch-action: none;
+}
+
+.pluginWindowIcon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 3px;
+}
+
+.pluginWindowTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  color: #e5e7eb;
+}
+
+.pluginWindowClose {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9ca3af;
+  border-radius: 4px;
+  cursor: pointer;
+
+  &:hover {
+    background: #3a3d3e;
+    color: #e5e7eb;
+  }
+}
+
+.pluginWindowFrame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: none;
+  // The plugin paints its own background per its theme vars, but until it
+  // finishes loading (or if it never sets one) this keeps the frame from
+  // flashing white against the rest of the dark UI.
+  background: #0c0e0f;
+}
