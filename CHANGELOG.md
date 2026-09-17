@@ -2,6 +2,13 @@
 
 Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. The classic pendant (`/`) is unaffected unless noted.
 
+## 2026-09-17
+
+- Added a plugin system: a puzzle-piece "Plugins" section in the right rail lists whatever's dropped into UGS's own `dashboard-plugins` folder, and opening one shows it as a draggable, resizable floating window. Plugins run in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) with zero access to the parent page except through a small, curated `postMessage` API (`getStatus`, `subscribe`/`unsubscribe` to live status/console-line events, `sendCommand`, `getGcode`/`setGcode`/`saveGcodeAs`, `listFiles`/`openFile`, per-plugin `getSettings`/`saveSettings`) - a plugin author gets exactly those capabilities, never a raw pass-through to the REST API. The protocol shape matches FigUI's own plugin API on purpose, so a plugin already written for that project needs to change very little to run here.
+- Reworked Save as into a full folder browser instead of only ever writing into the workspace root: the same recursive folder tree the Open dialog uses (now a shared `FolderTree` component), a "New folder" button, and a list of the files already in whatever folder is selected so one can be clicked to reuse its name. Saving over an existing file now warns first instead of silently overwriting it. The last-used folder is now one memory shared between Open and Save as (previously Open's own private one), and both dialogs scroll their tree pane so the active folder actually lands in view when reopened several levels deep, instead of leaving you scrolled to the top with no indication where you are.
+- A plugin's `saveGcodeAs` never takes a filename or path - it triggers this same dashboard-owned Save as dialog and resolves once you pick a location and confirm, so a plugin never needs (or gets) direct control over where its output lands on disk.
+- Backend: the workspace file listing now also returns every folder, regardless of whether it holds any gcode, so Save as can navigate into (and create) folders the existing gcode-filtered listing would never reveal. `saveFileContentAs` now accepts a folder-relative path instead of a bare filename, validated against path traversal the same way opening a workspace file already is.
+
 ## 2026-09-13
 
 - Reworked the Open file dialog into a wider, multi-column Name/Size/Modified table (with a Location column while searching) instead of a single narrow stacked-text list - sorting now happens by clicking the Name/Modified column headers, matching how Explorer/Finder/Drive already do it.
