@@ -26,6 +26,7 @@ import com.willwinder.universalgcodesender.pendantui.v1.resources.CustomOpenApiR
 import com.willwinder.universalgcodesender.pendantui.v1.resources.FilesResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.MachineResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.MacrosResource;
+import com.willwinder.universalgcodesender.pendantui.v1.resources.PluginsResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.ProbeResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.SettingsResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.StatusResource;
@@ -48,6 +49,7 @@ public class AppV1Config extends ResourceConfig {
         register(FilesResource.class);
         register(VisualizerResource.class);
         register(ProbeResource.class);
+        register(PluginsResource.class);
         register(MultiPartFeature.class);
         register(WadlFeature.class);
         register(StaticResource.class);
