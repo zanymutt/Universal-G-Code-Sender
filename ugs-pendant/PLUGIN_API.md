@@ -198,7 +198,7 @@ await Fluid.openFile("CustomerA/lid.gcode"); // resolves with no value once it's
 
 ### `pickFile()`
 
-Opens the dashboard's own Open dialog (folder tree, search, everything a person gets from the Open button) and resolves with the path they pick - **without** loading it as the active file, unlike `openFile()`. Use this when you want a path to act on later (queue it, read it, whatever), not one to switch to right now. Rejects if the person cancels.
+Opens the dashboard's own Open dialog (folder tree, search, everything a person gets from the Open button) and resolves with the path they pick - **without** loading it as the active file, unlike `openFile()`. Use this when you want a path to act on later (queue it, read it, whatever), not one to switch to right now. Rejects if the person cancels. Only one can be open at a time - a second call while one's already pending rejects immediately rather than replacing it, so `await` each call before making another.
 
 ```js
 try {
@@ -222,10 +222,12 @@ const fileStatus = await Fluid.getFileStatus();
 // fileStatus.completedRowCount    -> number, lines sent and acknowledged so far
 // fileStatus.remainingRowCount    -> number, rowCount - completedRowCount
 // fileStatus.sendDuration         -> number, milliseconds since the send started
-// fileStatus.sendRemainingDuration -> number, estimated milliseconds left
+// fileStatus.sendRemainingDuration -> number, estimated milliseconds left - see note below
 // fileStatus.lastCompletedLineNumber -> number, the 0-indexed line number of the last ack'd command
 const percent = Math.round((fileStatus.completedRowCount / fileStatus.rowCount) * 100);
 ```
+
+`completedRowCount` is **not** a safe way to tell "finished" from "stopped early": a line counts as completed once it's been sent and acknowledged, not once its motion has actually finished, so `completedRowCount` can already equal `rowCount` well before the machine is done moving - if Stop is pressed at exactly that point, this field alone makes it look like the job succeeded. `sendRemainingDuration` is the reliable one: it's `0` only once the send has genuinely finished; if the job was stopped before that, it reports the full original time estimate instead of some partial "time left when stopped" value. See `startSend()`/`pauseSend()`/`stopSend()` below for what to actually check.
 
 ### `startSend()` / `pauseSend()` / `stopSend()`
 
@@ -237,7 +239,9 @@ await Fluid.pauseSend(); // pauses (GRBL feed hold) - startSend() resumes from h
 await Fluid.stopSend();  // cancels the current send entirely
 ```
 
-There's no dedicated "job finished" event - watch `on("status", ...)` for `state` returning to `"IDLE"` after having been `"RUN"`/`"CHECK"`, then check `getFileStatus()` to tell "finished" (`completedRowCount >= rowCount`) apart from "stopped early".
+`startSend()` rejects (rather than silently running stale gcode) if the dashboard's own gcode editor currently has unsaved changes - same rule as the dashboard's own Start button, since the backend always runs what's on disk.
+
+There's no dedicated "job finished" event - watch `on("status", ...)` for `state` returning to `"IDLE"` after having been `"RUN"`/`"CHECK"`, then check `getFileStatus()`. Use `sendRemainingDuration === 0` to tell "finished" apart from "stopped early", not `completedRowCount` alone (see the note above) - and keep in mind *anything* can stop the job (your own `stopSend()`, the dashboard's own Stop button, an alarm), so treat this purely as "is it still going", not as a signal of who or what stopped it.
 
 ### `getSettings()` / `saveSettings(data)`
 

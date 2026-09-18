@@ -87,6 +87,10 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
   // is the only place that default can come from.
   const currentFileName = useAppSelector((state) => state.fileStatus.fileName);
   const defaultSaveAsName = useMemo(() => getFileName(currentFileName), [currentFileName]);
+  // startSend() checks this itself - see that case below - since it doesn't
+  // go through JobBar's handleStartClick, the one place this warning
+  // normally lives.
+  const editorIsDirty = useAppSelector((state) => state.ui.editorIsDirty);
 
   // Mirrors of Redux state, kept current via a plain ref rather than being
   // read from the closure a request handler was created in - postMessage
@@ -229,6 +233,16 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           // the active file, unlike openFile(). For a plugin that wants a
           // path to act on later (e.g. queueing several files up front)
           // rather than one to switch to right now.
+          //
+          // Rejects outright if one's already open rather than replacing the
+          // pending request - there's only one pickFileRequest slot, so a
+          // second call before the first settles would silently orphan the
+          // first plugin call's promise forever (confirmed 2026-09-18: a
+          // fast double-call left the first caller waiting with nothing left
+          // to ever resolve or reject it).
+          if (pickFileRequest) {
+            return Promise.reject(new Error("A file picker is already open for this plugin"));
+          }
           return new Promise((resolve, reject) => {
             setPickFileRequest({ resolve, reject });
           });
@@ -240,6 +254,16 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           return getFileStatus();
 
         case "startSend":
+          // Mirrors JobBar's handleStartClick, which this bridges around
+          // otherwise: the backend runs whatever's saved on disk, not the
+          // editor's live buffer, so a plugin calling this with unsaved
+          // editor changes present would silently run stale gcode with no
+          // indication anything was wrong (confirmed 2026-09-18).
+          if (editorIsDirty) {
+            return Promise.reject(
+              new Error("The gcode editor has unsaved changes - save or discard them before starting a send")
+            );
+          }
           return startFileSend();
 
         case "pauseSend":
@@ -270,7 +294,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           return Promise.reject(new Error(`Unknown method "${method}"`));
       }
     },
-    [dispatch, onClose, plugin.id]
+    [dispatch, onClose, plugin.id, pickFileRequest, editorIsDirty]
   );
 
   // --- Incoming requests from the plugin --------------------------------
