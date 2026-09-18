@@ -31,6 +31,11 @@ fi
 JAVA_VERSION=25
 MAIN_JAR="ugs-fx-$PROJECT_VERSION.jar"
 
+# jpackage's --app-version only accepts one to three dot-separated integers,
+# so a tag like v0.1.0-pendant-preview can't be passed through as-is - strip
+# everything from the first "-" onward.
+APP_VERSION=${APP_VERSION%%-*}
+
 echo "Java home: $JAVA_HOME"
 echo "Project version: $PROJECT_VERSION"
 echo "App version: $APP_VERSION"

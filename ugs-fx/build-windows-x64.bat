@@ -29,6 +29,11 @@ if exist "%JAVA_HOME%\" (
 set JAVA_VERSION=25
 set MAIN_JAR=ugs-fx-%PROJECT_VERSION%.jar
 
+:: jpackage's --app-version only accepts one to three dot-separated integers,
+:: so a tag like v0.1.0-pendant-preview can't be passed through as is - keep
+:: only the part before the first "-".
+for /f "delims=-" %%v in ("%APP_VERSION%") do set APP_VERSION=%%v
+
 echo Java home: %JAVA_HOME%
 echo Project version: %PROJECT_VERSION%
 echo App version: %APP_VERSION%
@@ -68,25 +73,39 @@ echo Creating Java runtime image...
 :: ----------- PACKAGING --------------------------------------------------
 echo Packaging application...
 
-for %%s in ("msi" "exe") do call "%JAVA_HOME%\bin\jpackage" ^
-  --type %%s ^
-  --dest target\installer ^
-  --input target\installer\input\libs ^
-  --name "Universal G-code Sender" ^
-  --main-class com.willwinder.universalgcodesender.fx.Launcher ^
-  --main-jar %MAIN_JAR% ^
-  --resource-dir installer ^
-  --java-options "--enable-native-access=ALL-UNNAMED -XX:MaxRAMPercentage=85.0 -Dprism.forceGPU=true -Djavafx.preloader=com.willwinder.universalgcodesender.fx.Preloader" ^
-  --runtime-image target\java-runtime ^
-  --icon installer\ugs.ico ^
-  --app-version %APP_VERSION% ^
-  --win-shortcut ^
-  --win-menu ^
-  --vendor "Universal G-code Sender" ^
-  --copyright "Joacim Breiler" ^
-  --license-file ..\COPYING ^
-  --about-url https://universalgcodesender.com/
+for %%s in ("msi" "exe") do (
+  call "%JAVA_HOME%\bin\jpackage" ^
+    --type %%s ^
+    --dest target\installer ^
+    --input target\installer\input\libs ^
+    --name "Universal G-code Sender" ^
+    --main-class com.willwinder.universalgcodesender.fx.Launcher ^
+    --main-jar %MAIN_JAR% ^
+    --resource-dir installer ^
+    --java-options "--enable-native-access=ALL-UNNAMED -XX:MaxRAMPercentage=85.0 -Dprism.forceGPU=true -Djavafx.preloader=com.willwinder.universalgcodesender.fx.Preloader" ^
+    --runtime-image target\java-runtime ^
+    --icon installer\ugs.ico ^
+    --app-version %APP_VERSION% ^
+    --win-shortcut ^
+    --win-menu ^
+    --vendor "Universal G-code Sender" ^
+    --copyright "Joacim Breiler" ^
+    --license-file ..\COPYING ^
+    --about-url https://universalgcodesender.com/
+  if !errorlevel! neq 0 (
+    echo jpackage failed to build the %%s package with exit code !errorlevel!
+    exit /b 1
+  )
+)
 
 move "target\installer\Universal G-code Sender*.exe" "target\installer\ugs-%APP_VERSION%-x64.exe"
+if !errorlevel! neq 0 (
+  echo Could not find or move the built exe installer
+  exit /b 1
+)
 move "target\installer\Universal G-code Sender*.msi" "target\installer\ugs-%APP_VERSION%-x64.msi"
+if !errorlevel! neq 0 (
+  echo Could not find or move the built msi installer
+  exit /b 1
+)
 echo Done.
