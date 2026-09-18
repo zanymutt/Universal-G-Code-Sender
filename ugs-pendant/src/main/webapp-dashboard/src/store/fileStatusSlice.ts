@@ -20,6 +20,7 @@ export const fetchFileStatus = createAsyncThunk(
 type FileStatusState = FileStatus & { latestRequestId: string | null };
 
 const initialState: FileStatusState = {
+  sendState: "IDLE",
   fileName: "",
   rowCount: 0,
   completedRowCount: 0,
@@ -35,6 +36,7 @@ const statusSlice = createSlice({
   initialState,
   reducers: {
     setFileStatus: (state, action) => {
+      state.sendState = action.payload.sendState;
       state.fileName = action.payload.fileName;
       state.rowCount = action.payload.rowCount;
       state.completedRowCount = action.payload.completedRowCount;

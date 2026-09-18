@@ -1,0 +1,6 @@
+{
+  "name": "Job Inspector",
+  "description": "Show machine state and count lines in the loaded job.",
+  "version": "1.0.0",
+  "entry": "index.html"
+}

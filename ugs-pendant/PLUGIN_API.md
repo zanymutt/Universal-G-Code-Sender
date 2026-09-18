@@ -31,7 +31,8 @@ Any additional files (CSS, JS, an icon) go in the same folder alongside `index.h
   "description": "What it does, in one sentence.",
   "version": "1.0.0",
   "entry": "index.html",
-  "icon": "icon.png"
+  "icon": "icon.png",
+  "allowMultipleInstances": false
 }
 ```
 
@@ -41,11 +42,18 @@ Any additional files (CSS, JS, an icon) go in the same folder alongside `index.h
 | `description` | No | Not currently shown anywhere in the UI, but good practice |
 | `version` | No | Not currently shown anywhere in the UI |
 | `entry` | No | Defaults to `index.html` |
+| `allowMultipleInstances` | No | Boolean; defaults to `false`. Set to `true` to permit multiple windows of this plugin in one Dashboard page. |
 | `icon` | No | Shown next to the name in the Plugins list and the plugin window's title bar |
 
 Unrecognized fields are silently ignored rather than causing an error, so a manifest written for another plugin ecosystem with a similar `plugin.json` shape (extra fields like `layout`, `layoutTablet`, `layoutMobile`, `files`) will still load here - it just won't do anything with the fields this dashboard doesn't act on yet.
 
 ## How it runs
+
+Plugins open once per Dashboard page by default. Clicking an already-open plugin brings its existing window to the front and focuses it without reloading its content. Closing it lets the next click open a fresh instance.
+
+Set `"allowMultipleInstances": true` in `plugin.json` only when your plugin supports independent windows. Reload Dashboard after changing the manifest. Each window has its own iframe, request routing, subscriptions, and local JavaScript state; closing one does not close its siblings. Settings remain shared by plugin ID (last save wins), and all windows use the same loaded job and machine connection. Keep batch runners and tools that modify the current job single-instance unless you implement appropriate coordination.
+
+This is a window policy for one Dashboard page, not a machine lock: another browser tab or device can still open the plugin. Existing manifests need no changes. The backend and Dashboard must include this feature for the opt-in to take effect.
 
 Your plugin opens as a **floating, draggable, resizable window** on top of the dashboard - not embedded into the normal layout. It renders inside a **sandboxed iframe** (`sandbox="allow-scripts"`, deliberately *without* `allow-same-origin`), which means:
 
@@ -218,6 +226,7 @@ Returns the currently loaded file's name and send progress. Separate from `getSt
 const fileStatus = await Fluid.getFileStatus();
 // fileStatus.fileName             -> string, the ABSOLUTE path on disk (not workspace-relative
 //                                    like listFiles()/openFile() use) - "" if nothing is loaded
+// fileStatus.sendState            -> "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELED" - see note below
 // fileStatus.rowCount             -> number, total lines in the loaded file
 // fileStatus.completedRowCount    -> number, lines sent and acknowledged so far
 // fileStatus.remainingRowCount    -> number, rowCount - completedRowCount
@@ -227,7 +236,7 @@ const fileStatus = await Fluid.getFileStatus();
 const percent = Math.round((fileStatus.completedRowCount / fileStatus.rowCount) * 100);
 ```
 
-`completedRowCount` is **not** a safe way to tell "finished" from "stopped early": a line counts as completed once it's been sent and acknowledged, not once its motion has actually finished, so `completedRowCount` can already equal `rowCount` well before the machine is done moving - if Stop is pressed at exactly that point, this field alone makes it look like the job succeeded. `sendRemainingDuration` is the reliable one: it's `0` only once the send has genuinely finished; if the job was stopped before that, it reports the full original time estimate instead of some partial "time left when stopped" value. See `startSend()`/`pauseSend()`/`stopSend()` below for what to actually check.
+`completedRowCount` and `sendRemainingDuration` are progress indicators, not success indicators: canceled jobs can have every row acknowledged and zero remaining time. Use `sendState`, which is one of `IDLE`, `RUNNING`, `PAUSED`, `COMPLETED`, or `CANCELED`. Loading/unloading a file resets it to `IDLE`; starting a stream sets `RUNNING`. Only the backend stream-complete event sets `COMPLETED`.
 
 ### `startSend()` / `pauseSend()` / `stopSend()`
 
@@ -241,7 +250,7 @@ await Fluid.stopSend();  // cancels the current send entirely
 
 `startSend()` rejects (rather than silently running stale gcode) if the dashboard's own gcode editor currently has unsaved changes - same rule as the dashboard's own Start button, since the backend always runs what's on disk.
 
-There's no dedicated "job finished" event - watch `on("status", ...)` for `state` returning to `"IDLE"` after having been `"RUN"`/`"CHECK"`, then check `getFileStatus()`. Use `sendRemainingDuration === 0` to tell "finished" apart from "stopped early", not `completedRowCount` alone (see the note above) - and keep in mind *anything* can stop the job (your own `stopSend()`, the dashboard's own Stop button, an alarm), so treat this purely as "is it still going", not as a signal of who or what stopped it.
+For batch sequencing, poll `getFileStatus()` after `startSend()` resolves. Require `sendState === "COMPLETED"`, the expected file name, and controller `state === "IDLE"` before advancing. Short jobs may finish between status notifications, so do not require observing RUN first. Keep polling while the stream is RUNNING or PAUSED. CANCELED and missing/unknown states must not advance the queue. Invalidate pending requests when stopping or starting another file so stale responses cannot advance a later run.
 
 ### `getSettings()` / `saveSettings(data)`
 

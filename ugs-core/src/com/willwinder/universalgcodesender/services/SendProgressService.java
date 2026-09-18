@@ -124,6 +124,14 @@ public class SendProgressService implements UGSEventListener {
 
     private volatile boolean isSending = false;
     private volatile boolean hasFinishedSending = false;
+    public enum SendState { IDLE, RUNNING, PAUSED, COMPLETED, CANCELED }
+
+    private volatile SendState sendState = SendState.IDLE;
+
+    /** Explicit stream lifecycle; remaining-time estimates are not completion results. */
+    public SendState getSendState() {
+        return sendState;
+    }
     private volatile double correction = 1;
 
     /**
@@ -391,23 +399,30 @@ public class SendProgressService implements UGSEventListener {
                 reset();
                 stopWatch.start();
                 isSending = true;
+                sendState = SendState.RUNNING;
             }
             case STREAM_PAUSED -> {
+                sendState = SendState.PAUSED;
                 if (stopWatch.isStarted() && !stopWatch.isSuspended()) {
                     stopWatch.suspend();
                 }
             }
             case STREAM_RESUMED -> {
+                sendState = SendState.RUNNING;
                 if (stopWatch.isSuspended()) {
                     stopWatch.resume();
                 }
             }
             case STREAM_COMPLETE -> {
                 stop();
+                sendState = SendState.COMPLETED;
                 backend.dispatchMessage(MessageType.INFO, "*** " + Localization.getString("controller.finished.send")
                         + " " + Utils.formattedMillis(getDuration()) + "\n");
             }
-            case STREAM_CANCELED -> stop();
+            case STREAM_CANCELED -> {
+                stop();
+                sendState = SendState.CANCELED;
+            }
         }
     }
 
@@ -452,6 +467,7 @@ public class SendProgressService implements UGSEventListener {
     }
 
     private void reset() {
+        sendState = SendState.IDLE;
         stopWatch.reset();
         sentRows.set(0);
         dispatchedRows.set(0);

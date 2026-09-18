@@ -8,13 +8,15 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  * nothing yet to parse a "layout" field into.
  * <p>
  * {@code @JsonIgnoreProperties(ignoreUnknown = true)} matters here specifically: this schema is
- * intentionally kept identical to FigUI's own plugin.json shape, which already documents fields
+ * compatible with FigUI-style manifests, which already document fields
  * (layout, layoutTablet, layoutMobile, files) this record doesn't model yet. Without this, a
  * plugin.json using any of those - or written by someone following FigUI's own guide - would fail
  * to parse and get silently skipped from the plugin list, not because anything is wrong with it.
+ * Dashboard's allowMultipleInstances extension defaults to false when omitted.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
-public record PluginManifest(String name, String description, String version, String entry, String icon) {
+public record PluginManifest(String name, String description, String version, String entry, String icon,
+                             boolean allowMultipleInstances) {
 
     public String entryOrDefault() {
         return entry == null || entry.isBlank() ? "index.html" : entry;

@@ -1,4 +1,5 @@
 export type FileStatus = {
+  sendState: "IDLE" | "RUNNING" | "PAUSED" | "COMPLETED" | "CANCELED";
   fileName: string;
   rowCount: number;
   completedRowCount: number;

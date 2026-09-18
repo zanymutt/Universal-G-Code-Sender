@@ -101,7 +101,8 @@ public class PluginsResource {
                         manifest.description(),
                         manifest.version(),
                         String.format("/api/v1/plugins/%s/files/%s", id, manifest.entryOrDefault()),
-                        iconUrl));
+                        iconUrl,
+                        manifest.allowMultipleInstances()));
             });
         }
         return result;

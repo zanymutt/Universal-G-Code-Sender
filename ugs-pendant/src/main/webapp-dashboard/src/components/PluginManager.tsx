@@ -1,14 +1,7 @@
-import { createContext, ReactNode, useContext, useEffect, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useReducer, useState } from "react";
 import { listPlugins, PluginInfo } from "../services/plugins";
 import PluginWindow from "./PluginWindow";
-
-// One open plugin window - a plugin can be opened more than once (two
-// instances of the same rotate-gcode tool, say), so instances are keyed by
-// a per-open counter, not by plugin id.
-type OpenWindow = {
-  key: number;
-  plugin: PluginInfo;
-};
+import { initialPluginWindows, pluginWindowsReducer } from "../store/pluginWindows";
 
 // Staggers each newly opened window a bit further down/right than the last
 // so opening several plugins in a row doesn't stack them in an identical
@@ -48,8 +41,7 @@ type Props = { children: ReactNode };
 // showing RightRail.
 const PluginManagerProvider = ({ children }: Props) => {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
-  const [openWindows, setOpenWindows] = useState<OpenWindow[]>([]);
-  const [nextKey, setNextKey] = useState(0);
+  const [windowState, dispatchWindow] = useReducer(pluginWindowsReducer, initialPluginWindows);
 
   const refreshPlugins = () => {
     listPlugins()
@@ -64,22 +56,24 @@ const PluginManagerProvider = ({ children }: Props) => {
   useEffect(refreshPlugins, []);
 
   const openPlugin = (plugin: PluginInfo) => {
-    setOpenWindows((prev) => [...prev, { key: nextKey, plugin }]);
-    setNextKey((k) => k + 1);
+    dispatchWindow({ type: "open", plugin });
   };
 
   const closeWindow = (key: number) => {
-    setOpenWindows((prev) => prev.filter((w) => w.key !== key));
+    dispatchWindow({ type: "close", key });
   };
 
   return (
     <PluginManagerContext.Provider value={{ plugins, refreshPlugins, openPlugin }}>
       {children}
 
-      {openWindows.map((openWindow, index) => (
+      {windowState.windows.map((openWindow, index) => (
         <PluginWindow
           key={openWindow.key}
           plugin={openWindow.plugin}
+          isFront={windowState.frontKey === openWindow.key}
+          focusRequest={openWindow.focusRequest}
+          onActivate={() => dispatchWindow({ type: "activate", key: openWindow.key })}
           initialOffset={{
             x: 80 + STAGGER_STEP * (index % STAGGER_MAX_STEPS),
             y: 80 + STAGGER_STEP * (index % STAGGER_MAX_STEPS),

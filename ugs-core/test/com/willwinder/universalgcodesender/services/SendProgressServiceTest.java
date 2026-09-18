@@ -85,6 +85,39 @@ public class SendProgressServiceTest {
 
     private IController connectedController;
 
+    @Test
+    public void sendState_distinguishesCancellationFromCompletionEvenAfterAllRowsAreAcknowledged() throws Exception {
+        backend.setGcodeFile(createGcodeFile("G21", "G1X100F100"));
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.IDLE);
+        startStream();
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.RUNNING);
+        service.UGSEvent(new StreamEvent(StreamEventType.STREAM_PAUSED));
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.PAUSED);
+        service.UGSEvent(new StreamEvent(StreamEventType.STREAM_RESUMED));
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.RUNNING);
+        for (int i = 0; i < service.getNumRows(); i++) {
+            service.UGSEvent(commandEvent(CommandEventType.COMMAND_COMPLETE));
+        }
+        service.UGSEvent(new StreamEvent(StreamEventType.STREAM_CANCELED));
+        assertThat(service.getNumCompletedRows()).isEqualTo(service.getNumRows());
+        assertThat(service.getRemainingDuration()).isZero();
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.CANCELED);
+        startStream();
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.RUNNING);
+        service.UGSEvent(new StreamEvent(StreamEventType.STREAM_COMPLETE));
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.COMPLETED);
+        service.UGSEvent(new FileStateEvent(FileState.FILE_UNLOADED));
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.IDLE);
+    }
+
+    @Test
+    public void sendState_reportsCompletionWhenDurationCannotBeEstimated() {
+        startStream();
+        service.UGSEvent(new StreamEvent(StreamEventType.STREAM_COMPLETE));
+        assertThat(service.getRemainingDuration()).isEqualTo(-1);
+        assertThat(service.getSendState()).isEqualTo(SendProgressService.SendState.COMPLETED);
+    }
+
     private void connectMachine() {
         doReturn(connectedController).when(backend).getController();
     }

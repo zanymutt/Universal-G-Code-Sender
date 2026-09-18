@@ -6,5 +6,5 @@ package com.willwinder.universalgcodesender.pendantui.v1.model;
  * itself - it just points an iframe's {@code src} straight at {@code entryUrl}.
  */
 public record PluginInfo(String id, String name, String description, String version, String entryUrl,
-                          String iconUrl) {
+                          String iconUrl, boolean allowMultipleInstances) {
 }

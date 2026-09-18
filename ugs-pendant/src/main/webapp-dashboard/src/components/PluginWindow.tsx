@@ -26,6 +26,9 @@ type Props = {
   plugin: PluginInfo;
   initialOffset: { x: number; y: number };
   onClose: () => void;
+  isFront: boolean;
+  focusRequest: number;
+  onActivate: () => void;
 };
 
 type SubscribableEvent = "status" | "line";
@@ -72,13 +75,20 @@ type PickFileRequest = {
   reject: (error: Error) => void;
 };
 
-const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
+const PluginWindow = ({ plugin, initialOffset, onClose, isFront, focusRequest, onActivate }: Props) => {
   const dispatch = useAppDispatch();
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const windowRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // Focus the existing shell without reloading its iframe or losing plugin state.
+    windowRef.current?.focus({ preventScroll: true });
+  }, [focusRequest]);
   const [position, setPosition] = useState(initialOffset);
   const [subscribedEvents, setSubscribedEvents] = useState<Set<SubscribableEvent>>(new Set());
   const [saveAsRequest, setSaveAsRequest] = useState<SaveAsRequest | null>(null);
   const [pickFileRequest, setPickFileRequest] = useState<PickFileRequest | null>(null);
+  // Reserve synchronously: React state alone leaves a gap before the next render.
+  const pickFileRequestRef = useRef<PickFileRequest | null>(null);
 
   const status = useAppSelector((state) => state.status);
   const consoleMessages = useAppSelector((state) => state.console.messages);
@@ -240,11 +250,13 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           // first plugin call's promise forever (confirmed 2026-09-18: a
           // fast double-call left the first caller waiting with nothing left
           // to ever resolve or reject it).
-          if (pickFileRequest) {
+          if (pickFileRequestRef.current) {
             return Promise.reject(new Error("A file picker is already open for this plugin"));
           }
           return new Promise((resolve, reject) => {
-            setPickFileRequest({ resolve, reject });
+            const request = { resolve, reject };
+            pickFileRequestRef.current = request;
+            setPickFileRequest(request);
           });
 
         case "getFileStatus":
@@ -294,7 +306,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           return Promise.reject(new Error(`Unknown method "${method}"`));
       }
     },
-    [dispatch, onClose, plugin.id, pickFileRequest, editorIsDirty]
+    [dispatch, onClose, plugin.id, editorIsDirty]
   );
 
   // --- Incoming requests from the plugin --------------------------------
@@ -399,17 +411,23 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
       <OpenFileModal
         onPick={(path) => {
           pickFileRequest.resolve({ path });
+          pickFileRequestRef.current = null;
           setPickFileRequest(null);
         }}
         handleClose={() => {
           // Same no-op-if-already-settled note as SaveAsModal above - only
           // matters for the cancel path here too.
           pickFileRequest.reject(new Error("Pick cancelled"));
+          pickFileRequestRef.current = null;
           setPickFileRequest(null);
         }}
       />
     )}
-    <div className="pluginWindow" style={{ left: position.x, top: position.y }}>
+    <div className="pluginWindow" ref={windowRef} tabIndex={-1}
+      aria-label={plugin.name}
+      onPointerDownCapture={onActivate}
+      onFocusCapture={onActivate}
+      style={{ left: position.x, top: position.y, zIndex: isFront ? 41 : 40 }}>
       <div
         className="pluginWindowHeader"
         onPointerDown={handleHeaderPointerDown}

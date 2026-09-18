@@ -8,6 +8,7 @@ export type PluginInfo = {
   // plugin's file paths themselves.
   entryUrl: string;
   iconUrl?: string;
+  allowMultipleInstances?: boolean;
 };
 
 export const listPlugins = (): Promise<PluginInfo[]> => {

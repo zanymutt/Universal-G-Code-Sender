@@ -303,7 +303,8 @@ public class FilesResource {
                 sendProgress.getNumRemainingRows(),
                 sendProgress.getDuration(),
                 sendProgress.getRemainingDuration(),
-                sendProgress.getLastCompletedCommandNumber());
+                sendProgress.getLastCompletedCommandNumber(),
+                sendProgress.getSendState().name());
     }
 
     @GET
