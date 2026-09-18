@@ -372,9 +372,16 @@ public class GUIBackend implements BackendAPI {
         if (gcodeStream != null) {
             gcodeStream.close();
         }
-        if (this.processedGcodeFile != null) {
-            eventDispatcher.sendUGSEvent(new FileStateEvent(FileState.FILE_UNLOADED));
-        }
+        // Deliberately unconditional, not gated on processedGcodeFile being set: a FileLoader
+        // can process the open asynchronously (e.g. the platform edition's OpenFileActionLoader
+        // dispatches via SwingUtilities.invokeLater), so a fast enough open-then-close can call
+        // this before processedGcodeFile is actually assigned. Gating this event on it being
+        // non-null meant that race silently dropped the broadcast, leaving every *other* connected
+        // dashboard client stuck showing the old file/toolpath even though the backend's own file
+        // state had already correctly cleared (confirmed 2026-09-17 - see FileStateEvent listeners
+        // like GcodeToolpathRenderable, which already treat a redundant FILE_UNLOADED as a safe
+        // no-op, so firing this every time costs nothing).
+        eventDispatcher.sendUGSEvent(new FileStateEvent(FileState.FILE_UNLOADED));
 
         initGcodeParser();
         this.gcodeFile = null;

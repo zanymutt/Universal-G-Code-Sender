@@ -474,12 +474,16 @@ public class GUIBackendTest {
         instance.setGcodeFile(tempFile);
 
         // Then
+        // setGcodeFile() unconditionally calls unsetGcodeFile() first (see its own comment on why
+        // that dispatch is no longer gated on a previously processed file existing), so even the
+        // very first file opened in a session now leads with a FILE_UNLOADED.
         List<UGSEvent> events = eventArgumentCaptor.getAllValues();
-        assertEquals(4, events.size());
-        assertEquals(FileState.OPENING_FILE, ((FileStateEvent) events.get(0)).getFileState());
-        assertEquals(FileState.FILE_LOADING, ((FileStateEvent) events.get(1)).getFileState());
-        assertEquals(SettingChangedEvent.class, events.get(2).getClass());
-        assertEquals(FileState.FILE_LOADED, ((FileStateEvent) events.get(3)).getFileState());
+        assertEquals(5, events.size());
+        assertEquals(FileState.FILE_UNLOADED, ((FileStateEvent) events.get(0)).getFileState());
+        assertEquals(FileState.OPENING_FILE, ((FileStateEvent) events.get(1)).getFileState());
+        assertEquals(FileState.FILE_LOADING, ((FileStateEvent) events.get(2)).getFileState());
+        assertEquals(SettingChangedEvent.class, events.get(3).getClass());
+        assertEquals(FileState.FILE_LOADED, ((FileStateEvent) events.get(4)).getFileState());
 
         assertNotNull(instance.getProcessedGcodeFile());
     }
