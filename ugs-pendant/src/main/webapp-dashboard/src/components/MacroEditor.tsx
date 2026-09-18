@@ -108,6 +108,24 @@ const MacroEditor = ({ compact = false }: Props) => {
     );
   };
 
+  // Selects the top macro whenever the list has something in it and nothing
+  // is currently selected, rather than leaving "Select a macro to edit, or
+  // click New" as the first thing a person sees. Guarded on selectedUuid,
+  // not just macros.length, so it doesn't fight an in-progress unsaved-new
+  // draft (selectedUuid is set for that, just not to an existing macro's
+  // id) or re-select something out from under editing an existing one.
+  // MacroEditor stays mounted across split/non-split toggles (see
+  // CenterPanel.tsx) and deleting the selected macro clears selectedUuid
+  // back to null, so in practice this fires once on first page load and
+  // again after deleting whatever was selected - both are exactly the
+  // "nothing selected" moments this is meant to cover, not just the first.
+  useEffect(() => {
+    if (loaded && selectedUuid === null && macros.length > 0) {
+      selectMacro(macros[0].uuid);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded, macros]);
+
   const startNewMacro = () => {
     guardDirty(
       () => {
