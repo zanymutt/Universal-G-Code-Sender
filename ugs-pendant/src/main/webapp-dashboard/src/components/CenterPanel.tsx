@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Nav } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -63,6 +63,36 @@ const CenterPanel = () => {
   const [topEditSlot, setTopEditSlot] = useState<HTMLDivElement | null>(null);
   const [bottomEditSlot, setBottomEditSlot] = useState<HTMLDivElement | null>(null);
   const activeEditSlot = bottomView !== "console" ? bottomEditSlot : topEditSlot;
+
+  // The portal below always targets THIS one div, created once and never
+  // swapped - React keys a portal's identity on its container, so changing
+  // *which* element createPortal targets doesn't actually move the portal:
+  // React treats a container change as not an update, unmounting and
+  // recreating the portaled subtree from scratch. Confirmed the hard way -
+  // passing activeEditSlot directly as the container silently discarded
+  // GcodeEditor's unsaved edits, cursor position, and undo history every
+  // time it swapped between topEditSlot and bottomEditSlot. Keeping the
+  // portal's container fixed avoids that; this div is instead physically
+  // relocated between the two visible slots via plain DOM appendChild in
+  // the layout effect below - a real node move, which (unlike changing a
+  // portal's container) preserves everything inside it, the same as
+  // dragging any other DOM node from one parent to another.
+  const editorHostRef = useRef<HTMLDivElement | null>(null);
+  if (editorHostRef.current === null) {
+    const host = document.createElement("div");
+    // Transparent to layout - GcodeEditor's own root expects height: 100%
+    // of its immediate parent; display: contents removes this wrapper from
+    // the box tree entirely so that resolves against the actual slot div
+    // instead of needing to replicate its sizing here.
+    host.style.display = "contents";
+    editorHostRef.current = host;
+  }
+
+  useLayoutEffect(() => {
+    if (activeEditSlot) {
+      activeEditSlot.appendChild(editorHostRef.current!);
+    }
+  }, [activeEditSlot]);
 
   const [consoleHeight, setConsoleHeight] = useState(220);
   const dragStartRef = useRef({ y: 0, height: 0 });
@@ -333,7 +363,7 @@ const CenterPanel = () => {
           <div className="centerPanelContent" hidden={bottomView === "console"} ref={setBottomEditSlot} />
         </div>
       </div>
-      {activeEditSlot && createPortal(<GcodeEditor />, activeEditSlot)}
+      {createPortal(<GcodeEditor />, editorHostRef.current!)}
     </div>
   );
 };
