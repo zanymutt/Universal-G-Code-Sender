@@ -30,6 +30,13 @@ import "./OpenFileModal.scss";
 
 type Props = {
   handleClose: () => void;
+  // When set, picking a file hands its path to this instead of opening it as
+  // the dashboard's own active gcode file - used by the plugin bridge's
+  // pickFile() request, which just wants a path back (e.g. to queue up),
+  // not to load the file itself. Upload is hidden in this mode too, since an
+  // uploaded file is loaded immediately as a side effect of uploading it -
+  // there's no "upload but don't open" path to plug in here.
+  onPick?: (path: string) => void;
 };
 
 type SortMode = "recent" | "name";
@@ -130,7 +137,7 @@ const readStoredViewMode = (): ViewMode => {
   }
 };
 
-const OpenFileModal = ({ handleClose }: Props) => {
+const OpenFileModal = ({ handleClose, onPick }: Props) => {
   const dispatch = useAppDispatch();
   const [entries, setEntries] = useState<WorkspaceFileEntry[]>();
   const [isLoadingList, setIsLoadingList] = useState<boolean>(true);
@@ -154,7 +161,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
   // comment), which on a remote session there's no way to get back to after
   // closing/reopening at all, unlike a workspace file. Not offering it there
   // avoids that dead end rather than explaining it after the fact.
-  const canUpload = isLocalAccess();
+  const canUpload = isLocalAccess() && !onPick;
 
   useEffect(() => {
     getWorkspaceFileList()
@@ -284,6 +291,10 @@ const OpenFileModal = ({ handleClose }: Props) => {
     });
 
   const alertClicked = (path: string) => {
+    if (onPick) {
+      onPick(path);
+      return;
+    }
     setIsLoading(true);
     setError(null);
     openWorkspaceFile(path)
@@ -341,7 +352,7 @@ const OpenFileModal = ({ handleClose }: Props) => {
   return (
     <Modal show={true} onHide={handleClose} centered dialogClassName="openFileModalDialog">
       <Modal.Header closeButton>
-        <Modal.Title>Open file</Modal.Title>
+        <Modal.Title>{onPick ? "Choose a file" : "Open file"}</Modal.Title>
       </Modal.Header>
 
       {error && (

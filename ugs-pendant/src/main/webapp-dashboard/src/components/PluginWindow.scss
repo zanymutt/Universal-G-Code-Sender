@@ -1,7 +1,13 @@
 .pluginWindow {
   position: fixed;
   width: 420px;
-  height: 320px;
+  // Was 320px - too short once actual plugins (Batch Runner's 5-row queue,
+  // both bundled plugins' bump to 14px text) are accounted for, forcing a
+  // scrollbar on first open that hid part of the content below the fold.
+  // Taller by default costs nothing for a simpler plugin (still resizable
+  // either way), so this is sized for the denser one rather than the
+  // sparser one.
+  height: 480px;
   min-width: 220px;
   min-height: 160px;
   max-width: 96vw;

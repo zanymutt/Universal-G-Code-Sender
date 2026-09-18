@@ -5,13 +5,21 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
-import { getWorkspaceFileList, openWorkspaceFile } from "../services/files";
+import {
+  getFileStatus,
+  getWorkspaceFileList,
+  openWorkspaceFile,
+  pause as pauseFileSend,
+  send as startFileSend,
+  stop as stopFileSend,
+} from "../services/files";
 import { sendGcode } from "../services/machine";
 import { acquireLineSubscription, releaseLineSubscription } from "../store/pluginLineSubscription";
 import { refreshFileState } from "../store/refreshFileState";
 import { getFileName } from "../utils/getFileName";
 import { Status } from "../model/Status";
 import SaveAsModal from "./SaveAsModal";
+import OpenFileModal from "./OpenFileModal";
 import "./PluginWindow.scss";
 
 type Props = {
@@ -57,12 +65,20 @@ type SaveAsRequest = {
   reject: (error: Error) => void;
 };
 
+// A plugin's in-flight pickFile() call, waiting on the OpenFileModal it
+// triggered in pick mode (browses and returns a path without opening it).
+type PickFileRequest = {
+  resolve: (result: { path: string }) => void;
+  reject: (error: Error) => void;
+};
+
 const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
   const dispatch = useAppDispatch();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [position, setPosition] = useState(initialOffset);
   const [subscribedEvents, setSubscribedEvents] = useState<Set<SubscribableEvent>>(new Set());
   const [saveAsRequest, setSaveAsRequest] = useState<SaveAsRequest | null>(null);
+  const [pickFileRequest, setPickFileRequest] = useState<PickFileRequest | null>(null);
 
   const status = useAppSelector((state) => state.status);
   const consoleMessages = useAppSelector((state) => state.console.messages);
@@ -206,6 +222,32 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
         case "openFile":
           return openWorkspaceFile(params.path as string);
 
+        case "pickFile":
+          // Opens the dashboard's own Open dialog (folder tree, search,
+          // everything a person gets from the Open button) but in pick
+          // mode - resolves with the chosen path *without* loading it as
+          // the active file, unlike openFile(). For a plugin that wants a
+          // path to act on later (e.g. queueing several files up front)
+          // rather than one to switch to right now.
+          return new Promise((resolve, reject) => {
+            setPickFileRequest({ resolve, reject });
+          });
+
+        case "getFileStatus":
+          // The one place a plugin can find out *which* file the backend actually has loaded
+          // and how far a send has gotten - getStatus()'s flattened status has neither, since
+          // that data lives on GUIBackend's own send-progress tracking, not ControllerStatus.
+          return getFileStatus();
+
+        case "startSend":
+          return startFileSend();
+
+        case "pauseSend":
+          return pauseFileSend();
+
+        case "stopSend":
+          return stopFileSend();
+
         case "readFile":
         case "writeFile":
           return notImplemented(method);
@@ -264,14 +306,24 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
   // buffer can already hold hundreds of lines from before this plugin
   // opened, and replaying all of them on subscribe would look like a burst
   // of stale traffic rather than a live feed.
-  const lastForwardedCountRef = useRef(consoleMessages.length);
+  //
+  // Diffs by each message's own id, not array length/position. consoleSlice
+  // caps its array at 500 by splicing off the oldest entries once it's full,
+  // which pins `consoleMessages.length` at exactly 500 forever after that -
+  // a position-based "everything past index N" diff against a length that
+  // never changes again returns nothing forevermore, even though the
+  // array's actual contents keep rotating. id is assigned once per message
+  // by the reducer and never reused or shifted, so it keeps working
+  // regardless of how much has been dropped off the front.
+  const lastForwardedIdRef = useRef(consoleMessages[consoleMessages.length - 1]?.id ?? 0);
   useEffect(() => {
+    const latestId = consoleMessages[consoleMessages.length - 1]?.id ?? lastForwardedIdRef.current;
     if (!subscribedEvents.has("line")) {
-      lastForwardedCountRef.current = consoleMessages.length;
+      lastForwardedIdRef.current = latestId;
       return;
     }
-    const newMessages = consoleMessages.slice(lastForwardedCountRef.current);
-    lastForwardedCountRef.current = consoleMessages.length;
+    const newMessages = consoleMessages.filter((message) => message.id > lastForwardedIdRef.current);
+    lastForwardedIdRef.current = latestId;
     newMessages
       .filter((message) => message.type === "verbose")
       .forEach((message) => postToPlugin({ type: "fluid-event", event: "line", data: message.text }));
@@ -297,6 +349,13 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
       <SaveAsModal
         defaultFileName={defaultSaveAsName}
         getContent={() => saveAsRequest.content}
+        // saveGcodeAs()'s contract is "resolves with a workspace-relative
+        // path" - a device save has no such path, and its success path
+        // doesn't go through onSaveToWorkspace below (the only place this
+        // request actually resolves), so offering it here would report a
+        // successful save to the plugin as a cancellation. See SaveAsModal's
+        // own comment on this prop.
+        allowDeviceSave={false}
         onSaveToWorkspace={(relativePath) =>
           saveFileContentAs(relativePath, saveAsRequest.content).then(() => {
             refreshFileState(dispatch);
@@ -309,6 +368,20 @@ const PluginWindow = ({ plugin, initialOffset, onClose }: Props) => {
           // actually matters for the cancel path, where nothing else does.
           saveAsRequest.reject(new Error("Save cancelled"));
           setSaveAsRequest(null);
+        }}
+      />
+    )}
+    {pickFileRequest && (
+      <OpenFileModal
+        onPick={(path) => {
+          pickFileRequest.resolve({ path });
+          setPickFileRequest(null);
+        }}
+        handleClose={() => {
+          // Same no-op-if-already-settled note as SaveAsModal above - only
+          // matters for the cancel path here too.
+          pickFileRequest.reject(new Error("Pick cancelled"));
+          setPickFileRequest(null);
         }}
       />
     )}

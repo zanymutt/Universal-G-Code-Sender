@@ -48,9 +48,9 @@ const ConsolePanel = ({ fontSize }: Props) => {
             Controller console output will appear here.
           </div>
         ) : (
-          messages.map((line, index) => (
+          messages.map((line) => (
             <div
-              key={index}
+              key={line.id}
               style={{
                 color:
                   line.type === "error"

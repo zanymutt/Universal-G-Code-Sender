@@ -22,6 +22,15 @@ type Props = {
   getContent: () => string;
   onSaveToWorkspace: (relativePath: string) => Promise<void>;
   handleClose: () => void;
+  // Default true. The plugin bridge's saveGcodeAs() (see PluginWindow.tsx)
+  // passes false: its contract is "resolves with a workspace-relative
+  // path," which a device save has no equivalent of - saveToDevice()'s
+  // success path never calls onSaveToWorkspace, so handleClose's blanket
+  // "Save cancelled" rejection was firing even though the file *had* been
+  // saved, just to the person's downloads folder instead of the workspace.
+  // Simplest fix is not offering that choice here at all, rather than
+  // inventing a second, path-less "success" shape for the plugin API.
+  allowDeviceSave?: boolean;
 };
 
 // Folder-only tree, built from getWorkspaceFileList's folderList - unlike
@@ -87,7 +96,7 @@ const countFilesByFolder = (files: WorkspaceFileEntry[]): Map<string, number> =>
   return counts;
 };
 
-const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClose }: Props) => {
+const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClose, allowDeviceSave = true }: Props) => {
   const [filename, setFilename] = useState(defaultFileName);
   const [mode, setMode] = useState<SaveMode>("workspace");
   const [isSaving, setIsSaving] = useState(false);
@@ -110,7 +119,8 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
   // Only the literal localhost/loopback address counts - see isLocalAccess's
   // own comment. "device" is never reachable as a mode at all in that case
   // (the toggle offering it isn't rendered below), not just hidden once picked.
-  const canSaveToDevice = isLocalAccess();
+  // allowDeviceSave narrows this further for the plugin bridge - see Props.
+  const canSaveToDevice = isLocalAccess() && allowDeviceSave;
 
   const tree = useMemo(() => buildFolderTree(folders), [folders]);
   const fileCounts = useMemo(() => countFilesByFolder(files), [files]);
