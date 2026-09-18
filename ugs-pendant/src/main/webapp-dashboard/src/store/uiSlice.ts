@@ -10,6 +10,13 @@ export type CenterView = "visualize" | "edit" | "split" | "macros" | "probe";
 // "split" itself, since a pane can't contain another split.
 export type PaneContent = "visualize" | "edit" | "macros" | "probe";
 
+// What the bottom panel shows: Console alone, the gcode editor alone (full
+// width - "console" in name only, this whole area's original and only
+// purpose before this existed), or both side by side. Unlike the top pane
+// system this is a fixed, three-way choice rather than a general content
+// picker, since Console only ever pairs with the gcode editor here.
+export type BottomView = "console" | "edit" | "split";
+
 type UiState = {
   centerView: CenterView;
   splitLeft: PaneContent;
@@ -39,12 +46,10 @@ type UiState = {
   // disk, not the editor's live buffer, so starting with unsaved edits
   // silently runs stale gcode otherwise.
   editorIsDirty: boolean;
-  // Whether the console area is split to show Console + the gcode editor
-  // side by side, instead of Console alone across the full width. Fixed to
-  // that one pairing for now (not a general pane picker like splitLeft/
-  // splitRight) - see setConsoleSplit for why "edit" can never appear here
-  // AND in the top pane system at the same time.
-  consoleSplit: boolean;
+  // What the bottom panel currently shows - see BottomView. "edit" and
+  // "split" can never coexist with "edit" in the top pane system at the same
+  // time - see setBottomView for why.
+  bottomView: BottomView;
 };
 
 const initialState: UiState = {
@@ -55,7 +60,7 @@ const initialState: UiState = {
   editorCursorLine: 0,
   toolpathVersion: 0,
   editorIsDirty: false,
-  consoleSplit: false,
+  bottomView: "console",
 };
 
 const uiSlice = createSlice({
@@ -97,12 +102,15 @@ const uiSlice = createSlice({
     // mounted editor on the same file would drift out of sync with it:
     // separate cursor/undo/unsaved-buffer state on what's supposed to be
     // one file). So it can live in the top pane system OR here, never both.
-    // Turning this on always wins that fight - anywhere "edit" is currently
-    // selected up top gets bumped to "visualize" (or "macros" if visualize
-    // is already the other split pane, to avoid landing on a duplicate).
-    setConsoleSplit: (state, action: { payload: boolean }) => {
-      state.consoleSplit = action.payload;
-      if (!action.payload) return;
+    // Switching to "edit" or "split" always wins that fight - anywhere
+    // "edit" is currently selected up top gets bumped to "visualize" (or
+    // "macros" if visualize is already the other split pane, to avoid
+    // landing on a duplicate). Switching back to "console" doesn't need to
+    // touch the top pane system at all - it simply no longer holds "edit"
+    // away from it.
+    setBottomView: (state, action: { payload: BottomView }) => {
+      state.bottomView = action.payload;
+      if (action.payload === "console") return;
       if (state.centerView === "edit") state.centerView = "visualize";
       if (state.splitLeft === "edit") {
         state.splitLeft = state.splitRight === "visualize" ? "macros" : "visualize";

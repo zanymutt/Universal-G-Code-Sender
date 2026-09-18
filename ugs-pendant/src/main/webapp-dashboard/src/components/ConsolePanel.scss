@@ -45,4 +45,47 @@
   padding-top: 0.75rem;
   flex: 0 0 auto;
   min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  // Grows to fill the row; Verbose/text-size sit after it at their natural
+  // width, both right of Send - see the comment in ConsolePanel.tsx.
+  .input-group {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+.consoleVerboseToggle {
+  flex: 0 0 auto;
+  white-space: nowrap;
+
+  .form-check-label {
+    color: #c3c8cb;
+    font-size: 0.85rem;
+  }
+}
+
+// Bootstrap's switch defaults to its own blue when checked - swap it for the
+// same green used as the accent color everywhere else in the dashboard.
+// Scoped to this one toggle for now rather than every .form-check-input,
+// since there's no theme system yet to route this through consistently.
+#verbose-toggle:checked {
+  background-color: #4ade80;
+  border-color: #4ade80;
+}
+
+.consoleFontSize {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+
+  .consoleFontSizeValue {
+    color: #9aa0a4;
+    font-size: 0.8rem;
+    min-width: 3.2em;
+    text-align: center;
+  }
 }

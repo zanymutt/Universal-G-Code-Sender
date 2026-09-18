@@ -46,6 +46,7 @@
   .centerPanelMainNav,
   .centerPanelRightNav,
   .centerPanelSplitNav,
+  .centerPanelBottomViewNav,
   .centerPanelConsoleSplitNav {
     flex: 0 0 auto;
   }
@@ -175,27 +176,19 @@
   .centerPanelConsoleHeader {
     display: flex;
     align-items: center;
-    justify-content: space-between;
     gap: 12px;
     margin-bottom: 6px;
     flex: 0 0 auto;
   }
 
-  // Pushes this and Verbose after it into a right-aligned group together,
-  // leaving the heading on its own at the start - an auto margin wins over
-  // the header's own space-between either way.
-  .centerPanelConsoleFontSize {
+  // Groups the Console/Edit selector (only while not split) and the Split
+  // toggle together at the end of the row, leaving the heading on its own
+  // at the start.
+  .centerPanelConsoleHeaderRight {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     margin-left: auto;
-
-    .centerPanelConsoleFontSizeValue {
-      color: #9aa0a4;
-      font-size: 0.8rem;
-      min-width: 3.2em;
-      text-align: center;
-    }
   }
 
   .centerPanelHeading {
@@ -204,20 +197,5 @@
     font-size: 0.75rem;
     letter-spacing: 0.05em;
     margin-bottom: 0;
-  }
-
-  .centerPanelConsoleHeader .form-check-label {
-    color: #c3c8cb;
-    font-size: 0.85rem;
-  }
-
-  // Bootstrap's switch defaults to its own blue when checked - swap it for
-  // the same green used as the accent color everywhere else in the
-  // dashboard. Scoped to this one toggle for now rather than every
-  // .form-check-input, since there's no theme system yet to route this
-  // through consistently.
-  #verbose-toggle:checked {
-    background-color: #4ade80;
-    border-color: #4ade80;
   }
 }

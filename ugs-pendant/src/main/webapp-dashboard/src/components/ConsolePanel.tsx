@@ -1,15 +1,29 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Button, Form, InputGroup } from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import { useConsoleFontSize } from "../hooks/useConsoleFontSize";
+import { consoleActions } from "../store/consoleSlice";
 import { sendGcode } from "../services/machine";
 import "./ConsolePanel.scss";
 
-type Props = {
-  fontSize: number;
-};
-
-const ConsolePanel = ({ fontSize }: Props) => {
+const ConsolePanel = () => {
+  const dispatch = useAppDispatch();
   const currentState = useAppSelector((state) => state.status.state);
+  const verboseEnabled = useAppSelector((state) => state.console.verboseEnabled);
+  // Owned here now (rather than passed down from CenterPanel) since both the
+  // +/- control and the text itself live entirely inside this component -
+  // there's only ever one ConsolePanel instance, so there's no risk of two
+  // separate hook instances drifting apart on the shared localStorage key.
+  const {
+    fontSize,
+    increase: increaseFontSize,
+    decrease: decreaseFontSize,
+    canIncrease: canIncreaseFontSize,
+    canDecrease: canDecreaseFontSize,
+  } = useConsoleFontSize();
   const [gcodeCommand, setGcodeCommand] = useState("");
   const messages = useAppSelector((state) => state.console.messages);
   const consoleRef = useRef<HTMLDivElement | null>(null);
@@ -91,6 +105,33 @@ const ConsolePanel = ({ fontSize }: Props) => {
             Send
           </Button>
         </InputGroup>
+
+        {/* Verbose and the text-size control live here, right of Send,
+            rather than in a header above - that header disappears/moves
+            around depending on split state, while this row is always
+            exactly where the console itself is. */}
+        <Form.Check
+          type="switch"
+          id="verbose-toggle"
+          label="Verbose"
+          checked={verboseEnabled}
+          // Gated server-side too (EventsSocket.java only forwards
+          // MessageType.VERBOSE traffic to sessions that asked for it) -
+          // toggling this off actually stops the extra traffic at the
+          // source, not just hides it here.
+          onChange={(e) => dispatch(consoleActions.setVerboseEnabled(e.target.checked))}
+          className="consoleVerboseToggle"
+        />
+
+        <div className="consoleFontSize" title="Console text size">
+          <Button variant="secondary" size="sm" disabled={!canDecreaseFontSize} onClick={decreaseFontSize} title="Smaller text">
+            <FontAwesomeIcon icon={faMinus} />
+          </Button>
+          <span className="consoleFontSizeValue">{fontSize}px</span>
+          <Button variant="secondary" size="sm" disabled={!canIncreaseFontSize} onClick={increaseFontSize} title="Larger text">
+            <FontAwesomeIcon icon={faPlus} />
+          </Button>
+        </div>
       </div>
     </div>
   );

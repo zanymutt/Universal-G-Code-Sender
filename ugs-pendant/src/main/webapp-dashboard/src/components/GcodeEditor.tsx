@@ -482,6 +482,11 @@ const GcodeEditor = () => {
         onCancel={() => setShowRunFromConfirm(false)}
       />
 
+      <div className="gcodeEditorContent">
+        {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
+        <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
+      </div>
+
       <div className="gcodeEditorToolbar">
         <span className="gcodeEditorFileName">{fileName}</span>
         {!isEditable && <span className="gcodeEditorLocked">Read-only while a job is running</span>}
@@ -531,11 +536,6 @@ const GcodeEditor = () => {
             <FontAwesomeIcon icon={faPlus} />
           </Button>
         </div>
-      </div>
-
-      <div className="gcodeEditorContent">
-        {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
-        <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
       </div>
     </div>
   );
