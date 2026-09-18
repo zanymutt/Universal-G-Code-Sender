@@ -42,14 +42,38 @@
     font-size: 0.8rem;
   }
 
-  // Both get margin-left: auto (not just the first) so this whole group -
-  // Run from/Save as/Save - sits right-aligned together, rather than only
-  // Run from getting pushed over and leaving a gap before the rest. Reset
-  // (between them) doesn't need its own - it just rides along right after
-  // Run from in normal flow.
-  .gcodeEditorRunFrom,
-  .gcodeEditorSave {
+  // Only Run from gets margin-left: auto - it claims all the toolbar's
+  // leftover space at once, pushing this whole group (Run from/Reset/Save
+  // as/Save) right-aligned together as one cluster. .gcodeEditorSave is the
+  // shared class on BOTH the Save as and Save buttons - giving it its own
+  // margin-left: auto too (as before) split that same leftover space three
+  // ways instead of one, spreading the group apart across the toolbar
+  // rather than clustering it snug against the right edge.
+  .gcodeEditorRunFrom {
     margin-left: auto;
+  }
+
+  // Bootstrap's default outline-secondary (mid-gray #6c757d border/text) is
+  // too dim against this dark toolbar, reading as washed-out next to Save's
+  // solid blue - lighten it here via Bootstrap 5's per-button CSS custom
+  // properties rather than switching variants. Deliberately still a muted
+  // outline style, not a new accent color of its own (Save stays the one
+  // solid/colored button, correctly marking it as the primary action of the
+  // three) - full color theming is a separate future pass, not this one.
+  // .btn-outline-secondary scopes this to the Save as button specifically,
+  // since .gcodeEditorSave is also shared with the actual Save button
+  // (variant="primary"), which must keep its own blue untouched. Only the
+  // resting/disabled colors are set here, not hover/active - bootstrap.scss's
+  // global .btn rule points every button's hover vars back at its own
+  // resting ones (touchscreens simulate :hover on tap and never clear it),
+  // and it'll pick these up as its resting color automatically without a
+  // second, competing override here of equal specificity.
+  .gcodeEditorRunFrom,
+  .gcodeEditorSave.btn-outline-secondary {
+    --bs-btn-color: #c3c8cb;
+    --bs-btn-border-color: #6b7075;
+    --bs-btn-disabled-color: #6b7075;
+    --bs-btn-disabled-border-color: #3a3d3e;
   }
 
   // Mirrors .jobRunFromReset in JobBar.scss - same reset, same styling,
