@@ -45,7 +45,8 @@
 
   .centerPanelMainNav,
   .centerPanelRightNav,
-  .centerPanelSplitNav {
+  .centerPanelSplitNav,
+  .centerPanelConsoleSplitNav {
     flex: 0 0 auto;
   }
 
@@ -101,6 +102,36 @@
   // above it) - flex-grow/shrink stay off so it holds exactly that height.
   .centerPanelConsole {
     flex: 0 0 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  // Column (Console alone, full width) unless .split - same row/order
+  // convention as .centerPanelContentRow above it, just for the bottom area.
+  .centerPanelConsoleBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+
+    &.split {
+      flex-direction: row;
+
+      .centerPanelContent,
+      .centerPanelConsolePane {
+        min-width: 0;
+      }
+    }
+  }
+
+  // Deliberately no border/background/radius of its own (unlike
+  // .centerPanelContent) - .console below already paints those, and stacking
+  // this on top of it would show as a visible double border around the
+  // console specifically, the one pane here that isn't a bare portal target.
+  .centerPanelConsolePane {
+    flex: 1 1 auto;
+    min-width: 0;
     min-height: 0;
     display: flex;
     flex-direction: column;

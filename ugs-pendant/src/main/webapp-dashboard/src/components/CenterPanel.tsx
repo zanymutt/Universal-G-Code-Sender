@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Nav, Form, Button } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
+import { faMinus, faPlus, faColumns } from "@fortawesome/free-solid-svg-icons";
 import Visualizer3D from "./Visualizer3D";
 import GcodeEditor from "./GcodeEditor";
 import ConsolePanel from "./ConsolePanel";
@@ -54,8 +55,51 @@ const CenterPanel = () => {
   const isSplit = view === "split";
   const setView = (next: CenterView) => dispatch(uiActions.setCenterView(next));
 
+  const consoleSplit = useAppSelector((state) => state.ui.consoleSplit);
+  // The top pane system can't offer "Edit" while the console split owns it -
+  // see setConsoleSplit. Filtering it out of the label list (rather than
+  // just disabling that one Nav.Link) also means neither nav can end up
+  // showing it as still "active" for a frame before the reducer's own
+  // reassignment re-renders.
+  const topPaneLabels = consoleSplit ? PANE_LABELS.filter((p) => p.content !== "edit") : PANE_LABELS;
+
+  // GcodeEditor is a single component instance that lives in exactly one of
+  // two possible slots (the top pane system's "edit" spot, or here in the
+  // console split) at any given time - never both, and never remounted when
+  // it moves between them, so its cursor/undo/unsaved-buffer state survives
+  // the switch. Both slot elements are always mounted (just hidden via CSS
+  // when not in use) so their refs are stable; a portal renders the actual
+  // <GcodeEditor/> into whichever one is currently active. Using setState
+  // directly as the ref callback (rather than a plain useRef) forces the
+  // re-render createPortal needs at exactly the moment each slot's DOM node
+  // becomes available, instead of silently portaling into `null` for a
+  // frame after mount.
+  const [topEditSlot, setTopEditSlot] = useState<HTMLDivElement | null>(null);
+  const [bottomEditSlot, setBottomEditSlot] = useState<HTMLDivElement | null>(null);
+  const activeEditSlot = consoleSplit ? bottomEditSlot : topEditSlot;
+
   const [consoleHeight, setConsoleHeight] = useState(220);
   const dragStartRef = useRef({ y: 0, height: 0 });
+
+  // null = true 50/50, same convention as splitLeftWidth below.
+  const [consoleSplitLeftWidth, setConsoleSplitLeftWidth] = useState<number | null>(null);
+  const consoleSplitDragRef = useRef({ x: 0, width: 0 });
+  const consoleSplitRowRef = useRef<HTMLDivElement | null>(null);
+
+  const onConsoleSplitResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    const rowWidth = consoleSplitRowRef.current?.clientWidth ?? SPLIT_MIN_WIDTH * 2;
+    const startWidth = consoleSplitLeftWidth ?? rowWidth / 2;
+    consoleSplitDragRef.current = { x: e.clientX, width: startWidth };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const onConsoleSplitResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    const delta = e.clientX - consoleSplitDragRef.current.x;
+    const maxWidth = (consoleSplitRowRef.current?.clientWidth ?? SPLIT_MIN_WIDTH * 2) - SPLIT_MIN_WIDTH;
+    const next = Math.min(maxWidth, Math.max(SPLIT_MIN_WIDTH, consoleSplitDragRef.current.width + delta));
+    setConsoleSplitLeftWidth(next);
+  };
 
   // null = not yet customized - the left pane stays a true, responsive 50%
   // of the row (via flex-basis: 50%) rather than a fixed pixel amount, so it
@@ -147,7 +191,7 @@ const CenterPanel = () => {
             className="centerPanelMainNav"
             style={isSplit ? { order: 1, flex: `0 0 ${leftBasis}` } : undefined}
           >
-            {PANE_LABELS.map((p) => (
+            {topPaneLabels.map((p) => (
               <Nav.Item key={p.content}>
                 <Nav.Link eventKey={p.content}>{p.label}</Nav.Link>
               </Nav.Item>
@@ -164,7 +208,7 @@ const CenterPanel = () => {
                 className="centerPanelRightNav"
                 style={{ order: 3, flex: "1 1 auto" }}
               >
-                {PANE_LABELS.map((p) => (
+                {topPaneLabels.map((p) => (
                   <Nav.Item key={p.content}>
                     <Nav.Link eventKey={p.content}>{p.label}</Nav.Link>
                   </Nav.Item>
@@ -173,17 +217,22 @@ const CenterPanel = () => {
             </>
           )}
 
-          {/* Never shows as "active" itself - isSplit ? splitLeft : view
-              never equals "split", by construction (see onSelectMainNav). */}
+          {/* activeKey here is purely this Nav's own pill-highlight display -
+              onSelect below still fires with eventKey="split" regardless of
+              it, so this doesn't touch onSelectMainNav's actual routing
+              logic (that still keys off isSplit/splitLeft/view exactly as
+              before). Matches the console split's own Nav+icon treatment. */}
           <Nav
             variant="pills"
-            activeKey={isSplit ? splitLeft : view}
+            activeKey={isSplit ? "split" : undefined}
             onSelect={onSelectMainNav}
             className="centerPanelSplitNav"
             style={isSplit ? { order: 4 } : undefined}
           >
             <Nav.Item>
-              <Nav.Link eventKey="split">Split</Nav.Link>
+              <Nav.Link eventKey="split">
+                <FontAwesomeIcon icon={faColumns} /> Split
+              </Nav.Link>
             </Nav.Item>
           </Nav>
         </div>
@@ -197,9 +246,16 @@ const CenterPanel = () => {
           <div className="centerPanelContent" style={contentStyle("visualize")} hidden={!isVisible("visualize")}>
             <Visualizer3D />
           </div>
-          <div className="centerPanelContent" style={contentStyle("edit")} hidden={!isVisible("edit")}>
-            <GcodeEditor />
-          </div>
+          {/* Portal target, not a direct <GcodeEditor/> render - see the
+              activeEditSlot comment above. Hidden defensively on
+              consoleSplit too, on top of it never being selectable via
+              topPaneLabels while consoleSplit is on. */}
+          <div
+            className="centerPanelContent"
+            style={contentStyle("edit")}
+            hidden={consoleSplit || !isVisible("edit")}
+            ref={setTopEditSlot}
+          />
           {isSplit && (
             <div
               className="centerPanelSplitResizer"
@@ -259,9 +315,46 @@ const CenterPanel = () => {
             // source, not just hides it here.
             onChange={(e) => dispatch(consoleActions.setVerboseEnabled(e.target.checked))}
           />
+          {/* Same Nav/pills treatment as the top pane system's own Split
+              link (blue text, pill-highlighted while active) rather than a
+              bordered Button, so the two read as the same kind of control. */}
+          <Nav
+            variant="pills"
+            activeKey={consoleSplit ? "split" : undefined}
+            onSelect={() => dispatch(uiActions.setConsoleSplit(!consoleSplit))}
+            className="centerPanelConsoleSplitNav"
+          >
+            <Nav.Item>
+              <Nav.Link
+                eventKey="split"
+                title={consoleSplit ? "Show console alone" : "Split: show the gcode editor alongside the console"}
+              >
+                <FontAwesomeIcon icon={faColumns} /> Split
+              </Nav.Link>
+            </Nav.Item>
+          </Nav>
         </div>
-        <ConsolePanel fontSize={consoleFontSize} />
+        <div className={"centerPanelConsoleBody" + (consoleSplit ? " split" : "")} ref={consoleSplitRowRef}>
+          <div
+            className="centerPanelConsolePane"
+            style={consoleSplit ? { flex: `0 0 ${consoleSplitLeftWidth === null ? "50%" : `${consoleSplitLeftWidth}px`}` } : undefined}
+          >
+            <ConsolePanel fontSize={consoleFontSize} />
+          </div>
+          {consoleSplit && (
+            <div
+              className="centerPanelSplitResizer"
+              onPointerDown={onConsoleSplitResizeStart}
+              onPointerMove={onConsoleSplitResizeMove}
+              title="Drag to resize the split"
+            />
+          )}
+          {/* Always mounted (see activeEditSlot above), just hidden when the
+              split is off, so its ref stays stable across toggling. */}
+          <div className="centerPanelContent" hidden={!consoleSplit} ref={setBottomEditSlot} />
+        </div>
       </div>
+      {activeEditSlot && createPortal(<GcodeEditor />, activeEditSlot)}
     </div>
   );
 };

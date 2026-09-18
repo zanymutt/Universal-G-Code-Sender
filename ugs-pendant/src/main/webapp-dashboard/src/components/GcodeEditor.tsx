@@ -493,7 +493,11 @@ const GcodeEditor = () => {
           title={canRunFrom ? undefined : "Can't arm a starting line while a job is running"}
           onClick={() => setShowRunFromConfirm(true)}
         >
-          <FontAwesomeIcon icon={faForward} /> Run from line {cursorLine}
+          {/* Compact mode (see the @container rule in GcodeEditor.scss) drops
+              everything but the icon and the line number itself - "Run from
+              line" is the part worth losing first when space is tight. */}
+          <FontAwesomeIcon icon={faForward} /> <span className="gcodeEditorButtonLabel">Run from line </span>
+          {cursorLine}
         </Button>
         {armedRunFromLine > 0 && (
           <button type="button" className="gcodeEditorRunFromReset" onClick={resetRunFromLine}>
@@ -506,7 +510,7 @@ const GcodeEditor = () => {
           disabled={!isEditable || isSaving}
           onClick={() => setShowSaveAs(true)}
         >
-          <FontAwesomeIcon icon={faFileExport} /> Save as
+          <FontAwesomeIcon icon={faFileExport} /> <span className="gcodeEditorButtonLabel">Save as</span>
         </Button>
         <Button
           className="gcodeEditorSave"
@@ -514,7 +518,8 @@ const GcodeEditor = () => {
           disabled={!isEditable || !isDirty || isSaving}
           onClick={handleSave}
         >
-          <FontAwesomeIcon icon={faFloppyDisk} /> Save {isSaving && <Spinner size="sm" />}
+          <FontAwesomeIcon icon={faFloppyDisk} /> <span className="gcodeEditorButtonLabel">Save</span>{" "}
+          {isSaving && <Spinner size="sm" />}
         </Button>
 
         <div className="gcodeEditorFontSize" title="Gcode text size - independent of the page Zoom, always rendered at its actual size">

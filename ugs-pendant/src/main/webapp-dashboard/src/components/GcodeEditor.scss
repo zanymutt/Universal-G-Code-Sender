@@ -10,9 +10,26 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  // Establishes the reference size for the @container rule below - this
+  // toolbar can end up full-width, half of a top split, or half of the
+  // (narrower still) console split, so a viewport media query can't tell
+  // whether ITS OWN available width is actually tight; a container query
+  // keyed to this element can.
+  container-type: inline-size;
 
   .gcodeEditorFileName {
     font-weight: 600;
+  }
+
+  // Buttons default to wrapping their own text (white-space: normal) once
+  // they run out of room, which grows the whole toolbar row taller with the
+  // other buttons oddly vertically centered alongside a two-line one rather
+  // than anything actually laying out as a clean second row. The @container
+  // rule further down is the real fix (compact to icons before it gets this
+  // bad); this is a backstop for filenames/widths it doesn't quite catch.
+  .gcodeEditorRunFrom,
+  .gcodeEditorSave {
+    white-space: nowrap;
   }
 
   .gcodeEditorLocked {
@@ -58,6 +75,17 @@
       font-size: 0.8rem;
       min-width: 3.2em;
       text-align: center;
+    }
+  }
+
+  // Below this, "Run from line"/"Save as"/"Save" collapse to icon-only
+  // (Run from keeps its line number - just the word label goes) rather than
+  // wrapping mid-button. Picked generously (wider than the buttons actually
+  // need at their narrowest) so this kicks in before that ever happens,
+  // not right at the edge of it.
+  @container (max-width: 640px) {
+    .gcodeEditorButtonLabel {
+      display: none;
     }
   }
 }
