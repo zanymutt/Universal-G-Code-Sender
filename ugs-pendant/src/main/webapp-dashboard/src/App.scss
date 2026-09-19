@@ -18,6 +18,7 @@ body {
 
 .app {
     height: 100vh;
+    height: 100dvh;
     width: 100vw;
 }
 
@@ -39,6 +40,7 @@ html.dashboard-zoomed .app {
     // fills the real window again - the same reflow-into-the-full-window
     // effect an actual browser zoom has, which no page can trigger directly.
     height: calc(100vh / var(--dashboard-zoom, 1));
+    height: calc(100dvh / var(--dashboard-zoom, 1));
     width: calc(100vw / var(--dashboard-zoom, 1));
     transform: scale(var(--dashboard-zoom, 1));
     transform-origin: top left;

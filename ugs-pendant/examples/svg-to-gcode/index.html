@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SVG to G-code</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1>SVG to G-code <small>Preview · 0.3.3</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
+<div class="importBar"><label>SVG file<input id="file" type="file" accept=".svg,image/svg+xml"></label><button id="example">Load example artwork</button></div></header>
+<main>
+<section class="settings">
+<fieldset><legend>Presets</legend>
+<label>Saved settings<select id="presets"><option value="">Choose a preset</option></select></label>
+<div class="pair"><button id="loadPreset">Load preset</button><button id="deletePreset">Delete preset</button></div>
+<label>Preset name<input id="presetName" maxlength="100" placeholder="e.g. Vinyl knife"></label>
+<button id="savePreset" disabled>Save / replace preset</button>
+<p class="hint">Saved in UGS across sessions. Includes import, tool, origin and ordering settings; excludes artwork and individual path edits. Use an existing name to replace it.</p>
+</fieldset>
+<fieldset><legend>1 · Artwork</legend>
+<div class="pair"><label>Pixel DPI<input id="dpi" type="number" value="96" min="1" max="2400"></label><label>Sample spacing (mm)<input id="spacing" type="number" value="0.1" min="0.02" max="5" step="0.01"></label></div>
+<p class="hint">Physical SVG dimensions take priority. DPI affects pixel-based sizes. Smaller spacing gives finer curves and larger files. Text/clones must be converted to paths in Inkscape.</p>
+<label>Nearby-node cleanup (mm; 0 = off)<input id="cleanup" type="number" value="0.1" min="0" max="1" step="0.01"></label><p class="hint">Merges nearby redundant samples before scaling. Endpoints and bends changing the outline by more than 0.001 mm are retained. Reimport to apply; the SVG file is unchanged.</p>
+<button id="reimport" disabled>Reimport with these settings</button>
+<div class="pair"><label>Scale (%)<input id="scale" type="number" value="100" min="0.01" step="1"></label><label>Rotation (° CCW)<input id="rotation" type="number" value="0" step="1"></label></div>
+<div class="pair"><label>Origin bounds<select id="originBounds"><option value="artwork">Artwork</option><option value="page">SVG page</option></select></label><label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Center</option><option value="custom">Custom</option></select></label></div>
+<div class="pair"><label>Custom X (mm)<input id="originX" type="number" value="0" step="0.1"></label><label>Custom Y (mm)<input id="originY" type="number" value="0" step="0.1"></label></div>
+<button id="pickOrigin" disabled>Pick origin in preview</button><p class="hint">Custom coordinates are in the scaled, rotated SVG coordinate system (Y upward). This changes output coordinates, not machine zero.</p>
+</fieldset>
+<fieldset><legend>2 · Tool and passes</legend>
+<label>Tool mode<select id="mode"><option value="plotter">Plotter — Z lift</option><option value="knife">Drag knife — offset compensated</option><option value="laser">Laser — M3/M4 power control</option></select></label>
+<div class="pair"><label>Working feed (mm/min)<input id="feed" type="number" value="1000" min="1"></label><label>Lowering feed (mm/min)<input id="plunge" type="number" value="200" min="1"></label></div>
+<label>Safe travel Z (mm)<input id="safe" type="number" value="5" step="0.1"></label>
+<div id="depthSettings"><div class="pair"><label>Surface Z (mm)<input id="surface" type="number" value="0" step="0.1"></label><label>Final Z (mm)<input id="final" type="number" value="-0.2" step="0.1"></label></div><label>Step down (positive mm)<input id="step" type="number" value="0.2" min="0.001" step="0.1"></label></div>
+<div id="laserSettings" hidden><div class="pair"><label>Focus Z (mm)<input id="focus" type="number" value="0" step="0.1"></label><label>Laser passes<input id="laserPasses" type="number" value="1" min="1" max="1000" step="1"></label></div><p class="hint">Laser passes repeat at focus Z. Match M3/M4 and the S range to your controller. Power is disabled for travel and lowering.</p></div>
+<div id="knifeSettings" hidden>
+<label>Blade offset (mm)<input id="knifeOffset" type="number" value="0.45" min="0.0001" max="100" step="0.01"></label>
+<p class="hint">Use Surface Z, Final Z and Step down above for progressive passes, just as in plotter mode. Example: 0 → −1.2 with step 0.5 cuts at −0.5, −1.0, −1.2. On a floating Z axis these Z changes set pressure, not measured material depth.</p>
+<label class="check"><input id="knifeLift" type="checkbox" checked>Lift for corner swivels</label>
+<p class="hint">Uncheck to turn corners at the current cutting Z. XY swivel arcs remain. Entry alignment is controlled separately below.</p>
+<label>Swivel Z — lighter contact (mm)<input id="knifeSwivelZ" type="number" step="0.01" placeholder="Contact Z setting"></label>
+<p class="hint">Swivel Z must be at or above the first cutting Z and still keep blade contact. Safe travel Z must fully release and clear the blade.</p>
+<div class="pair"><label>Repeat each Z<input id="knifePasses" type="number" value="1" min="1" max="1000" step="1"></label><label>Corner threshold (°)<input id="knifeAngle" type="number" value="30" min="1" max="180" step="1"></label></div>
+<p class="hint">Leave repeats at 1 for one cut at each Z. Turns at or above the threshold use swivel feed and, if enabled, lift to swivel Z. Smaller turns stay at cutting Z.</p>
+<label class="check"><input id="knifeAlign" type="checkbox" checked>Align blade before each pass</label>
+<p class="hint">Uncheck to remove all entry turns and lead-ins. Corner swivels stay enabled. With alignment on, lead-in 0 removes only the straight lead-in; the entry turn remains when direction changes.</p>
+<div class="pair"><label>Swivel / alignment feed (mm/min)<input id="knifeFeed" type="number" value="200" min="1" step="10"></label><label>Straight lead-in length (mm)<input id="knifeLead" type="number" value="0" min="0" max="1000" step="0.1"></label></div>
+<label>Initial trailing direction (°; 0 = travel +X)<input id="knifeHeading" type="number" value="0" min="-180" max="180" step="1"></label>
+<p class="hint" id="knifeHeadingHint"></p>
+<p class="hint">Orange lines show the HOLDER center moving, not the blade-tip cut. In an ideal swivel, the holder turns around the tip to face the next cut. Contact turns can still mark material. Positive lead-ins move the tip too; their position is not checked for scrap or neighboring shapes. Knife output uses M5 to turn the spindle off and never turns it on.</p>
+<button id="knifeCalibration" type="button">Load knife calibration shapes</button>
+</div>
+<output id="passes">1 pass per path</output>
+<label>Tool on/off commands<select id="tool"><option value="none">None — no tool-on commands</option><option value="M3">M3 + M5</option><option value="M4">M4 + M5 (controller-dependent)</option></select></label>
+<div class="pair"><label>S value / laser power<input id="power" type="number" value="100" min="0"></label><label>Configured maximum S<input id="powerMax" type="number" value="1000" min="1"></label></div>
+</fieldset>
+<fieldset><legend>3 · Paths</legend>
+<label>Order<select id="order"><option value="svg">Original SVG order</option><option value="nearest">Reduce travel</option></select></label>
+<label class="check"><input id="inner" type="checkbox" checked>Inner contours first</label><label class="check"><input id="largest" type="checkbox">Largest closed contour last</label>
+<label>Start points<select id="start"><option value="original">Original SVG starts</option><option value="auto">Automatic — nearest point</option></select></label>
+<label class="check"><input id="reverse" type="checkbox">Allow automatic reversal of open paths</label>
+<label>Closed-path overlap (mm)<input id="overlap" type="number" value="0" min="0" step="0.1"></label>
+<label>Selected path<select id="selected"><option>Import an SVG first</option></select></label>
+<label>Selected path direction<select id="pathDirection" disabled><option value="auto">Use start / automatic settings</option><option value="forward">Original SVG direction</option><option value="reverse">Reverse SVG direction</option></select></label>
+<div class="pair"><button id="pickStart" disabled>Pick start on path</button><button id="clearStarts" disabled>Clear manual starts</button></div>
+<p class="hint">Click near the selected path to lock a start. Open paths use an endpoint. Manual starts and direction choices survive order changes; reimport clears them. Reversing a closed path keeps its start. For open paths, picking an endpoint sets direction; changing direction clears that endpoint lock.</p>
+</fieldset>
+</section>
+<section class="work" id="work">
+<div class="previewCard"><div id="summary">Import an SVG to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import an SVG to preview toolpaths</text></svg><p class="hint">Green = other cuts · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel or +/− to zoom · drag to pan</p></div>
+<div id="divider" role="separator" tabindex="0" aria-label="Resize preview and G-code" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" title="Drag to resize; arrow keys adjust; double-click resets"></div>
+<div class="codePane">
+<div id="message" role="status" aria-live="polite">Nothing is sent to the machine by this plugin.</div>
+<div class="actions"><button id="generate" disabled>Generate G-code</button><button id="save" disabled>Save As into Dashboard</button><button id="copy" disabled>Copy G-code</button></div>
+<label class="codeLabel">Generated G-code<textarea id="output" readonly spellcheck="false" placeholder="Generate after checking the preview and settings."></textarea></label>
+</div>
+</section>
+</main>
+<script src="core.js"></script><script src="importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
+</body></html>

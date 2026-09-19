@@ -13,6 +13,21 @@
   scrollbar-width: thin;
   scrollbar-color: #3a3d3e transparent;
 
+  .rightRailTabs {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 6px;
+    .btn { flex: 1; min-height: 44px; padding: 6px; font-size: 14px; }
+  }
+
+  .rightRailTabPanel {
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
+    gap: inherit;
+    &[hidden] { display: none; }
+  }
+
   &::-webkit-scrollbar {
     width: 8px;
   }

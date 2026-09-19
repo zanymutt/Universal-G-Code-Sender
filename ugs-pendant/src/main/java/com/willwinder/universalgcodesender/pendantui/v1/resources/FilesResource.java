@@ -356,7 +356,7 @@ public class FilesResource {
             throw new BadRequestException("Invalid filename");
         }
 
-        File currentFile = currentGcodeFile();
+        File currentFile = backendAPI.getGcodeFile();
         Optional<File> workspaceDirectory = workspaceDirectory();
         String filenameWithExtension = ensureExtension(filename, currentFile);
         File targetFile;
@@ -375,6 +375,9 @@ public class FilesResource {
             // supports a bare filename saved next to whatever's currently loaded, same as before.
             if (!filenameWithExtension.equals(new File(filenameWithExtension).getName())) {
                 throw new BadRequestException("Invalid filename");
+            }
+            if (currentFile == null) {
+                throw new BadRequestException("Configure a workspace directory before saving a new job");
             }
             targetFile = new File(currentFile.getParentFile(), filenameWithExtension);
         }
@@ -405,10 +408,10 @@ public class FilesResource {
     }
 
     private static String ensureExtension(String filename, File referenceFile) {
-        if (filename.contains(".")) {
+        if (new File(filename).getName().contains(".")) {
             return filename;
         }
-        String refName = referenceFile.getName();
+        String refName = referenceFile == null ? "untitled.gcode" : referenceFile.getName();
         int dot = refName.lastIndexOf('.');
         return filename + (dot >= 0 ? refName.substring(dot) : ".gcode");
     }

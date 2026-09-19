@@ -13,7 +13,7 @@
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(300px, 360px) 1fr minmax(280px, 360px);
+  grid-template-columns: minmax(260px, var(--dashboard-left-width, 360px)) minmax(180px, 1fr) minmax(260px, var(--dashboard-right-width, 360px));
   gap: 16px;
   padding: 16px;
   overflow: auto;

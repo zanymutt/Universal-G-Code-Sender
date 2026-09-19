@@ -1,0 +1,7 @@
+{
+  "name": "SVG to G-code",
+  "description": "Preview and generate plotter, drag-knife and laser paths from SVG artwork.",
+  "version": "0.3.3",
+  "entry": "index.html",
+  "allowMultipleInstances": false
+}

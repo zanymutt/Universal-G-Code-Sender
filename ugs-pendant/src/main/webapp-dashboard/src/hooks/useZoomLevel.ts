@@ -36,5 +36,9 @@ export function useZoomLevel() {
   const zoomIn = useCallback(() => setZoom((z) => Math.min(MAX_ZOOM, z + STEP)), []);
   const zoomOut = useCallback(() => setZoom((z) => Math.max(MIN_ZOOM, z - STEP)), []);
 
-  return { zoom, zoomIn, zoomOut, canZoomIn: zoom < MAX_ZOOM, canZoomOut: zoom > MIN_ZOOM };
+  const resetZoom = useCallback(() => setZoom(DEFAULT_ZOOM), []);
+  const applyZoom = useCallback((value: number) => {
+    if (Number.isFinite(value)) setZoom(Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value)));
+  }, []);
+  return { zoom, zoomIn, zoomOut, resetZoom, applyZoom, canZoomIn: zoom < MAX_ZOOM, canZoomOut: zoom > MIN_ZOOM };
 }

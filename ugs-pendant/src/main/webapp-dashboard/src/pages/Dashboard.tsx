@@ -1,5 +1,7 @@
 import { useAppSelector } from "../hooks/useAppSelector";
-import { useNarrowLayout } from "../hooks/useNarrowLayout";
+import { useState } from "react";
+import { useDispatch } from "react-redux";
+import { uiActions } from "../store/uiSlice";
 import TopBar from "../components/TopBar";
 import DroPanel from "../components/DroPanel";
 import FeedSpindleReadout from "../components/FeedSpindleReadout";
@@ -7,32 +9,42 @@ import PinsStatus from "../components/PinsStatus";
 import JogPad from "../components/JogPad";
 import CenterPanel from "../components/CenterPanel";
 import RightRail from "../components/RightRail";
-import PortraitDashboard from "../components/PortraitDashboard";
 import JobBar from "../components/JobBar";
 import AlarmModal from "../components/AlarmModal";
 import PluginManagerProvider from "../components/PluginManager";
 import "./Dashboard.scss";
+import "./TabletDashboard.scss";
 
 const Dashboard = () => {
   const status = useAppSelector((state) => state.status);
-  // Below this width, the normal 3-column layout has nowhere to put a
-  // column's content but a squeezed sliver of its real height - a one-page-
-  // at-a-time tabbed layout (see PortraitDashboard) actually fits a tall
-  // narrow screen instead of just cramming the wide one into it.
-  const isNarrow = useNarrowLayout();
+  // Keep the panels mounted across responsive layout changes.
+  const [panel, setPanel] = useState("program");
+  const [consoleOpen, setConsoleOpen] = useState(false);
+  const dispatch = useDispatch();
+  const toggleConsole = () => {
+    if (!consoleOpen || panel !== "program") {
+      setPanel("program");
+      dispatch(uiActions.setBottomView("console"));
+      setConsoleOpen(true);
+    } else {
+      setConsoleOpen(false);
+    }
+  };
 
   return (
-    // Wraps the whole layout, not just RightRail, since PortraitDashboard
-    // (the narrow/mobile branch below) mounts its own copy of RightRail too
-    // - both need to reach the same plugin list and open-window state via
-    // usePluginManager(), not independent copies of it.
     <PluginManagerProvider>
-      <div className="dashboard">
+      <div className="dashboard" data-panel={panel} data-console-open={consoleOpen}>
         <TopBar />
-
-        {isNarrow ? (
-          <PortraitDashboard />
-        ) : (
+        <div className="tabletReadout" aria-label="Current work position">
+          {(["x", "y", "z"] as const).map(axis => <span key={axis}>{axis.toUpperCase()} <strong>{Number(status.workCoord?.[axis] ?? 0).toFixed(3)}</strong></span>)}
+          <span>{status.workCoord?.units === "INCH" ? "in" : "mm"}</span>
+        </div>
+        <nav className="tabletNavigation" aria-label="Dashboard panels">
+          <button className="tabletPositionTab" aria-pressed={panel === "position"} onClick={() => setPanel("position")}>Position / Jog</button>
+          <button aria-pressed={panel === "program"} onClick={() => setPanel("program")}>Program</button>
+          <button aria-pressed={panel === "machine"} onClick={() => setPanel("machine")}>Machine / Macros</button>
+          <button className="tabletConsoleToggle" aria-pressed={consoleOpen && panel === "program"} onClick={toggleConsole}>{consoleOpen && panel === "program" ? "Hide console" : "Show console"}</button>
+        </nav>
           <div className="dashboardBody">
             <div className="dashboardLeft">
               <DroPanel />
@@ -53,7 +65,6 @@ const Dashboard = () => {
               <RightRail />
             </div>
           </div>
-        )}
 
         <JobBar />
 

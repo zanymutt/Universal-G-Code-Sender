@@ -5,6 +5,7 @@ import { Button, ButtonGroup } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { getToolpath, ToolpathSegment } from "../services/visualizer";
 import { sendGcode } from "../services/machine";
+import VisualizerZoomControl from "./VisualizerZoomControl";
 import "./Visualizer3D.scss";
 
 const RAPID_COLOR = new THREE.Color("#6b7280");
@@ -24,6 +25,11 @@ const GRID_CELL_SIZE = 10;
 const GRID_PADDING = 100;
 const X_AXIS_COLOR = "#ff8a8a";
 const Y_AXIS_COLOR = "#8affa0";
+
+// Orthographic camera.zoom limits, shared by OrbitControls (wheel/pinch) and the
+// on-screen zoom slider so both stop at the same place. 1 = the framing setView picks.
+const MIN_ZOOM = 0.2;
+const MAX_ZOOM = 40;
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 type ViewPreset = "top" | "bottom" | "left" | "right" | "3d";
@@ -164,6 +170,11 @@ const Visualizer3D = () => {
   const frustumSizeRef = useRef(100);
   const applyFrustumRef = useRef(() => {});
   const controlsRef = useRef<OrbitControls | null>(null);
+  // Mirrors camera.zoom into React state for the slider - camera.zoom is changed
+  // outside React (wheel, pinch, setView), so the render loop below compares it
+  // against zoomSyncRef each frame and only sets state when it really moved.
+  const [zoom, setZoomState] = useState(1);
+  const zoomSyncRef = useRef(1);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const toolpathLinesRef = useRef<THREE.LineSegments | null>(null);
   // The last-fetched segments (already reflecting any armed "run from" line,
@@ -321,6 +332,8 @@ const Visualizer3D = () => {
     controlsRef.current?.dispose();
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.minZoom = MIN_ZOOM;
+    controls.maxZoom = MAX_ZOOM;
     // Top/Left/Right/Bottom are flat, orthographic reference views - what
     // you mostly want to do there is slide the part around (pan) to line
     // it up, with rotating (checking it's not actually tilted in 3D) as the
@@ -333,14 +346,29 @@ const Visualizer3D = () => {
         MIDDLE: THREE.MOUSE.DOLLY,
         RIGHT: THREE.MOUSE.ROTATE,
       };
+      // Two fingers zoom + pan only, never DOLLY_ROTATE: a pinch is never exactly
+      // symmetric, so with rotate mixed in every pinch also twisted the flat view
+      // slightly off-axis. Rotating a flat view isn't a touch action at all now -
+      // the 3D button is the way to look at it from an angle.
       controls.touches = {
         ONE: THREE.TOUCH.PAN,
-        TWO: THREE.TOUCH.DOLLY_ROTATE,
+        TWO: THREE.TOUCH.DOLLY_PAN,
       };
     }
     controls.target.copy(center);
     controls.update();
     controlsRef.current = controls;
+  };
+
+  // Zoom slider / +- buttons. OrthographicCamera.zoom is the whole "how far in"
+  // state (wheel and pinch write the same field), so setting it directly and
+  // refreshing the projection is all it takes; the render loop then mirrors it
+  // back into `zoom` state for the slider's thumb.
+  const setZoom = (value: number) => {
+    const camera = cameraRef.current;
+    if (!camera) return;
+    camera.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
+    camera.updateProjectionMatrix();
   };
 
   const runBoundary = () => {
@@ -381,7 +409,39 @@ const Visualizer3D = () => {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.minZoom = MIN_ZOOM;
+    controls.maxZoom = MAX_ZOOM;
     controlsRef.current = controls;
+
+    // OrbitControls quirk: lifting one finger of a two-finger pinch hands the
+    // remaining finger straight back to the one-finger gesture (rotate in the 3D
+    // view, pan in the flat ones), so the tail end of nearly every pinch nudged
+    // the view - the "pinch to zoom sometimes rotates" symptom. After a
+    // multi-touch gesture, ignore the leftover finger until every finger is up.
+    // The controls instance is recreated by setView, so this reads controlsRef
+    // fresh on each event rather than closing over one instance.
+    const activeTouches = new Set<number>();
+    let multiTouch = false;
+    const onTouchPointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") return;
+      activeTouches.add(event.pointerId);
+      if (activeTouches.size >= 2) multiTouch = true;
+    };
+    const onTouchPointerEnd = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") return;
+      activeTouches.delete(event.pointerId);
+      const active = controlsRef.current;
+      if (!active) return;
+      if (activeTouches.size === 0) {
+        multiTouch = false;
+        active.enabled = true;
+      } else if (multiTouch) {
+        active.enabled = false;
+      }
+    };
+    renderer.domElement.addEventListener("pointerdown", onTouchPointerDown);
+    renderer.domElement.addEventListener("pointerup", onTouchPointerEnd);
+    renderer.domElement.addEventListener("pointercancel", onTouchPointerEnd);
 
     const xLabel = createAxisLabel("X", X_AXIS_COLOR);
     const yLabel = createAxisLabel("Y", Y_AXIS_COLOR);
@@ -547,6 +607,10 @@ const Visualizer3D = () => {
     let animationFrame: number;
     const animate = () => {
       controlsRef.current?.update();
+      if (camera.zoom !== zoomSyncRef.current) {
+        zoomSyncRef.current = camera.zoom;
+        setZoomState(camera.zoom);
+      }
       renderer.render(scene, camera);
       animationFrame = requestAnimationFrame(animate);
     };
@@ -555,6 +619,9 @@ const Visualizer3D = () => {
     return () => {
       cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", onTouchPointerDown);
+      renderer.domElement.removeEventListener("pointerup", onTouchPointerEnd);
+      renderer.domElement.removeEventListener("pointercancel", onTouchPointerEnd);
       controlsRef.current?.dispose();
       renderer.dispose();
       toolpathLinesRef.current?.geometry.dispose();
@@ -735,6 +802,13 @@ const Visualizer3D = () => {
       <div className="visualizer3DBody">
         {isEmpty && <div className="visualizer3DEmpty">No file loaded to visualize.</div>}
         <div className="visualizer3DCanvas" ref={containerRef} />
+        <VisualizerZoomControl
+          zoom={zoom}
+          minZoom={MIN_ZOOM}
+          maxZoom={MAX_ZOOM}
+          onChange={setZoom}
+          onZoomBy={(factor) => setZoom((cameraRef.current?.zoom ?? 1) * factor)}
+        />
       </div>
     </div>
   );

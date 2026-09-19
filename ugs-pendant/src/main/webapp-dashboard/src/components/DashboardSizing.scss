@@ -1,0 +1,77 @@
+.dashboardSizing {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.dashboardSizingPresets { display: flex; flex-wrap: wrap; gap: 8px; }
+
+// Actual layout sizes, never a transform. Scope these to the controls so
+// CodeMirror, the console, dialogs and plugin content retain their own sizing.
+html[data-dashboard-density="compact"] {
+  .topBar { gap: 10px; padding: 6px 10px; }
+  .topBar .topBarSection, .topBar .connectionWidget { gap: 6px; }
+  .topBar .connectionWidget { flex-wrap: wrap; }
+  .topBar .btn {
+    min-height: 32px; padding: 4px 8px; font-size: 14px; line-height: 1.4;
+  }
+  .topBar .form-control, .topBar .form-select {
+    min-height: 32px; font-size: 13px; padding-top: 4px; padding-bottom: 4px;
+  }
+  .topBar .connectionWidgetPort { width: 120px; }
+  .topBar .connectionWidgetBaud { width: 72px; }
+  .topBar .controllerState { margin-left: 0; }
+  .topBar .controllerState .card-body { padding: 5px 8px; font-size: 13px; }
+  .topBar .topBarZoomLevel { font-size: 12px; }
+  .jobBar { gap: 12px; padding: 6px 10px; flex-wrap: wrap; }
+  .jobBar .jobFile {
+    min-width: 100px; max-width: 180px; overflow-wrap: anywhere; font-size: 13px;
+  }
+  .jobBar .jobProgress { flex-basis: 220px; }
+  .jobBar .jobProgress .progress { height: 18px; }
+  .jobBar .jobProgress .jobSendStatus { gap: 3px 12px; font-size: 13px; }
+  .jobBar .jobActions { gap: 6px; flex-wrap: wrap; }
+  .jobBar .jobActions .btn {
+    min-height: 38px; padding: 5px 9px; font-size: 14px; line-height: 1.4;
+    white-space: nowrap;
+  }
+  .dashboardBody { gap: 10px; padding: 10px; }
+  .dashboardLeft { gap: 6px; }
+  .dashboardLeftJog { padding-top: 6px; }
+  .dashboardSectionHeading { margin-bottom: 6px; }
+  .rightRail { gap: 10px; padding-right: 4px; }
+  .axisRow { padding: 6px 8px; margin-bottom: 6px; gap: 6px; }
+  .axisRow .axisValue.work { font-size: 28px; }
+  .axisRow .axisValue.machine { font-size: 15px; }
+  .axisRow .axisLabel { font-size: 18px; }
+  .axisRow .axisZeroButton { min-width: 36px; min-height: 36px; padding: 4px 8px; }
+  .feedSpindleRow { padding: 6px 8px; gap: 6px; }
+  .feedSpindleRow .feedSpindleValue { font-size: 28px; }
+  .feedSpindleRow .feedSpindleLabel { font-size: 15px; }
+  .jogPad { gap: 10px; }
+  .jogPad .jogArrows { gap: 8px; }
+  .jogPad .jogXY {
+    flex-basis: 152px;
+    grid-template-columns: repeat(3, minmax(0, 48px));
+    grid-template-rows: repeat(3, 48px);
+    gap: 4px;
+  }
+  .jogPad .jogBtn { min-width: 0; min-height: 48px; }
+  .jogPad .jogZ { padding: 4px; gap: 4px; }
+  .jogPad .jogZ .jogBtn { width: 52px; min-height: 0; }
+  .jogPad .jogSettings { gap: 6px; }
+  .pinsStatus { gap: 4px; }
+  .pinBadge { padding: 0 4px; height: 28px; font-size: 12px; }
+  .stepSize .stepSizeRow, .feedRate .feedRateRow { gap: 4px; }
+  .stepSize .stepSizeCurrent, .feedRate .feedRateCurrent {
+    min-width: 46px; padding: 4px; min-height: 32px; font-size: 13px;
+  }
+  .stepSize .btn-group .btn, .feedRate .btn-group .btn { min-height: 32px; font-size: 12px; }
+  .modalStatusChip { padding: 0 3px; font-size: 11px; }
+  .modalStatusWcs { padding: 0 2px; min-width: 50px; }
+  .rightRail .toolbox, .rightRail .macrosPanel {
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 6px;
+  }
+  .rightRail .toolbox .btn, .rightRail .macroButton {
+    min-height: 40px; padding: 4px 6px; font-size: 14px;
+  }
+}

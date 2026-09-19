@@ -1,0 +1,97 @@
+.tabletNavigation, .tabletReadout { display: none; }
+
+@mixin tablet-shell {
+  .tabletNavigation {
+    display: flex; flex: 0 0 auto; gap: 6px; padding: 6px 10px; flex-wrap: wrap;
+    button {
+      border: 1px solid #3a3d3e; border-radius: 5px; background: #232526;
+      color: #c3c8cb; padding: 8px 12px; min-height: 44px; font-size: 14px;
+      &[aria-pressed="true"] { background: #323c65; border-color: #6879ed; color: white; }
+    }
+    .tabletConsoleToggle { margin-left: auto; }
+  }
+  .dashboardBody { padding: 8px; gap: 10px; overflow: hidden; }
+  .dashboardRight { overflow-y: auto; }
+  .dashboard[data-console-open="false"] {
+    .centerPanelConsole, .centerPanelResizer { display: none; }
+  }
+  .jobBar {
+    flex: 0 0 auto;
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 12px; padding: 6px 10px max(6px, env(safe-area-inset-bottom));
+    .jobFile { min-width: 0; max-width: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .jobProgress { grid-column: 1; grid-row: 2; }
+    .jobProgress .jobSendStatus { font-size: 12px; gap: 2px 8px; }
+    .jobProgress .progress { height: 10px; }
+    .jobActions { grid-column: 2; grid-row: 1 / 3; gap: 4px; }
+    .jobActions .btn { min-height: 44px; padding: 6px 8px; font-size: 14px; }
+  }
+  .topBar .btn { min-height: 40px; }
+  .topBar { flex-shrink: 0; }
+  // Connection fields need their own row when the machine is disconnected.
+  // Let the inner flex item shrink too, rather than overflowing its parent.
+  .topBarDisconnected {
+    .topBarSection { min-width: 0; max-width: 100%; }
+    .topBarSection:first-child { flex: 1 0 100%; }
+    .topBarSection:last-child { margin-left: auto; }
+    .connectionWidget {
+      flex: 1 1 0;
+      min-width: 0;
+      flex-wrap: wrap;
+      .form-control, .form-select { min-width: 0; max-width: 100%; }
+    }
+  }
+  .centerPanelConsole { max-height: 50%; }
+}
+@mixin tablet-landscape {
+  @include tablet-shell;
+  .dashboardBody { grid-template-columns: minmax(260px, min(var(--dashboard-left-width, 280px), 310px)) minmax(0, 1fr); }
+  .tabletPositionTab { display: none; }
+  .dashboardRight { display: none; }
+  .dashboard[data-panel="machine"] {
+    .dashboardCenter { display: none; }
+    .dashboardRight { display: flex; }
+  }
+}
+@mixin tablet-tabbed {
+  @include tablet-shell;
+  .topBarDisconnected .connectionWidget {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    .controllerState { grid-column: 1 / -1; margin-left: 0; }
+    .form-control, .form-select { width: 100%; }
+    .btn { width: 100%; }
+  }
+  .tabletReadout {
+    display: flex; flex: 0 0 auto; justify-content: space-around; flex-wrap: wrap;
+    gap: 4px 12px; padding: 6px 10px; background: #111213;
+    font-size: 14px; strong { color: #4ade80; font-variant-numeric: tabular-nums; }
+  }
+  .tabletNavigation button { flex: 1; padding: 6px; }
+  .tabletNavigation .tabletPositionTab { display: block; }
+  .tabletNavigation .tabletConsoleToggle { flex: 0 0 auto; }
+  .droPanel { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .droPanel .modalStatusRow { grid-column: 1 / -1; }
+  .droPanel .axisRow { margin-bottom: 0; min-width: 0; padding: 6px; gap: 4px; }
+  .droPanel .axisValue.work { font-size: 24px; }
+  .droPanel .axisValue.machine { font-size: 13px; }
+  .droPanel .axisZeroButton { min-width: 40px; min-height: 44px; }
+  .dashboardBody { display: flex; flex-direction: column; }
+  .dashboardLeft, .dashboardCenter, .dashboardRight { display: none; flex: 1; }
+  .dashboard[data-panel="position"] .dashboardLeft,
+  .dashboard[data-panel="program"] .dashboardCenter,
+  .dashboard[data-panel="machine"] .dashboardRight { display: flex; }
+  .jobBar {
+    grid-template-columns: minmax(0, 1fr);
+    .jobActions { grid-column: 1; grid-row: 3; margin-left: 0; }
+    .jobActions .btn { flex: 1; }
+  }
+}
+html[data-dashboard-layout="tablet"] { @include tablet-landscape; }
+html[data-dashboard-layout="tabbed"] { @include tablet-tabbed; }
+@media (min-width: 901px) and (max-width: 1400px) {
+  html[data-dashboard-layout="auto"] { @include tablet-landscape; }
+}
+@media (max-width: 900px) {
+  html[data-dashboard-layout="auto"], html[data-dashboard-layout="tablet"] { @include tablet-tabbed; }
+}

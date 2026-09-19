@@ -15,16 +15,17 @@ import { disconnect, softReset } from "../services/machine";
 import AccessoryState from "./AccessoryState";
 import ConnectionWidget from "./ConnectionWidget";
 import ConnectionHealth from "./ConnectionHealth";
+import DashboardSizing from "./DashboardSizing";
 import "./TopBar.scss";
 
 const TopBar = () => {
   const status = useAppSelector((state) => state.status);
   const isDisconnected = status.state === "DISCONNECTED";
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
-  const { zoom, zoomIn, zoomOut, canZoomIn, canZoomOut } = useZoomLevel();
+  const { zoom, zoomIn, zoomOut, resetZoom, applyZoom, canZoomIn, canZoomOut } = useZoomLevel();
 
   return (
-    <div className="topBar">
+    <div className={"topBar" + (isDisconnected ? " topBarDisconnected" : "")}>
       <div className="topBarSection">
         <ConnectionWidget />
         <ConnectionHealth />
@@ -34,6 +35,7 @@ const TopBar = () => {
       </div>
 
       <div className="topBarSection">
+        <DashboardSizing zoom={zoom} resetZoom={resetZoom} applyZoom={applyZoom} />
         <Button variant="secondary" disabled={!canZoomOut} onClick={zoomOut} title="Zoom out">
           <FontAwesomeIcon icon={faMagnifyingGlassMinus} />
         </Button>
