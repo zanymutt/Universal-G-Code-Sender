@@ -2,9 +2,18 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Button, ButtonGroup } from "react-bootstrap";
+import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
+import { uiActions } from "../store/uiSlice";
 import { getToolpath, ToolpathSegment } from "../services/visualizer";
 import { sendGcode } from "../services/machine";
+import {
+  DEFAULT_RAPID_RATE_MM_PER_MIN,
+  QUICK_SPEEDS,
+  SimulationColorFn,
+  ToolpathSimulation,
+} from "../utils/toolpathSimulation";
+import SimulationBar from "./SimulationBar";
 import VisualizerZoomControl from "./VisualizerZoomControl";
 import "./Visualizer3D.scss";
 
@@ -33,6 +42,78 @@ const MAX_ZOOM = 40;
 
 type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
 type ViewPreset = "top" | "bottom" | "left" | "right" | "3d";
+
+// What the simulation bar renders, mirrored out of ToolpathSimulation (which
+// lives outside React) so the bar re-renders only when one of these changes.
+type SimUi = {
+  active: boolean;
+  playing: boolean;
+  speed: number;
+  speeds: number[];
+  realTime: boolean;
+  elapsedSeconds: number;
+  totalSeconds: number;
+  progress: number;
+  line: number;
+};
+const INITIAL_SIM_UI: SimUi = {
+  active: false,
+  playing: false,
+  speed: QUICK_SPEEDS[1],
+  speeds: QUICK_SPEEDS,
+  realTime: false,
+  elapsedSeconds: 0,
+  totalSeconds: 0,
+  progress: 0,
+  line: 0,
+};
+const snapshotSim = (sim: ToolpathSimulation): SimUi => ({
+  active: sim.isActive(),
+  playing: sim.isPlaying(),
+  speed: sim.getSpeed(),
+  speeds: sim.getSpeeds(),
+  realTime: sim.isRealTiming(),
+  elapsedSeconds: sim.getElapsedSeconds(),
+  totalSeconds: sim.getTotalSeconds(),
+  progress: sim.getProgress(),
+  line: sim.getCurrentLine(),
+});
+const sameSimUi = (a: SimUi, b: SimUi) =>
+  a.active === b.active &&
+  a.playing === b.playing &&
+  a.speed === b.speed &&
+  a.speeds === b.speeds &&
+  a.realTime === b.realTime &&
+  a.elapsedSeconds === b.elapsedSeconds &&
+  a.totalSeconds === b.totalSeconds &&
+  a.progress === b.progress &&
+  a.line === b.line;
+
+const RAPID_RATE_STORAGE_KEY = "ugs.dashboard.simulation.rapidRate";
+// Wrapped because localStorage can be missing or throw (private windows, blocked
+// site data) - the setting just doesn't persist then.
+const readStoredRapidRate = () => {
+  try {
+    const stored = Number(window.localStorage.getItem(RAPID_RATE_STORAGE_KEY));
+    return Number.isFinite(stored) && stored > 0 ? stored : DEFAULT_RAPID_RATE_MM_PER_MIN;
+  } catch {
+    return DEFAULT_RAPID_RATE_MM_PER_MIN;
+  }
+};
+
+// The base color of a segment before any highlight/completed override: by type
+// normally, or - "color by order" - a blue-to-red ramp over the whole program,
+// which shows the cutting order at a glance without playing anything back.
+// Rapids stay gray either way so travel still reads as travel. Returns a shared
+// scratch color for the ramp, so callers must copy the channels out right away
+// (both do) rather than hold on to it.
+const orderScratch = new THREE.Color();
+const segmentBaseColor = (segment: ToolpathSegment, index: number, count: number, byOrder: boolean) => {
+  if (segment.rapid) return RAPID_COLOR;
+  if (byOrder) return orderScratch.setHSL(0.66 * (1 - index / Math.max(1, count - 1)), 0.85, 0.55);
+  return segment.arc ? ARC_COLOR : CUT_COLOR;
+};
+const ORDER_GRADIENT = "linear-gradient(90deg, hsl(238,85%,55%), hsl(180,85%,55%), hsl(119,85%,55%), hsl(59,85%,55%), hsl(0,85%,55%))";
 
 const createAxisLabel = (text: string, color: string) => {
   const canvas = document.createElement("canvas");
@@ -119,15 +200,22 @@ const pickTickInterval = (size: number, targetTicks = 8) => {
 const buildToolpathGeometry = (
   segments: ToolpathSegment[],
   highlightLine: number,
-  completedThroughLine: number
+  completedThroughLine: number,
+  colorByOrder: boolean,
+  hideRapids: boolean
 ) => {
   const highlightCommand = highlightLine;
 
+  // "Clean" view draws only the cutting moves. Filtered here rather than per
+  // vertex so the geometry is genuinely smaller, but colors still use each
+  // segment's index in the full program so the order ramp doesn't shift.
   const positions = new Float32Array(segments.length * 6);
   const colors = new Float32Array(segments.length * 6);
+  let written = 0;
 
   segments.forEach((segment, i) => {
-    const offset = i * 6;
+    if (hideRapids && segment.rapid) return;
+    const offset = written++ * 6;
     positions[offset] = segment.start.x;
     positions[offset + 1] = segment.start.y;
     positions[offset + 2] = segment.start.z;
@@ -140,11 +228,7 @@ const buildToolpathGeometry = (
         ? HIGHLIGHT_COLOR
         : segment.lineNumber < completedThroughLine
           ? COMPLETED_COLOR
-          : segment.rapid
-            ? RAPID_COLOR
-            : segment.arc
-              ? ARC_COLOR
-              : CUT_COLOR;
+          : segmentBaseColor(segment, i, segments.length, colorByOrder);
     colors[offset] = color.r;
     colors[offset + 1] = color.g;
     colors[offset + 2] = color.b;
@@ -154,8 +238,8 @@ const buildToolpathGeometry = (
   });
 
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-  geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+  geometry.setAttribute("position", new THREE.BufferAttribute(positions.slice(0, written * 6), 3));
+  geometry.setAttribute("color", new THREE.BufferAttribute(colors.slice(0, written * 6), 3));
   return geometry;
 };
 
@@ -170,6 +254,26 @@ const Visualizer3D = () => {
   const frustumSizeRef = useRef(100);
   const applyFrustumRef = useRef(() => {});
   const controlsRef = useRef<OrbitControls | null>(null);
+  const dispatch = useAppDispatch();
+  // Toolpath playback (see utils/toolpathSimulation). Created in the one-time
+  // setup effect since it needs the scene; the UI state below mirrors it.
+  const simRef = useRef<ToolpathSimulation | null>(null);
+  const [simUi, setSimUi] = useState<SimUi>(INITIAL_SIM_UI);
+  const lastSimLineSentRef = useRef(0);
+  const [colorByOrder, setColorByOrder] = useState(false);
+  // "Clean image": hides rapids and the grid/axes/rulers so only the cutting
+  // path is left - for screenshots and for judging the part itself.
+  const [cleanView, setCleanView] = useState(false);
+  const cleanViewRef = useRef(false);
+  cleanViewRef.current = cleanView;
+  const applyGridVisibilityRef = useRef(() => {});
+  const [rapidRate, setRapidRate] = useState(readStoredRapidRate);
+  const rapidRateRef = useRef(rapidRate);
+  rapidRateRef.current = rapidRate;
+  // Read from inside callbacks that outlive the render that created them (the
+  // async toolpath fetch), which would otherwise see a stale toggle.
+  const colorByOrderRef = useRef(false);
+  colorByOrderRef.current = colorByOrder;
   // Mirrors camera.zoom into React state for the slider - camera.zoom is changed
   // outside React (wheel, pinch, setView), so the render loop below compares it
   // against zoomSyncRef each frame and only sets state when it really moved.
@@ -204,6 +308,7 @@ const Visualizer3D = () => {
   const workCoord = useAppSelector((state) => state.status.workCoord);
   const currentState = useAppSelector((state) => state.status.state);
   const isIdle = useAppSelector((state) => state.status.state === "IDLE");
+  const isJobActive = currentState === "RUN" || currentState === "HOLD" || currentState === "CHECK";
   // Only used to notice "a different file is now loaded" and re-fetch the
   // toolpath - the fetch itself always reads whatever's currently open.
   const fileName = useAppSelector((state) => state.fileStatus.fileName);
@@ -259,9 +364,18 @@ const Visualizer3D = () => {
     // Highlights the cursor's line regardless of whether anything's armed -
     // see buildToolpathGeometry's comment: original command numbers survive
     // into the processed file's segments too, not just the unfiltered one.
-    const geometry = buildToolpathGeometry(segments, liveHighlightLine, completedThroughLine);
+    const geometry = buildToolpathGeometry(
+      segments,
+      liveHighlightLine,
+      completedThroughLine,
+      colorByOrderRef.current,
+      cleanViewRef.current
+    );
     const material = new THREE.LineBasicMaterial({ vertexColors: true });
     const toolpathLines = new THREE.LineSegments(geometry, material);
+    // The simulation draws its own copy of the toolpath (solid + ghost) while
+    // it's active - this one would only show through it.
+    toolpathLines.visible = !simRef.current?.isActive();
     scene.add(toolpathLines);
     toolpathLinesRef.current = toolpathLines;
   };
@@ -275,7 +389,70 @@ const Visualizer3D = () => {
       applyToolpathGeometry(segmentsRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveHighlightLine, completedThroughLine]);
+  }, [liveHighlightLine, completedThroughLine, colorByOrder, cleanView]);
+
+  // One color function for both the main toolpath's base colors and the
+  // simulation's copy, so "color by order" looks the same in either.
+  const simColorFor = (order: boolean): SimulationColorFn => {
+    const count = segmentsRef.current.length;
+    return (segment, index) => segmentBaseColor(segment, index, count, order);
+  };
+
+  useEffect(() => {
+    simRef.current?.setColorFor(simColorFor(colorByOrder));
+    setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [colorByOrder]);
+
+  useEffect(() => {
+    simRef.current?.setShowRapids(!cleanView);
+    applyGridVisibilityRef.current();
+    setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
+  }, [cleanView]);
+
+  useEffect(() => {
+    simRef.current?.setRapidRate(rapidRate);
+    setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
+    try {
+      window.localStorage.setItem(RAPID_RATE_STORAGE_KEY, String(rapidRate));
+    } catch {
+      // Not persisting is fine - it just falls back to the default next time.
+    }
+  }, [rapidRate]);
+
+  // While the simulation is up, the machine's own tool marker and the live
+  // toolpath step aside so only one "tool" and one toolpath are on screen.
+  useEffect(() => {
+    if (toolMarkerRef.current) toolMarkerRef.current.visible = !simUi.active;
+    if (toolpathLinesRef.current) toolpathLinesRef.current.visible = !simUi.active;
+  }, [simUi.active]);
+
+  // A real job starting takes over the visualizer (live gray-out, live tool
+  // position, the editor's running-line highlight) - the simulation would just
+  // fight it for all three, so it steps aside.
+  useEffect(() => {
+    if (isJobActive && simRef.current?.isActive()) exitSim();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isJobActive]);
+
+  // Tells the editor which line the simulation is on (0 once it's not showing
+  // one), at most ~12 times a second - fast playback can cross many lines per
+  // frame, and the editor re-highlights and scrolls on every change. The
+  // trailing timeout makes sure the final line always lands.
+  useEffect(() => {
+    const line = simUi.active ? simUi.line : 0;
+    const wait = Math.max(0, 80 - (performance.now() - lastSimLineSentRef.current));
+    const send = () => {
+      lastSimLineSentRef.current = performance.now();
+      dispatch(uiActions.setSimLine(line));
+    };
+    if (wait === 0) {
+      send();
+      return;
+    }
+    const timer = window.setTimeout(send, wait);
+    return () => window.clearTimeout(timer);
+  }, [simUi.active, simUi.line, dispatch]);
 
   useEffect(() => {
     if (toolMarkerRef.current) {
@@ -369,6 +546,42 @@ const Visualizer3D = () => {
     if (!camera) return;
     camera.zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, value));
     camera.updateProjectionMatrix();
+  };
+
+  // Pulls the simulation's current state into React state, but only when
+  // something the bar shows actually changed (cheap to call after any control).
+  const syncSim = () => {
+    const sim = simRef.current;
+    if (!sim) return;
+    const next = snapshotSim(sim);
+    setSimUi((prev) => (sameSimUi(prev, next) ? prev : next));
+  };
+
+  // Hands the simulation a new toolpath (rewinding it) - and, if there's nothing
+  // left to simulate (file closed, load failed), takes it out of active mode so
+  // the bar doesn't linger over an empty viewport.
+  const resetSimulation = (segments: ToolpathSegment[]) => {
+    const sim = simRef.current;
+    if (!sim) return;
+    sim.setSegments(segments, simColorFor(colorByOrderRef.current));
+    if (segments.length === 0) sim.setActive(false);
+    syncSim();
+  };
+
+  const enterSim = () => {
+    simRef.current?.setActive(true);
+    syncSim();
+  };
+
+  const exitSim = () => {
+    simRef.current?.setActive(false);
+    syncSim();
+  };
+
+  const simControl = (action: (sim: ToolpathSimulation) => void) => {
+    if (!simRef.current) return;
+    action(simRef.current);
+    syncSim();
   };
 
   const runBoundary = () => {
@@ -513,7 +726,22 @@ const Visualizer3D = () => {
       xLabel.scale.set(labelScale, labelScale, 1);
       yLabel.position.set(0, centerY + half + labelScale, 1);
       yLabel.scale.set(labelScale, labelScale, 1);
+      applyGridVisibility();
     };
+    // Everything that makes up the "grid" for the clean-image toggle - the grid
+    // itself, the X/Y axis lines and letters, and the mm ruler labels. Called
+    // whenever any of those are (re)created too, since grid and labels are
+    // rebuilt from scratch on every resize.
+    const applyGridVisibility = () => {
+      const visible = !cleanViewRef.current;
+      if (gridRef.current) gridRef.current.visible = visible;
+      xAxisLine.visible = visible;
+      yAxisLine.visible = visible;
+      xLabel.visible = visible;
+      yLabel.visible = visible;
+      tickLabelsRef.current.forEach((label) => (label.visible = visible));
+    };
+    applyGridVisibilityRef.current = applyGridVisibility;
     applyGridExtentRef.current = applyGridExtent;
     applyGridExtent(DEFAULT_GRID_SIZE, 0, 0);
 
@@ -564,7 +792,10 @@ const Visualizer3D = () => {
         tickLabelsRef.current.push(label);
       }
     };
-    updateTickLabelsRef.current = updateTickLabels;
+    updateTickLabelsRef.current = (centerX, centerY, halfExtent) => {
+      updateTickLabels(centerX, centerY, halfExtent);
+      applyGridVisibility();
+    };
     updateTickLabels(0, 0, DEFAULT_GRID_SIZE / 2);
 
     // A cone pointing straight down at the tool position, tip-first - closer to
@@ -580,6 +811,11 @@ const Visualizer3D = () => {
     const toolMarker = new THREE.Mesh(toolMarkerGeometry, new THREE.MeshBasicMaterial({ color: "#ffd400" }));
     scene.add(toolMarker);
     toolMarkerRef.current = toolMarker;
+
+    const simulation = new ToolpathSimulation(scene);
+    simulation.setRapidRate(rapidRateRef.current);
+    simulation.setShowRapids(!cleanViewRef.current);
+    simRef.current = simulation;
 
     const applyFrustum = () => {
       const { clientWidth, clientHeight } = container;
@@ -605,7 +841,17 @@ const Visualizer3D = () => {
     resizeObserver.observe(container);
 
     let animationFrame: number;
+    let lastFrameTime = performance.now();
     const animate = () => {
+      // Capped so coming back to a backgrounded tab doesn't fast-forward the
+      // simulation through everything it "missed".
+      const now = performance.now();
+      const deltaSeconds = Math.min(0.1, (now - lastFrameTime) / 1000);
+      lastFrameTime = now;
+      if (simulation.update(deltaSeconds)) {
+        const next = snapshotSim(simulation);
+        setSimUi((prev) => (sameSimUi(prev, next) ? prev : next));
+      }
       controlsRef.current?.update();
       if (camera.zoom !== zoomSyncRef.current) {
         zoomSyncRef.current = camera.zoom;
@@ -623,6 +869,8 @@ const Visualizer3D = () => {
       renderer.domElement.removeEventListener("pointerup", onTouchPointerEnd);
       renderer.domElement.removeEventListener("pointercancel", onTouchPointerEnd);
       controlsRef.current?.dispose();
+      simulation.dispose();
+      simRef.current = null;
       renderer.dispose();
       toolpathLinesRef.current?.geometry.dispose();
       gridRef.current?.dispose();
@@ -687,6 +935,7 @@ const Visualizer3D = () => {
     getToolpath().then((segments) => {
       if (cancelled) return;
       segmentsRef.current = segments;
+      resetSimulation(segments);
       if (segments.length === 0) {
         setIsEmpty(true);
         applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
@@ -748,6 +997,7 @@ const Visualizer3D = () => {
       }
     }).catch(() => {
       if (cancelled) return;
+      resetSimulation([]);
       setIsEmpty(true);
       applyGridExtentRef.current(DEFAULT_GRID_SIZE, 0, 0);
       updateTickLabelsRef.current(0, 0, DEFAULT_GRID_SIZE / 2);
@@ -781,6 +1031,39 @@ const Visualizer3D = () => {
           </Button>
         </ButtonGroup>
 
+        <ButtonGroup>
+          <Button
+            variant={simUi.active ? "primary" : "outline-primary"}
+            disabled={simUi.active ? false : !bounds || isJobActive}
+            onClick={simUi.active ? exitSim : enterSim}
+            title="Play the toolpath back in program order to see what gets cut when"
+          >
+            Simulate
+          </Button>
+          <Button
+            variant={colorByOrder ? "primary" : "outline-primary"}
+            disabled={!bounds}
+            onClick={() => setColorByOrder(!colorByOrder)}
+            title="Color the toolpath from blue (first) to red (last) to show the cutting order"
+          >
+            Order
+          </Button>
+          <Button
+            variant={cleanView ? "primary" : "outline-primary"}
+            onClick={() => setCleanView(!cleanView)}
+            title="Clean image: hide rapid moves and the grid, leaving just the cutting path"
+          >
+            Clean
+          </Button>
+        </ButtonGroup>
+        {colorByOrder && (
+          <div className="visualizer3DOrderLegend" title="First move to last move">
+            <span>start</span>
+            <div className="visualizer3DOrderRamp" style={{ background: ORDER_GRADIENT }} />
+            <span>end</span>
+          </div>
+        )}
+
         {bounds && (
           <div className="visualizer3DBounds">
             X: {bounds.minX.toFixed(1)} &rarr; {bounds.maxX.toFixed(1)} &nbsp; Y:{" "}
@@ -802,6 +1085,28 @@ const Visualizer3D = () => {
       <div className="visualizer3DBody">
         {isEmpty && <div className="visualizer3DEmpty">No file loaded to visualize.</div>}
         <div className="visualizer3DCanvas" ref={containerRef} />
+        {simUi.active && (
+          <SimulationBar
+            playing={simUi.playing}
+            speed={simUi.speed}
+            speeds={simUi.speeds}
+            realTime={simUi.realTime}
+            elapsedSeconds={simUi.elapsedSeconds}
+            totalSeconds={simUi.totalSeconds}
+            rapidRate={rapidRate}
+            progress={simUi.progress}
+            line={simUi.line}
+            onPlay={() => simControl((sim) => sim.play())}
+            onPause={() => simControl((sim) => sim.pause())}
+            onRestart={() => simControl((sim) => sim.restart())}
+            onStepBack={() => simControl((sim) => sim.stepBack())}
+            onStepForward={() => simControl((sim) => sim.stepForward())}
+            onSeek={(fraction) => simControl((sim) => sim.seek(fraction))}
+            onSpeed={(speed) => simControl((sim) => sim.setSpeed(speed))}
+            onRapidRate={setRapidRate}
+            onClose={exitSim}
+          />
+        )}
         <VisualizerZoomControl
           zoom={zoom}
           minZoom={MIN_ZOOM}

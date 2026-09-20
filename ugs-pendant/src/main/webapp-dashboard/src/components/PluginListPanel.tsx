@@ -5,7 +5,7 @@ import "./PluginListPanel.scss";
 // MacrosPanel, since this sits in the same sidebar and should read as one
 // more section of it, not a visually distinct widget.
 const PluginListPanel = () => {
-  const { plugins, openPlugin } = usePluginManager();
+  const { plugins, openPlugin, pluginStates } = usePluginManager();
 
   if (plugins.length === 0) {
     return (
@@ -22,7 +22,10 @@ const PluginListPanel = () => {
           type="button"
           key={plugin.id}
           className="pluginListButton"
-          title={plugin.description || plugin.name}
+          data-state={pluginStates[plugin.id]}
+          title={pluginStates[plugin.id] === "minimized"
+            ? `Restore ${plugin.name}`
+            : plugin.description || plugin.name}
           onClick={() => openPlugin(plugin)}
         >
           {plugin.iconUrl && <img src={plugin.iconUrl} alt="" className="pluginListIcon" />}

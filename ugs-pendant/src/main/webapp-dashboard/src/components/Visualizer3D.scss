@@ -29,6 +29,21 @@
     white-space: nowrap;
   }
 
+  .visualizer3DOrderLegend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #c3c8cb;
+    font-size: 0.75rem;
+    white-space: nowrap;
+  }
+
+  .visualizer3DOrderRamp {
+    width: 80px;
+    height: 8px;
+    border-radius: 4px;
+  }
+
   .visualizer3DBoundary {
     margin-left: auto;
   }

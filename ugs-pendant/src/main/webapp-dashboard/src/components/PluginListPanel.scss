@@ -25,6 +25,23 @@
     border-color: #2d5a3f;
     color: #4ade80;
   }
+
+  // Already running: a green dot after the label. Minimized is the same dot
+  // hollow, so the list shows at a glance which plugins are still alive.
+  &[data-state]::after {
+    content: "";
+    flex-shrink: 0;
+    margin-left: auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid #4ade80;
+    background: #4ade80;
+  }
+
+  &[data-state="minimized"]::after {
+    background: transparent;
+  }
 }
 
 .pluginListIcon {

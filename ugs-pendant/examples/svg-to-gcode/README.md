@@ -1,6 +1,62 @@
 # SVG to G-code — Dashboard plugin
 
-Version 0.3.3 includes passive drag-knife compensation and is a working release for Z-lift plotters, drag knives, and vector lasers. It generates millimeter, absolute-coordinate G-code for inspection in UGS Dashboard. It never sends machine commands or starts a job.
+Version 0.6.0 includes passive drag-knife compensation and is a working release for Z-lift plotters, drag knives, and vector lasers. It generates millimeter, absolute-coordinate G-code for inspection in UGS Dashboard. It never sends machine commands or starts a job.
+
+## Bounded nearby-node merging (0.6.0)
+
+Quality now includes **Merge nearby nodes (mm; 0 = off)**, default 0.001 mm, saved in presets. Older presets without the field use 0.001 mm. Changing it requires Reimport, like the other import controls. Original SVG files and saved settings.json are not modified by installation.
+
+Before short-move cleanup and knife compensation, consecutive sampled vertices on the same contour are grouped only while the entire group's bounding-box diagonal stays within the merge distance. This conservative bound prevents a chain of short steps from collapsing a long curve. It also means not every neighboring pair is necessarily merged across group boundaries. The representative retains the group's incoming and outgoing directions, preserving the net corner instead of making swivels around each microscopic intermediate edge. Open endpoints are retained exactly, closed seams keep their starting position, closed contours keep at least three vertices, and distinct contours are never joined. Distances apply in physical SVG millimeters before scale; 0.01 mm deliberately removes larger tiny details than the 0.001 mm default.
+
+With the supplied Kena SVG and the user's 0.1 mm sampling/cleanup settings, the 0.001 mm merge pass consolidates 51 vertices and removes the top-left A node-pair's two artificial swivels; the neighboring real corner remains. Tests cover merging off/on, preserved net corners, bounded chains, endpoints, small closed shapes, closed seams, separate paths, worker/fallback equality, progress/cancellation and preset round trips. No physical machine operation was performed.
+
+## Tiny opposing-turn cleanup (0.5.1)
+
+Short-move cleanup now recognizes an interior pair of opposing turns joined by a step no longer than both the short-move threshold and the allowed cleanup deviation (half the curve/cleanup tolerance). The surrounding contour directions must match within 1 degree, the two turn signs must oppose, and the existing positional-deviation checks must pass for every removed sample. Cleanup restores the retained incoming direction so a deleted step cannot leave a false swivel behind. It does not join separate paths or alter the original SVG.
+
+On the supplied Kena SVG with 0.1 mm short-move threshold and 0.01 mm curve tolerance, the 0.000522 mm step at the bottom between N and A no longer causes two approximately 94-degree swivels or their Z lifts. Cleanup off preserves the original geometry. Tests also retain steps above tolerance, mismatched surrounding headings, real corners and path endpoints. Worker and synchronous output remain identical. Saved presets are unchanged.
+
+## Fast import, progress and corrected corners (0.5.0)
+
+SVG geometry is evaluated directly by geometry.js: lines, quadratic/cubic Beziers (including reflected S/T controls), elliptical arcs, and their one-sided derivatives. There are no browser getPointAtLength/getTotalLength calls. Adaptive sampling preserves command junctions, splits at derivative roots and bounds changes of direction as well as positional deviation. Short-move cleanup retains rapid smooth direction changes and repairs tangent metadata when deleting a tiny redundant reversal. There is no longer a hard-coded 3-degree curve-junction smoothing rule.
+
+Heavy geometry processing runs in a cancellable Blob worker. The plugin displays a status banner, animated spinner, path progress and Cancel button while reading and importing, then clears it on success, failure or cancellation. A new import supersedes an old one without allowing stale results to replace the preview. Where browser policy blocks workers, the same geometry generator runs in short chunks and yields to the UI. XML parsing/validation and preview rendering still run on the UI thread; the 5 MB input, 500 path and 100,000 sampled-point limits remain. Generate reuses the valid preview plan instead of repeating it.
+
+The two knife angle controls are independent:
+
+- **Swivel arc angle**, default **10 degrees**: insert an arc when the corner direction change exceeds this value. Below it, connect the two offset positions directly. Zero inserts arcs at every nonzero discrete corner; 180 disables internal corner arcs. Entry alignment is controlled separately. Smooth continuous curves are not given a pivot at every sample.
+- **Swivel lift angle**: the previous angle setting, preserved in existing presets. For an inserted arc, a turn at or above this angle lifts to swivel Z if the lift switch is enabled. All inserted swivel arcs use swivel feed. The lift threshold alone does not create an arc.
+
+Explicit swivel arcs use at most 5-degree steps and a 0.001 mm chord-deviation bound, further limited by the selected maximum step. Output simplification never removes their points. Tight continuous turns (local sampled radius below blade offset) also bypass output simplification and appear solid orange; they continue at working feed/cut Z because they are continuous curves rather than inserted stationary-tip swivels. Ordinary holder cutting movements remain dashed blue. This distinction matters for artwork with extremely small rounded corners, such as the supplied A.
+
+All presets save the new arc angle independently of the lift angle. Older presets default the new arc angle to 10 degrees without altering their saved lift angle, offset, Z or feed values. The settings.json file is preserved during installation.
+
+Measured in an embedded Edge test on the supplied A: direct import about 5–9 ms; complete background import about 14 ms, versus about 2.15 seconds previously. Browser geometry queries fell from 16,114 to zero. A larger background test left UI timer callbacks running and passed progress/cancellation tests. Timings vary by computer and artwork.
+
+Corner correctness takes priority over the earlier minimum line count. Using the supplied Kena v2 SVG and saved RolandDrag2 tool settings with default quality settings produced 1,780 lines / 38,226 bytes, including restored tight turns and finer explicit swivels; the older pre-optimization export had 4,694 lines. The 0.4.0 figure below is historical and omitted/missampled some tight turns.
+
+Validation: 13 planner checks, 15 knife checks, 8 direct-geometry/corner checks, existing importer/browser regressions, 0.45 and 3 mm offsets in both directions, progressive passes, independent arc/lift threshold behavior, protected arcs at high output simplification, worker/fallback equivalence, responsive background import, cancellation, stale-result suppression, solid turn overlays, presets and simulated Save As. No physical cutting or machine commands were performed. The older release notes below describe their respective versions and are superseded by this section.
+
+## Quality controls and smoother output (0.4.0)
+
+Settings are grouped into Artwork, Tool, Paths, Quality and Presets tabs. Tabs support arrow keys and Home/End. Presets include all quality settings, tool mode and blade offset. Loading an older preset retains its saved spacing/cleanup and defaults endpoint equality to 0 (preserve old openings); new controls otherwise use the defaults below.
+
+- **Minimum segments per curve/spline: 12.** Applied per SVG C/S/Q/T command; more samples are added for maximum step and adaptive curve tolerance. Higher counts sample more finely, although output simplification can merge redundant samples. Straight lines retain their endpoints without unnecessary subdivision.
+- **Maximum arc/curve step: 0.5 mm.** Sampling distance along curved artwork, also limiting knife swivel chords. Smaller means more samples. Similar to GRBL-Plotter's circumference step, but this control also bounds spline sample spacing. All output remains G1; no G2/G3 fitting is performed.
+- **Curve/cleanup tolerance: 0.01 mm.** Adaptive curve sampling checks quarter/mid/three-quarter positions against half this tolerance; short-move cleanup uses the other half. This is an approximation control, not a formal global error guarantee. Import distances are before artwork scaling.
+- **Remove short moves below: 0.1 mm (0 disables).** Removes only nearby redundant samples whose replacement stays within the cleanup allowance. Meaningful small features and endpoints can remain.
+- **Endpoint equality: 0.01 mm (0 disables).** Closes only the start/end gap of the same subpath when within tolerance. Never merges different subpaths, and does not infer closure from fill or intersections. Closing changes contour ordering/overlap eligibility; use 0 for intentionally open tiny gaps.
+- **Output simplification: 0.01 mm (0 disables).** After scaling, removes redundant points within the selected deviation from the sampled trajectory. Plotter/laser use the cut path; knife uses the holder path. Knife swivel, entry, feed/Z boundaries and path starts/ends are retained. This is not a guaranteed blade-tip error. The preview shows the sampled intended cut and the actual simplified knife-holder trajectory.
+
+Reimport applies import controls and resets manual starts/directions. Output tolerance applies immediately. Original SVG files are never modified. Repeated F words are omitted in all modes; feeds still change at every required transition.
+
+Smooth SVG samples now carry curve tangents through scaling, rotation, path reversal, manual start selection and compensation. The holder follows one smooth offset trajectory instead of alternating a short cut and pivot at every sample. Discontinuous corner tangents retain explicit swivels, with the existing angle threshold controlling feed/Z lift. Nearly matching curve-junction tangents (under 3 degrees) are averaged to suppress numerical sampling noise; straight-line junctions retain their corners. This remains approximate passive-knife geometry; actual tip response depends on blade contact and orientation.
+
+On the supplied Kena v2 SVG with the saved RolandDrag2 tool settings and new quality defaults, output is 978 lines / 21,076 bytes, versus 4,698 lines reconstructed with the previous plugin (the supplied older export has 4,694). The SVG/start settings are not an exact reconstruction of that older export. Moves below 0.05 mm drop from 2,708 in the supplied export to 17 in the new result; repeated feed words drop to zero. Feed and Z settings were not reduced to obtain this result.
+
+Validation includes planner/knife/import regressions; both 0.45 and 3 mm circle offsets; reversed circles with manual starts; ideal passive-tip numerical integration; progressive passes; quality/preset round trips; simulated Save As; and embedded-frame tab, dropdown, crosshair and origin-scroll checks. For the circle test, ideal simulated radial tip error stayed below 0.005 mm in both directions. This does not establish accuracy for all shapes or a physical machine. No physical cut or live machine command was performed.
+
+The older release notes below describe their respective versions; the controls above supersede earlier fixed-spacing and fixed-cleanup descriptions.
 
 ## Install
 
@@ -13,6 +69,7 @@ Copy these files into `~/.ugs/dashboard-plugins/svg-to-gcode/` on the computer r
 - `dropdowns.js`
 - `core.js`
 - `importer.js`
+- `geometry.js`
 
 Then reload Dashboard and choose **SVG to G-code** under Plugins. No Platform rebuild is required. Resize the plugin window to suit the display. The included `sample.svg` and **Load example artwork** button provide a small four-path example.
 

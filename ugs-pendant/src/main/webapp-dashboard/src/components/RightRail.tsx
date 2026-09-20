@@ -54,7 +54,7 @@ const RightRail = () => {
       </div>
       </div>
       <div className="rightRailTabPanel" role="tabpanel" id="overrides-panel" aria-labelledby="overrides-tab" hidden={tab !== "overrides"}>
-        <div className="rightRailSection">
+        <div className="rightRailSection rightRailOverrides">
           <h6 className="rightRailHeading">Overrides</h6>
           <OverrideControls />
         </div>

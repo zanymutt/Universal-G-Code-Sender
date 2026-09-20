@@ -1,28 +1,26 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SVG to G-code</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>SVG to G-code <small>Preview · 0.3.3</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
+<header><h1>SVG to G-code <small>Preview · 0.6.0</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
 <div class="importBar"><label>SVG file<input id="file" type="file" accept=".svg,image/svg+xml"></label><button id="example">Load example artwork</button></div></header>
+<div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
 <section class="settings">
-<fieldset><legend>Presets</legend>
+<div class="settingsTabs" role="tablist" aria-label="Settings"><button type="button" role="tab" id="tab-artwork" aria-controls="panel-artwork" aria-selected="true" tabindex="0">Artwork</button><button type="button" role="tab" id="tab-tool" aria-controls="panel-tool" aria-selected="false" tabindex="-1">Tool</button><button type="button" role="tab" id="tab-paths" aria-controls="panel-paths" aria-selected="false" tabindex="-1">Paths</button><button type="button" role="tab" id="tab-quality" aria-controls="panel-quality" aria-selected="false" tabindex="-1">Quality</button><button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="false" tabindex="-1">Presets</button></div>
+<fieldset id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" hidden><legend>Presets</legend>
 <label>Saved settings<select id="presets"><option value="">Choose a preset</option></select></label>
 <div class="pair"><button id="loadPreset">Load preset</button><button id="deletePreset">Delete preset</button></div>
 <label>Preset name<input id="presetName" maxlength="100" placeholder="e.g. Vinyl knife"></label>
 <button id="savePreset" disabled>Save / replace preset</button>
 <p class="hint">Saved in UGS across sessions. Includes import, tool, origin and ordering settings; excludes artwork and individual path edits. Use an existing name to replace it.</p>
 </fieldset>
-<fieldset><legend>1 · Artwork</legend>
-<div class="pair"><label>Pixel DPI<input id="dpi" type="number" value="96" min="1" max="2400"></label><label>Sample spacing (mm)<input id="spacing" type="number" value="0.1" min="0.02" max="5" step="0.01"></label></div>
-<p class="hint">Physical SVG dimensions take priority. DPI affects pixel-based sizes. Smaller spacing gives finer curves and larger files. Text/clones must be converted to paths in Inkscape.</p>
-<label>Nearby-node cleanup (mm; 0 = off)<input id="cleanup" type="number" value="0.1" min="0" max="1" step="0.01"></label><p class="hint">Merges nearby redundant samples before scaling. Endpoints and bends changing the outline by more than 0.001 mm are retained. Reimport to apply; the SVG file is unchanged.</p>
-<button id="reimport" disabled>Reimport with these settings</button>
+<fieldset id="panel-artwork" role="tabpanel" aria-labelledby="tab-artwork"><legend>1 · Artwork</legend>
 <div class="pair"><label>Scale (%)<input id="scale" type="number" value="100" min="0.01" step="1"></label><label>Rotation (° CCW)<input id="rotation" type="number" value="0" step="1"></label></div>
 <div class="pair"><label>Origin bounds<select id="originBounds"><option value="artwork">Artwork</option><option value="page">SVG page</option></select></label><label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Center</option><option value="custom">Custom</option></select></label></div>
 <div class="pair"><label>Custom X (mm)<input id="originX" type="number" value="0" step="0.1"></label><label>Custom Y (mm)<input id="originY" type="number" value="0" step="0.1"></label></div>
 <button id="pickOrigin" disabled>Pick origin in preview</button><p class="hint">Custom coordinates are in the scaled, rotated SVG coordinate system (Y upward). This changes output coordinates, not machine zero.</p>
 </fieldset>
-<fieldset><legend>2 · Tool and passes</legend>
+<fieldset id="panel-tool" role="tabpanel" aria-labelledby="tab-tool" hidden><legend>2 · Tool and passes</legend>
 <label>Tool mode<select id="mode"><option value="plotter">Plotter — Z lift</option><option value="knife">Drag knife — offset compensated</option><option value="laser">Laser — M3/M4 power control</option></select></label>
 <div class="pair"><label>Working feed (mm/min)<input id="feed" type="number" value="1000" min="1"></label><label>Lowering feed (mm/min)<input id="plunge" type="number" value="200" min="1"></label></div>
 <label>Safe travel Z (mm)<input id="safe" type="number" value="5" step="0.1"></label>
@@ -31,25 +29,26 @@
 <div id="knifeSettings" hidden>
 <label>Blade offset (mm)<input id="knifeOffset" type="number" value="0.45" min="0.0001" max="100" step="0.01"></label>
 <p class="hint">Use Surface Z, Final Z and Step down above for progressive passes, just as in plotter mode. Example: 0 → −1.2 with step 0.5 cuts at −0.5, −1.0, −1.2. On a floating Z axis these Z changes set pressure, not measured material depth.</p>
+<label>Swivel arc angle (°)<input id="knifeArcAngle" type="number" value="10" min="0" max="180" step="1"></label><p class="hint">Add a swivel arc when a corner changes direction by more than this angle. Smaller turns use a straight connection. 0 adds arcs at every nonzero corner; smooth curves do not get per-sample swivels. Entry alignment is separate.</p>
 <label class="check"><input id="knifeLift" type="checkbox" checked>Lift for corner swivels</label>
 <p class="hint">Uncheck to turn corners at the current cutting Z. XY swivel arcs remain. Entry alignment is controlled separately below.</p>
 <label>Swivel Z — lighter contact (mm)<input id="knifeSwivelZ" type="number" step="0.01" placeholder="Contact Z setting"></label>
 <p class="hint">Swivel Z must be at or above the first cutting Z and still keep blade contact. Safe travel Z must fully release and clear the blade.</p>
-<div class="pair"><label>Repeat each Z<input id="knifePasses" type="number" value="1" min="1" max="1000" step="1"></label><label>Corner threshold (°)<input id="knifeAngle" type="number" value="30" min="1" max="180" step="1"></label></div>
-<p class="hint">Leave repeats at 1 for one cut at each Z. Turns at or above the threshold use swivel feed and, if enabled, lift to swivel Z. Smaller turns stay at cutting Z.</p>
+<div class="pair"><label>Repeat each Z<input id="knifePasses" type="number" value="1" min="1" max="1000" step="1"></label><label>Swivel lift angle (°)<input id="knifeAngle" type="number" value="30" min="1" max="180" step="1"></label></div>
+<p class="hint">Leave repeats at 1 for one cut at each Z. All swivel arcs use swivel feed. Only arcs at or above the lift angle raise to swivel Z, when lift is enabled. The lift angle does not decide whether an arc is added.</p>
 <label class="check"><input id="knifeAlign" type="checkbox" checked>Align blade before each pass</label>
 <p class="hint">Uncheck to remove all entry turns and lead-ins. Corner swivels stay enabled. With alignment on, lead-in 0 removes only the straight lead-in; the entry turn remains when direction changes.</p>
 <div class="pair"><label>Swivel / alignment feed (mm/min)<input id="knifeFeed" type="number" value="200" min="1" step="10"></label><label>Straight lead-in length (mm)<input id="knifeLead" type="number" value="0" min="0" max="1000" step="0.1"></label></div>
 <label>Initial trailing direction (°; 0 = travel +X)<input id="knifeHeading" type="number" value="0" min="-180" max="180" step="1"></label>
 <p class="hint" id="knifeHeadingHint"></p>
-<p class="hint">Orange lines show the HOLDER center moving, not the blade-tip cut. In an ideal swivel, the holder turns around the tip to face the next cut. Contact turns can still mark material. Positive lead-ins move the tip too; their position is not checked for scrap or neighboring shapes. Knife output uses M5 to turn the spindle off and never turns it on.</p>
+<p class="hint">Orange lines show swivel arcs and tight continuous holder turns. Continuous turns stay at working feed and cutting Z; the lift angle applies to inserted corner arcs. These lines show the HOLDER center moving, not the blade-tip cut. In an ideal swivel, the holder turns around the tip to face the next cut. Contact turns can still mark material. Positive lead-ins move the tip too; their position is not checked for scrap or neighboring shapes. Knife output uses M5 to turn the spindle off and never turns it on.</p>
 <button id="knifeCalibration" type="button">Load knife calibration shapes</button>
 </div>
 <output id="passes">1 pass per path</output>
 <label>Tool on/off commands<select id="tool"><option value="none">None — no tool-on commands</option><option value="M3">M3 + M5</option><option value="M4">M4 + M5 (controller-dependent)</option></select></label>
 <div class="pair"><label>S value / laser power<input id="power" type="number" value="100" min="0"></label><label>Configured maximum S<input id="powerMax" type="number" value="1000" min="1"></label></div>
 </fieldset>
-<fieldset><legend>3 · Paths</legend>
+<fieldset id="panel-paths" role="tabpanel" aria-labelledby="tab-paths" hidden><legend>3 · Paths</legend>
 <label>Order<select id="order"><option value="svg">Original SVG order</option><option value="nearest">Reduce travel</option></select></label>
 <label class="check"><input id="inner" type="checkbox" checked>Inner contours first</label><label class="check"><input id="largest" type="checkbox">Largest closed contour last</label>
 <label>Start points<select id="start"><option value="original">Original SVG starts</option><option value="auto">Automatic — nearest point</option></select></label>
@@ -60,9 +59,29 @@
 <div class="pair"><button id="pickStart" disabled>Pick start on path</button><button id="clearStarts" disabled>Clear manual starts</button></div>
 <p class="hint">Click near the selected path to lock a start. Open paths use an endpoint. Manual starts and direction choices survive order changes; reimport clears them. Reversing a closed path keeps its start. For open paths, picking an endpoint sets direction; changing direction clears that endpoint lock.</p>
 </fieldset>
+<fieldset id="panel-quality" role="tabpanel" aria-labelledby="tab-quality" hidden><legend>Curve quality and output</legend>
+<label>Pixel DPI<input id="dpi" type="number" value="96" min="1" max="2400"></label>
+<p class="hint">Physical SVG dimensions take priority. DPI affects pixel-based sizes. Convert text and clones to paths before importing.</p>
+<label>Minimum segments per curve / spline<input id="curveSegments" type="number" value="12" min="1" max="1000" step="1"></label>
+<p class="hint">Higher values sample each SVG curve more finely. Extra samples are added to meet the arc step and curve tolerance. Straight lines keep only their endpoints.</p>
+<label>Maximum arc / curve step (mm)<input id="spacing" type="number" value="0.5" min="0.02" max="5" step="0.01"></label>
+<p class="hint">Maximum sampling distance along curves and circles. Smaller values mean finer sampling and more data. Also limits knife swivel steps. Output uses straight G1 moves.</p>
+<label>Curve / cleanup tolerance (mm)<input id="tolerance" type="number" value="0.01" min="0.001" max="1" step="0.001"></label>
+<p class="hint">Controls curve sampling and short-move cleanup before scaling. Smaller values preserve more detail.</p>
+<label>Merge nearby nodes (mm; 0 = off)<input id="mergeDistance" type="number" value="0.001" min="0" max="0.1" step="0.001"></label>
+<p class="hint">Combines consecutive vertices on one contour before short-move cleanup and knife compensation. Each whole group must fit within this distance; groups cannot grow through a chain of tiny steps. Keeps the incoming and outgoing directions so genuine corners remain. Open endpoints and separate contours stay separate. Start at 0.001 mm; 0.01 mm removes larger tiny details. Distances are before scaling.</p>
+<label>Remove short moves below (mm; 0 = off)<input id="cleanup" type="number" value="0.1" min="0" max="1" step="0.01"></label>
+<p class="hint">Merges nearby samples only when the replacement stays within half the curve tolerance. Endpoints are retained; not every short move can be removed safely.</p>
+<label>Endpoint equality (mm; 0 = off)<input id="equalDistance" type="number" value="0.01" min="0" max="1" step="0.001"></label>
+<p class="hint">Closes a single path when its start and end are this close. Does not join separate paths. Use 0 to preserve intentional tiny openings.</p>
+<button id="reimport" disabled>Reimport with these settings</button>
+<p class="hint">Reimport applies the controls above and clears manual starts and directions. Original SVG files are unchanged. Import distances are measured before artwork scaling.</p>
+<label>Output simplification tolerance (mm; 0 = off)<input id="outputTolerance" type="number" value="0.01" min="0" max="1" step="0.001"></label>
+<p class="hint">Removes redundant output points within this distance of the sampled path, after scaling. In knife mode this applies to the holder path; it is not a guaranteed blade-tip error. Starts, ends, Z changes and explicit swivels are retained. All tool modes omit repeated feed words.</p>
+</fieldset>
 </section>
 <section class="work" id="work">
-<div class="previewCard"><div id="summary">Import an SVG to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import an SVG to preview toolpaths</text></svg><p class="hint">Green = other cuts · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel or +/− to zoom · drag to pan</p></div>
+<div class="previewCard"><div id="summary">Import an SVG to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel / tight turn</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import an SVG to preview toolpaths</text></svg><p class="hint">Green = other cuts · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel or +/− to zoom · drag to pan</p></div>
 <div id="divider" role="separator" tabindex="0" aria-label="Resize preview and G-code" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" title="Drag to resize; arrow keys adjust; double-click resets"></div>
 <div class="codePane">
 <div id="message" role="status" aria-live="polite">Nothing is sent to the machine by this plugin.</div>
@@ -71,5 +90,5 @@
 </div>
 </section>
 </main>
-<script src="core.js"></script><script src="importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
+<script src="core.js"></script><script src="geometry.js"></script><script src="importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
 </body></html>

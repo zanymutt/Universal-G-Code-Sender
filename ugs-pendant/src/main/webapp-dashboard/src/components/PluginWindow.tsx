@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faMinus, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
@@ -26,6 +26,8 @@ type Props = {
   plugin: PluginInfo;
   initialOffset: { x: number; y: number };
   onClose: () => void;
+  onMinimize: () => void;
+  minimized: boolean;
   isFront: boolean;
   focusRequest: number;
   onActivate: () => void;
@@ -75,7 +77,7 @@ type PickFileRequest = {
   reject: (error: Error) => void;
 };
 
-const PluginWindow = ({ plugin, initialOffset, onClose, isFront, focusRequest, onActivate }: Props) => {
+const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate }: Props) => {
   const dispatch = useAppDispatch();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
@@ -427,7 +429,13 @@ const PluginWindow = ({ plugin, initialOffset, onClose, isFront, focusRequest, o
       aria-label={plugin.name}
       onPointerDownCapture={onActivate}
       onFocusCapture={onActivate}
-      style={{ left: position.x, top: position.y, zIndex: isFront ? 41 : 40 }}>
+      // Minimizing hides the window rather than unmounting it: an unmounted
+      // iframe reloads from scratch, losing whatever the plugin had entered.
+      // visibility (not display:none) so the frame keeps its layout size -
+      // a display:none iframe is 0x0, and plugins that size a canvas off
+      // their viewport would see a bogus resize on restore.
+      style={{ left: position.x, top: position.y, zIndex: isFront ? 41 : 40,
+        visibility: minimized ? "hidden" : "visible" }}>
       <div
         className="pluginWindowHeader"
         onPointerDown={handleHeaderPointerDown}
@@ -437,7 +445,10 @@ const PluginWindow = ({ plugin, initialOffset, onClose, isFront, focusRequest, o
       >
         {plugin.iconUrl && <img src={plugin.iconUrl} alt="" className="pluginWindowIcon" />}
         <span className="pluginWindowTitle">{plugin.name}</span>
-        <button type="button" className="pluginWindowClose" onClick={onClose} aria-label="Close plugin">
+        <button type="button" className="pluginWindowMinimize" onClick={onMinimize} aria-label="Minimize plugin" title="Minimize">
+          <FontAwesomeIcon icon={faMinus} />
+        </button>
+        <button type="button" className="pluginWindowClose" onClick={onClose} aria-label="Close plugin" title="Close">
           <FontAwesomeIcon icon={faXmark} />
         </button>
       </div>

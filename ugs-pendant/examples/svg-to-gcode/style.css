@@ -39,3 +39,7 @@ html{height:100%}body{height:100%;display:flex;flex-direction:column;overflow:hi
 .selectMenu{position:fixed;z-index:1000;overflow:auto;overscroll-behavior:contain;background:#272c31;border:1px solid #8dbbff;border-radius:5px;box-shadow:0 6px 20px #0008;padding:3px;scrollbar-gutter:stable}
 .selectOption{padding:9px 10px;border-radius:3px;white-space:normal;overflow-wrap:anywhere;cursor:pointer;min-height:36px}.selectOption:hover,.selectOption.active{background:#344b70}.selectOption[aria-selected=true]{font-weight:600;color:#a8dcff}.selectOption[aria-disabled=true]{opacity:.4;cursor:default}
 .pair label>.selectButton{margin-top:auto}#preview:focus{outline:none}
+
+.settingsTabs{display:flex;flex-wrap:wrap;gap:4px;position:sticky;top:0;z-index:5;background:#1c1e1f;padding:0 0 10px}.settingsTabs button{flex:1;padding:7px 9px;min-height:36px;font-size:12px}.settingsTabs [aria-selected=true]{background:#344ac2;border-color:#94baff}.settings [role=tabpanel]{margin-top:4px}
+
+#busy{display:flex;align-items:center;gap:12px;padding:10px;background:#233746;border:1px solid #729acf;border-radius:6px;margin-bottom:10px;flex:none}#busyText{flex:1}#busyProgress{width:100px}.spinner{width:18px;height:18px;flex:none;border:2px solid #577089;border-top-color:#9cd7ff;border-radius:50%;animation:working .75s linear infinite}@keyframes working{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.spinner{animation:none}}@media(max-width:680px){#busy{flex-wrap:wrap}#busyProgress{width:65px}}

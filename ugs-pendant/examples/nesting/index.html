@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nesting</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<header><h1>Nesting <small>Preview · 0.2.2</small></h1><p>Pack copies of one G-code part onto a sheet by its outer shape. Nothing is sent to the machine.</p>
+<div class="importBar"><button id="useOpen" type="button">Use file open in Dashboard</button><label>G-code file<input id="file" type="file" accept=".gcode,.nc,.ngc,.tap,.cnc,.gc,.txt,text/plain"></label><button id="example" type="button">Load example part</button></div></header>
+<main>
+<section class="settings">
+<div class="settingsTabs" role="tablist" aria-label="Settings"><button type="button" role="tab" id="tab-part" aria-controls="panel-part" aria-selected="true" tabindex="0">Part</button><button type="button" role="tab" id="tab-layout" aria-controls="panel-layout" aria-selected="false" tabindex="-1">Layout</button><button type="button" role="tab" id="tab-output" aria-controls="panel-output" aria-selected="false" tabindex="-1">Output</button><button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="false" tabindex="-1">Presets</button></div>
+
+<fieldset id="panel-part" role="tabpanel" aria-labelledby="tab-part"><legend>1 · Part</legend>
+<div id="partInfo" class="info">Load a G-code file above. The whole file is treated as one complete part.</div>
+<label class="check"><input id="rotate" type="checkbox" checked>Allow part rotation</label>
+<label>Rotation step (°)<input id="rotStep" type="number" value="15" min="1" max="180" step="1"></label>
+<p class="hint">Copies may be turned in steps of this angle (15° gives 24 orientations). A smaller step can pack tighter but takes longer. Parts are never mirrored.</p>
+<p class="hint">Packing follows the part's outer shape, so a triangle can sit inverted beside another. Inner cuts do not affect packing. The path from the file, including its lead-in, counts as part of the shape.</p>
+<div id="partWarnings" class="hint warn" hidden></div>
+</fieldset>
+
+<fieldset id="panel-layout" role="tabpanel" aria-labelledby="tab-layout" hidden><legend>2 · Layout</legend>
+<label>Layout mode<select id="mode">
+<option value="fixedX">Fixed width X · N parts → minimum Y</option>
+<option value="fixedY">Fixed height Y · N parts → minimum X</option>
+<option value="minArea">N parts → minimum area</option>
+<option value="maxParts">Sheet X × Y → maximum parts</option></select></label>
+<p class="hint" id="modeHint"></p>
+<label id="countWrap">Number of parts<input id="count" type="number" value="4" min="1" max="2000" step="1"></label>
+<div class="pair"><label id="sizeXWrap"><span id="sizeXLabel">Maximum X (mm)</span><input id="sizeX" type="number" value="600" min="0" step="1"></label><label id="sizeYWrap"><span id="sizeYLabel">Maximum Y (mm)</span><input id="sizeY" type="number" value="400" min="0" step="1"></label></div>
+<label>Minimum gap between parts (mm)<input id="gap" type="number" value="3" min="0" step="0.1"></label>
+<p class="hint">Edge to edge, between the parts' outer shapes. Kerf is not added; account for it in your post processor. The result reports the smallest gap actually achieved.</p>
+<label>Result preference<select id="prefer"><option value="compact" selected>Compact block — smallest frame area</option><option value="length">Shortest length — strictly</option></select></label>
+<p class="hint">Compact picks the tightest block among results within 3% of the shortest length. Shortest length may stagger parts to save a few mm, leaving gaps.</p>
+<label>Search effort<select id="effort"><option value="1">Fast — one pass</option><option value="3" selected>Normal — best of 3 passes</option><option value="5">Thorough — best of 5 passes</option></select></label>
+<div class="actions"><button id="nest" type="button" disabled>Nest &amp; generate</button><button id="stop" type="button" hidden>Stop</button></div>
+<output id="progress"></output>
+</fieldset>
+
+<fieldset id="panel-output" role="tabpanel" aria-labelledby="tab-output" hidden><legend>3 · Output</legend>
+<label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Nest center</option><option value="custom">Custom</option></select></label>
+<div class="pair"><label>Custom X (mm)<input id="originX" type="number" value="0" step="0.1"></label><label>Custom Y (mm)<input id="originY" type="number" value="0" step="0.1"></label></div>
+<button id="pickOrigin" type="button" disabled>Pick origin in preview</button>
+<p class="hint">Corners are those of the nest frame: the tight bounding box of the placed parts (or the sheet you entered in maximum-parts mode). Custom coordinates are measured from its bottom-left, Y up. This only offsets the generated coordinates; it never zeroes or moves the machine. Zero your torch at the same point on the sheet.</p>
+<label>Cut sequence<select id="cutOrder"><option value="phases">Inner cuts of every part first, then outer cuts</option><option value="part">One part at a time, in file order</option></select></label>
+<label>Walk between cuts<select id="order"><option value="nearest">Nearest next — reduce travel</option><option value="nest">Part number order</option></select></label>
+<p class="hint">Inner cuts are the ones inside another contour (holes). A cut is one torch cycle (M3/M4 … M5) or, in pen/knife files without those, one pen-down run that ends when the tool lifts to the highest Z. Each cut keeps its own approach, probe, pierce and pauses exactly as in the file; only the order changes. Files with a single cut are unaffected.</p>
+<label class="check"><input id="tags" type="checkbox" checked>Add part comments to the G-code</label>
+<label>Rapid rate for time estimate (mm/min)<input id="rapid" type="number" value="3000" min="1" step="100"></label>
+<p class="hint">Estimate = cutting at each move's F word, rapids at this rate, plus G4 dwells. Z moves, probing and acceleration are not included, so treat it as a lower bound.</p>
+</fieldset>
+
+<fieldset id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" hidden><legend>Presets</legend>
+<label>Saved settings<select id="presets"><option value="">Choose a preset</option></select></label>
+<div class="pair"><button id="loadPreset" type="button">Load preset</button><button id="deletePreset" type="button">Delete preset</button></div>
+<label>Preset name<input id="presetName" maxlength="100" placeholder="e.g. 1 mm steel, 600 wide"></label>
+<button id="savePreset" type="button" disabled>Save / replace preset</button>
+<p class="hint">Saved in UGS across sessions. Includes rotation, layout, gap and output settings, not the part. Use an existing name to replace it. Your last settings are also restored automatically.</p>
+</fieldset>
+</section>
+
+<section class="work" id="work">
+<div class="previewCard"><div id="summary">Load a part to begin.</div>
+<div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" type="button" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" type="button" aria-label="Zoom in">+</button><button id="zoomFit" type="button">Fit</button></div>
+<svg id="preview" viewBox="0 0 100 100" aria-label="Nest preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Load a part to preview</text></svg>
+<p class="hint">Green outline = outer shape · dim green = inner cuts · dashed grey = nest frame · dashed orange = travel between cuts · orange dot = pierce/first move · number = cut order · red cross = origin · wheel or +/− to zoom · drag to pan</p></div>
+<div id="divider" role="separator" tabindex="0" aria-label="Resize preview and G-code" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" title="Drag to resize; arrow keys adjust; double-click resets"></div>
+<div class="codePane">
+<div id="message" role="status" aria-live="polite">Nothing is sent to the machine by this plugin.</div>
+<div class="actions"><button id="save" type="button" disabled>Save As into Dashboard</button><button id="copy" type="button" disabled>Copy G-code</button></div>
+<label class="codeLabel">Nested G-code<textarea id="output" readonly spellcheck="false" placeholder="Nest the part to generate G-code."></textarea></label>
+</div>
+</section>
+</main>
+<script src="core.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
+</body></html>

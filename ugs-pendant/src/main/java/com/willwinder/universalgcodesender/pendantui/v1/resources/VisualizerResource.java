@@ -22,6 +22,7 @@ import com.willwinder.universalgcodesender.gcode.DefaultCommandCreator;
 import com.willwinder.universalgcodesender.gcode.util.GcodeParserException;
 import com.willwinder.universalgcodesender.model.BackendAPI;
 import com.willwinder.universalgcodesender.model.Position;
+import com.willwinder.universalgcodesender.model.UnitUtils;
 import com.willwinder.universalgcodesender.pendantui.v1.model.ToolpathPoint;
 import com.willwinder.universalgcodesender.pendantui.v1.model.ToolpathSegment;
 import com.willwinder.universalgcodesender.utils.GcodeStreamReader;
@@ -114,6 +115,8 @@ public class VisualizerResource {
                 new ToolpathPoint(lineSegment.getEnd().x, lineSegment.getEnd().y, lineSegment.getEnd().z),
                 lineSegment.isFastTraverse(),
                 lineSegment.isArc(),
-                lineSegment.getLineNumber());
+                lineSegment.getLineNumber(),
+                lineSegment.getFeedRate(),
+                lineSegment.getStart().getUnits() == UnitUtils.Units.INCH);
     }
 }

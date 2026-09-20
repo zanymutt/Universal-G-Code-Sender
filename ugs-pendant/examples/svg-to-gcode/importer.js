@@ -35,7 +35,7 @@
       const up=cmd.toUpperCase(),relative=cmd!==up;
       if(up==='Z'){
         if(!current)throw Error('Close command without a path.');
-        current.d+=' Z';current.ends.push(current.d.length);current.closed=true;x=sx;y=sy;cmd='';continue;
+        current.d+=' Z';current.ends.push(current.d.length);current.commands.push('Z');current.closed=true;x=sx;y=sy;cmd='';continue;
       }
       const n=count[up];if(!n)throw Error('Unsupported SVG path command '+cmd);
       const a=tokens.slice(i,i+n).map(Number);
@@ -45,12 +45,12 @@
       if(up==='H')nx=a[0]+(relative?x:0);
       else if(up==='V')ny=a[0]+(relative?y:0);
       else {nx=a[n-2]+(relative?x:0);ny=a[n-1]+(relative?y:0);}
-      if(up==='M') {current={d:`M ${nx} ${ny}`,closed:false,ends:[]};paths.push(current);sx=nx;sy=ny;cmd=relative?'l':'L';}
+      if(up==='M') {current={d:`M ${nx} ${ny}`,closed:false,ends:[],commands:[]};paths.push(current);sx=nx;sy=ny;cmd=relative?'l':'L';}
       else {
         if(!current)throw Error('SVG path must start with M.');
-        if(current.closed){current={d:`M ${x} ${y}`,closed:false,ends:[]};paths.push(current);sx=x;sy=y;}
+        if(current.closed){current={d:`M ${x} ${y}`,closed:false,ends:[],commands:[]};paths.push(current);sx=x;sy=y;}
         current.d+=' '+cmd+' '+a.join(' ');
-        current.ends.push(current.d.length);
+        current.ends.push(current.d.length);current.commands.push(up);
       }
       x=nx;y=ny;
     }
@@ -80,7 +80,11 @@
     }
     throw Error('Unsupported SVG element <'+tag+'>. Convert text/clones to paths and remove bitmap images first.');
   }
-  function parse(text,{dpi=96,spacing=.25,cleanup=0}={}){
+  function prepare(text,{dpi=96,spacing=.5,cleanup=0,curveSegments=12,tolerance=.01,equalDistance=0,mergeDistance=.001}={}){
+    if(!Number.isInteger(curveSegments)||curveSegments<1||curveSegments>1000)throw Error('Curve segments must be an integer from 1 to 1000.');
+    if(!Number.isFinite(tolerance)||tolerance<.001||tolerance>1)throw Error('Curve tolerance must be 0.001–1 mm.');
+    if(!Number.isFinite(mergeDistance)||mergeDistance<0||mergeDistance>.1)throw Error('Merge nearby nodes must be 0–0.1 mm.');
+    if(!Number.isFinite(equalDistance)||equalDistance<0||equalDistance>1)throw Error('Endpoint equality must be 0–1 mm.');
     if(text.length>5000000)throw Error('SVG exceeds 5 MB.');
     if(!(dpi>0&&dpi<=2400&&spacing>=.02&&spacing<=5))throw Error('DPI must be 1–2400; segment spacing must be 0.02–5 mm.');
     if(/<!DOCTYPE|<!ENTITY/i.test(text))throw Error('Remove the SVG DOCTYPE/entity declarations first.');
@@ -99,7 +103,7 @@
     }
     const pageMatrix=new DOMMatrix([sx,0,0,sy,ox-box[0]*sx,oy-box[1]*sy]);
     if(!Number.isFinite(cleanup)||cleanup<0||cleanup>1)throw Error('Node cleanup must be from 0 to 1 mm.');
-    const paths=[],warnings=[];let vertices=0,removed=0;
+    const items=[];
     function walk(el,parent,depth=0){
       if(depth>60)throw Error('SVG group nesting exceeds 60 levels.');
       const tag=el.localName;
@@ -113,39 +117,41 @@
       const mat=parent.multiply(matrix(el.getAttribute('transform')));
       if(![mat.a,mat.b,mat.c,mat.d,mat.e,mat.f].every(Number.isFinite))throw Error('Non-finite SVG transform.');
       if(tag==='g'||el===root){for(const child of el.children)walk(child,mat,depth+1);return;}
-      if(paths.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
+      if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
       for(const source of shape(el))for(const sub of (source.ends?[source]:splitPath(source.d))){
-        if(paths.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
+        if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
         if(sub.ends.length>3000)throw Error('A path exceeds 3000 segments. Simplify or split it first.');
-        const path=document.createElementNS(NS,'path');path.setAttribute('d',sub.d);
-        const len=path.getTotalLength();if(!Number.isFinite(len))throw Error('Invalid path geometry.');if(len<=1e-8)continue;
-        // Frobenius norm is an upper bound on transform stretch; sample in mm.
-        const stretch=Math.hypot(mat.a,mat.b,mat.c,mat.d),steps=Math.max(1,Math.ceil(len*stretch/spacing));
-        if(steps>100000||vertices+steps>100000)throw Error('Limit: 100,000 sampled points. Increase segment spacing.');
-        // Include every command endpoint so sampling never trims a sharp corner.
-        const probe=document.createElementNS(NS,'path');let previous=0;
-        const distances=[0];
-        for(const end of sub.ends){probe.setAttribute('d',sub.d.slice(0,end));const next=probe.getTotalLength();const count=Math.max(1,Math.ceil((next-previous)*stretch/spacing));for(let i=1;i<=count;i++)distances.push(previous+(next-previous)*i/count);previous=next;}
-        if(distances.length+vertices>100000)throw Error('Limit: 100,000 sampled points. Increase segment spacing.');
-        let points=[];
-        for(const distance of distances){
-          const p=path.getPointAtLength(distance),q=new DOMPoint(p.x,p.y).matrixTransform(mat),point={x:q.x,y:height-q.y};
-          if(!Number.isFinite(point.x)||!Number.isFinite(point.y))throw Error('Non-finite path coordinates.');
-          if(!points.length||SvgCam.dist(points.at(-1),point)>1e-8)points.push(point);
-        }
-        if(sub.closed&&points.length>1&&SvgCam.dist(points[0],points.at(-1))<1e-5)points.pop();
-        if(points.length<(sub.closed?3:2))continue;
-        const originalCount=points.length;points=SvgCam.cleanPoints(points,sub.closed,cleanup);removed+=originalCount-points.length;
-        vertices+=originalCount;
-        paths.push({id:'p'+paths.length,name:(el.getAttribute('id')||tag)+'/'+(paths.length+1),closed:sub.closed,points});
+        items.push({d:sub.d,closed:sub.closed,matrix:[mat.a,mat.b,mat.c,mat.d,mat.e,mat.f],height,name:(el.getAttribute('id')||tag)+'/'+(items.length+1)});
       }
     }
     walk(root,pageMatrix);
-    if(!paths.length)throw Error('No supported visible vector paths found.');
-    if(removed)warnings.push(`Node cleanup removed ${removed} nearby redundant points (threshold ${cleanup} mm).`);
-    const openCount=paths.filter(p=>!p.closed).length;if(openCount)warnings.push(`${openCount} open path(s): SVG fill does not close the cutting path.`);
-    warnings.push('SVG vectors define the intended cut. Fills and stroke widths do not define a scrap side. Knife mode adds holder-offset compensation.');
-    return {paths,width,height,page:[{x:0,y:0},{x:width,y:0},{x:width,y:height},{x:0,y:height}],warnings,vertices};
+    return {items,width,height,options:{dpi,spacing,cleanup,curveSegments,tolerance,equalDistance,mergeDistance}};
   }
-  window.SvgImport={parse,splitPath};
+  function parse(text,options){return SvgGeometry.run(prepare(text,options));}
+  async function parseAsync(text,options,{signal,onProgress=()=>{}}={}){
+    const abort=()=>{if(signal?.aborted)throw new DOMException('Import canceled.','AbortError');};
+    abort();onProgress({stage:'Reading SVG',fraction:0});
+    await new Promise(resolve=>setTimeout(resolve,0));abort();
+    const prepared=prepare(text,options);abort();
+    // Blob workers also work in the Dashboard's opaque-origin sandbox. If its
+    // content policy blocks workers, the same generator yields between chunks.
+    try{
+      return await new Promise((resolve,reject)=>{
+        let worker,url,settled=false,started=false;
+        const finish=(error,value)=>{if(settled)return;settled=true;worker?.terminate();if(url)URL.revokeObjectURL(url);signal?.removeEventListener('abort',cancel);error?reject(error):resolve(value);};
+        const cancel=()=>finish(new DOMException('Import canceled.','AbortError'));
+        try{url=URL.createObjectURL(new Blob([SvgGeometry.workerSource],{type:'text/javascript'}));worker=new Worker(url);}catch(e){e.workerUnavailable=true;finish(e);return;}
+        signal?.addEventListener('abort',cancel,{once:true});if(signal?.aborted){cancel();return;}
+        worker.onmessage=e=>{started=true;if(e.data.error)finish(Error(e.data.error));else if(e.data.result)finish(null,e.data.result);else onProgress({...e.data.progress,stage:'Calculating curves'});};
+        worker.onerror=e=>{e.preventDefault();const error=Error(e.message||'Background worker unavailable.');error.workerUnavailable=!started;finish(error);};
+        try{worker.postMessage(prepared);}catch(e){finish(e);}
+      });
+    }catch(e){
+      if(!e.workerUnavailable)throw e;
+      const gen=SvgGeometry.process(prepared);let step,last=performance.now();
+      while(!(step=gen.next()).done){abort();if(performance.now()-last>8){onProgress({...step.value,stage:'Calculating curves'});await new Promise(resolve=>setTimeout(resolve,0));abort();last=performance.now();}}
+      return step.value;
+    }
+  }
+  window.SvgImport={parse,parseAsync,prepare,splitPath};
 })();

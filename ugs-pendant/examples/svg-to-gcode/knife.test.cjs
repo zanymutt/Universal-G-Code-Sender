@@ -11,7 +11,7 @@ test('90 degree swivel holds ideal blade tip on vertex with exact offset radius'
 });
 test('Dense circle samples stay at cut Z without repeated corner lifts',()=>{
  const pts=Array.from({length:360},(_,i)=>[10*Math.cos(i*Math.PI/180),10*Math.sin(i*Math.PI/180)]);
- const j=C.plan(doc(pts,true),base);assert.equal(j.knife.swivels,0);assert(j.knife.runs[0].moves.some(m=>m.kind==='curve'));assert(j.knife.runs[0].moves.filter(m=>m.kind==='curve').every(m=>m.z===base.final));
+ const j=C.plan(doc(pts,true),base);assert.equal(j.knife.swivels,0);assert(j.knife.runs[0].moves.some(m=>m.kind==='transition'));assert(j.knife.runs[0].moves.filter(m=>m.kind==='transition').every(m=>m.z===base.final));
 });
 test('Repeated open passes preserve heading and return only at safe Z',()=>{
  const o={...base,knifePasses:2};const j=C.plan(doc([[0,0],[10,0],[10,10]]),o);assert.deepEqual(j.depths,[-2,-2]);const a=j.knife.runs[1];near(a.moves[0].x,0);near(a.moves[0].y,.45);assert(a.moves.some(m=>m.kind==='alignment'));
@@ -25,7 +25,7 @@ test('Lead-in uses lighter Z, correct heading and visible compensated bounds',()
 });
 test('Reversal, locked starts, closed overlap and 180 degree turns remain finite',()=>{
  const d=doc([[0,0],[10,0],[10,10],[0,10]],true),o={...base,overlap:2};const j=C.plan(d,o,{p:2},{p:true});near(j.paths[0].points[0].x,10);near(j.paths[0].points.at(-1).y,8);assert.equal(j.knife.swivels,4);assert(!/NaN|Infinity/.test(C.gcode(j,o)));
- const u=C.plan(doc([[0,0],[10,0],[0,0]]),base);assert.equal(u.knife.swivels,1);assert(u.knife.runs[0].moves.filter(m=>m.kind==='swivel').length>=36);
+ const u=C.plan(doc([[0,0],[10,0],[0,0]]),base);assert.equal(u.knife.swivels,1);const arc=u.knife.runs[0].moves.filter(m=>m.kind==='swivel');assert(arc.length>=12);for(let i=1;i<arc.length;i++){const mid={x:(arc[i-1].x+arc[i].x)/2,y:(arc[i-1].y+arc[i].y)/2};assert(base.knifeOffset-Math.hypot(mid.x-10,mid.y)<=.00501);}
 });
 test('Reject missing force calibration, invalid settings and tool-on commands',()=>{
  for(const bad of [{final:NaN},{knifeSwivelZ:undefined},{knifeOffset:0},{knifeOffset:101},{knifePasses:1.5},{knifePasses:1001},{knifeAngle:0},{knifeAngle:181},{knifeLead:-1},{knifeFeed:0},{knifeSwivelZ:-3},{safe:-1},{knifeHeading:181},{tool:'M3',power:10,powerMax:100}])assert.throws(()=>C.plan(doc([[0,0],[10,0]]),{...base,...bad}),JSON.stringify(bad));
@@ -67,7 +67,7 @@ test('Corner lift off preserves XY swivel compensation at each progressive Z',()
  const o={...base,knifeLift:false,knifeAlign:false,knifeSwivelZ:NaN,surface:0,final:-1.2,step:.5};
  const j=C.plan(doc([[0,0],[10,0],[10,10]]),o);
  for(const [i,r] of j.knife.runs.entries()){assert(!r.moves.some(m=>m.kind==='lift'));assert(r.moves.some(m=>m.kind==='swivel'));assert(r.moves.filter(m=>m.kind==='swivel').every(m=>m.z===j.depths[i]));}
- assert(!C.gcode(j,o).includes('NaN'));assert(C.gcode(j,o).includes('Corner swivel Z lift OFF'));
+ assert(!C.gcode(j,o).includes('NaN'));assert(C.gcode(j,o).includes('lift OFF'));
  const aligned=C.plan(doc([[0,0],[10,0],[10,10]]),{...o,knifeAlign:true,knifeHeading:90,knifeSwivelZ:0});
  assert(aligned.knife.runs[0].moves.some(m=>m.kind==='alignment'&&m.z===0));assert(!aligned.knife.runs[0].moves.some(m=>m.kind==='lift'));
 });

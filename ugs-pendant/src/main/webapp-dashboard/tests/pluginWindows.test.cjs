@@ -52,3 +52,39 @@ test("only literal true opts in; activation preserves window identities", () => 
   assert.equal(activated.frontKey, state.frontKey);
   assert.equal(activated.windows, other.windows);
 });
+test("minimize keeps the window mounted, hands the front to a visible sibling, restore raises it", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  const min = reduce(b, { type: "minimize", key: b.frontKey });
+  assert.equal(min.windows.length, 2);
+  assert.equal(min.windows[1].minimized, true);
+  assert.equal(min.windows[0], b.windows[0]);
+  assert.equal(min.frontKey, a.frontKey);
+  const restored = reduce(min, { type: "restore", key: b.frontKey });
+  assert.equal(restored.windows[1].minimized, false);
+  assert.equal(restored.windows[1].focusRequest, 1);
+  assert.equal(restored.frontKey, b.frontKey);
+});
+test("minimizing the only window leaves no front window; redundant minimize/restore are no-ops", () => {
+  const a = open(initial);
+  const min = reduce(a, { type: "minimize", key: a.frontKey });
+  assert.equal(min.frontKey, null);
+  assert.equal(reduce(min, { type: "minimize", key: a.windows[0].key }), min);
+  assert.equal(reduce(a, { type: "restore", key: a.frontKey }), a);
+});
+test("relaunching a minimized plugin restores it instead of opening a second window", () => {
+  const min = reduce(open(initial), { type: "minimize", key: 0 });
+  const again = open(min);
+  assert.equal(again.windows.length, 1);
+  assert.equal(again.windows[0].minimized, false);
+  assert.equal(again.frontKey, 0);
+});
+test("a minimized window can't be activated; closing the front skips minimized siblings", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  const c = open(b, { ...plugin, id: "third" });
+  const min = reduce(c, { type: "minimize", key: b.frontKey });
+  assert.equal(reduce(min, { type: "activate", key: b.frontKey }), min);
+  const closed = reduce(min, { type: "close", key: c.frontKey });
+  assert.equal(closed.frontKey, a.frontKey);
+});

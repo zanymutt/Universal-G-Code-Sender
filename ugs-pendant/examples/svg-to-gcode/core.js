@@ -7,7 +7,7 @@
   const length = p => p.slice(1).reduce((s,a,i)=>s+dist(p[i],a),0);
   // Remove nearby redundant samples without flattening real corners. The
   // replacement chord must remain within 0.001 mm of every removed sample.
-  function cleanPoints(points,closed,threshold=0) {
+  function cleanPoints(points,closed,threshold=0,maxDeviation=.001) {
     if(!Number.isFinite(threshold)||threshold<0||threshold>1)throw Error('Node cleanup must be from 0 to 1 mm.');
     if(!threshold||points.length<3)return points;
     const source=closed?[...points,points[0]]:points,result=[source[0]],pending=[];
@@ -16,7 +16,7 @@
       const t=l?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l)):0;
       return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);
     };
-    const tolerance=Math.min(threshold,.001);
+    const tolerance=Math.min(threshold,maxDeviation);
     for(let i=1;i<source.length-1;i++){
       const a=result.at(-1),b=source[i],c=source[i+1];
       if(pending.length<128&&(dist(a,b)<threshold||dist(b,c)<threshold)&&deviation(b,a,c)<=tolerance&&pending.every(q=>deviation(q,a,c)<=tolerance))pending.push(b);
@@ -25,6 +25,20 @@
     result.push(source.at(-1));if(closed)result.pop();
     return result.length<(closed?3:2)?points:result;
   }
+  function simplify(points,tolerance){
+    if(!tolerance||points.length<3)return points;
+    const keep=new Set([0,points.length-1]),stack=[[0,points.length-1]];
+    while(stack.length){const [a,b]=stack.pop(),p=points[a],q=points[b],dx=q.x-p.x,dy=q.y-p.y,l=dx*dx+dy*dy;let max=tolerance,index=-1;
+      for(let i=a+1;i<b;i++){const r=points[i],t=l?Math.max(0,Math.min(1,((r.x-p.x)*dx+(r.y-p.y)*dy)/l)):0,d=Math.hypot(r.x-p.x-t*dx,r.y-p.y-t*dy);if(d>max){max=d;index=i;}}
+      if(index>=0){keep.add(index);stack.push([a,index],[index,b]);}
+    }
+    const result=[...keep].sort((a,b)=>a-b).map(i=>points[i]);
+    return dist(points[0],points.at(-1))<1e-9&&result.length<4?points:result;
+  }
+  function modal(lines){let feed=null;return lines.map(line=>{
+    if(line.startsWith('('))return line;
+    return line.replace(/ F([\d.]+)/g,(word,value)=>{if(value===feed)return '';feed=value;return word;});
+  }).join('\n')+'\n';}
   function inside(p, poly) {
     let hit=false;
     for(let i=0,j=poly.length-1;i<poly.length;j=i++) {
@@ -50,16 +64,18 @@
   }
   function transform(doc,o) {
     const r=o.rotation*Math.PI/180, c=Math.cos(r)*o.scale/100,s=Math.sin(r)*o.scale/100;
-    const tr=p=>({x:c*p.x-s*p.y,y:s*p.x+c*p.y});
+    const vector=v=>v?{x:(c*v.x-s*v.y)/(o.scale/100),y:(s*v.x+c*v.y)/(o.scale/100)}:null;
+    const tr=p=>({...p,x:c*p.x-s*p.y,y:s*p.x+c*p.y,...(p.tin?{tin:vector(p.tin)}:{}),...(p.tout?{tout:vector(p.tout)}:{})});
     const paths=doc.paths.map(p=>({...p,points:p.points.map(tr)}));
     const b=bounds((o.originBounds==='page'?doc.page:paths.flatMap(p=>p.points)).map(p=>o.originBounds==='page'?tr(p):p));
     let origin;
     if(o.origin==='custom') origin={x:o.originX,y:o.originY};
     else origin={x:o.origin.includes('left')?b.minX:o.origin.includes('right')?b.maxX:(b.minX+b.maxX)/2,y:o.origin.includes('top')?b.maxY:o.origin.includes('bottom')?b.minY:(b.minY+b.maxY)/2};
-    return {paths:paths.map(p=>({...p,points:p.points.map(q=>({x:q.x-origin.x,y:q.y-origin.y}))})),origin};
+    return {paths:paths.map(p=>({...p,points:p.points.map(q=>({...q,x:q.x-origin.x,y:q.y-origin.y}))})),origin};
   }
   function orient(p,position,o,locks,directions) {
     let pts=p.points.slice(),reverse=false, index=0;
+    const flip=()=>{pts=pts.map(q=>({...q,...(q.tout?{tin:{x:-q.tout.x,y:-q.tout.y}}:{}),...(q.tin?{tout:{x:-q.tin.x,y:-q.tin.y}}:{})}));};
     const lock=locks[p.id], direction=directions[p.id];
     if(lock!==undefined) index=Math.min(pts.length-1,Math.max(0,lock));
     else if(o.start==='auto') {
@@ -69,9 +85,9 @@
       } else if(direction===undefined && o.reverse && dist(position,pts.at(-1))<dist(position,pts[0])) reverse=true;
     }
     if(p.closed) pts=pts.slice(index).concat(pts.slice(0,index));
-    else if(reverse || (lock!==undefined && index>0)) pts.reverse();
-    if(p.closed && direction===true) pts=[pts[0],...pts.slice(1).reverse()];
-    if(!p.closed && direction!==undefined && lock===undefined && direction) pts.reverse();
+    else if(reverse || (lock!==undefined && index>0)) {pts.reverse();flip();}
+    if(p.closed && direction===true){pts=[pts[0],...pts.slice(1).reverse()];flip();}
+    if(!p.closed && direction!==undefined && lock===undefined && direction) {pts.reverse();flip();}
     if(p.closed) pts.push({...pts[0]});
     return {...p,points:pts};
   }
@@ -83,7 +99,7 @@
     for(let i=1;i<p.points.length && remaining>1e-9;i++) {
       const a=p.points[i-1],b=p.points[i],d=dist(a,b);
       if(!d) continue;
-      const t=Math.min(1,remaining/d);points.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});remaining-=d*t;
+      const t=Math.min(1,remaining/d);points.push(t===1?{...b}:{x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,tin:{x:(b.x-a.x)/d,y:(b.y-a.y)/d},tout:{x:(b.x-a.x)/d,y:(b.y-a.y)/d}});remaining-=d*t;
     }
     return {...p,points};
   }
@@ -98,6 +114,7 @@
     if(!['plotter','knife','laser'].includes(o.mode)||!['none','M3','M4'].includes(o.tool)) throw Error('Invalid tool mode.');
     if(o.mode==='laser' && o.tool==='none') throw Error('Select M3 or M4 for laser mode.');
     if(o.tool!=='none' && (o.power<0||o.powerMax<=0||o.power>o.powerMax)) throw Error('S value must be between zero and the configured maximum.');
+    if(o.outputTolerance!==undefined&&(!Number.isFinite(o.outputTolerance)||o.outputTolerance<0||o.outputTolerance>1))throw Error('Output tolerance must be 0–1 mm.');
     const z=depths(o), transformed=transform(doc,o);
     if(transformed.paths.some(p=>p.points.some(q=>![q.x,q.y].every(v=>Number.isFinite(v)&&Math.abs(v)<=1000000))))throw Error('Transformed artwork exceeds the supported coordinate range.');
     const remaining=transformed.paths.map(p=>({...p,area:p.closed?area(p.points):0}));
@@ -151,15 +168,16 @@
     return o.mode==='knife'?compensateKnife(job,o):job;
   }
   // Passive drag knife: the holder is offset ahead of the blade along its heading.
-  // Each segment ends at tip + offset * incoming tangent. A pivot arc centered
-  // on that tip aligns the next segment. Small sampled turns stay at cutting Z.
+  // Analytic one-sided tangents retain real corners; smooth samples need no pivot.
+  // Arc creation and Z lift use independent angle thresholds.
   function knifeSettings(o) {
     const usesSwivelZ=o.knifeLift!==false||o.knifeAlign!==false;
     if(usesSwivelZ&&!Number.isFinite(o.knifeSwivelZ))throw Error('Enter a valid contact Z for swivel movements.');
     for(const k of ['knifeOffset',...(usesSwivelZ?['knifeSwivelZ']:[]),'knifeAngle','knifeFeed','knifePasses',...(o.knifeAlign!==false?['knifeLead','knifeHeading']:[])])
       if(!Number.isFinite(o[k]))throw Error('Enter a calibrated/valid value for '+k+'.');
     if(o.knifeOffset<.0001||o.knifeOffset>100)throw Error('Blade offset must be from 0.0001 to 100 mm.');
-    if(o.knifeAngle<1||o.knifeAngle>180)throw Error('Corner threshold must be from 1 to 180 degrees.');
+    if(o.knifeArcAngle!==undefined&&(!Number.isFinite(o.knifeArcAngle)||o.knifeArcAngle<0||o.knifeArcAngle>180))throw Error('Swivel arc angle must be 0–180 degrees.');
+    if(o.knifeAngle<1||o.knifeAngle>180)throw Error('Swivel lift angle must be from 1 to 180 degrees.');
     if(o.knifeFeed<.001||o.knifeFeed>1000000)throw Error('Swivel feed must be positive and at most 1000000 mm/min.');
     if(o.knifeAlign!==false&&(o.knifeLead<0||o.knifeLead>1000))throw Error('Alignment lead-in must be from 0 to 1000 mm.');
     if(o.knifeAlign!==false&&(o.knifeHeading< -180||o.knifeHeading>180))throw Error('Initial blade heading must be from -180 to 180 degrees.');
@@ -173,12 +191,15 @@
     const shift=(p,a)=>({x:p.x+d*Math.cos(a),y:p.y+d*Math.sin(a)});
     const turn=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
     // Bound chord deviation and angle even for very small offsets.
-    const arcStep=Math.min(Math.PI/36,2*Math.acos(Math.max(-1,1-.005/d)));
+    const arcStep=Math.min(Math.PI/36,(o.spacing??.5)/d,2*Math.acos(Math.max(-1,1-.001/d)));
     let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
     for(const p of job.paths) {
       const pts=p.points.filter((v,i,a)=>i===0||dist(v,a[i-1])>1e-9);
       if(pts.length<2)throw Error('Path '+p.number+' is too short for knife compensation.');
       const angles=pts.slice(1).map((v,i)=>Math.atan2(v.y-pts[i].y,v.x-pts[i].x));
+      const direction=(q,key,fallback)=>q[key]?Math.atan2(q[key].y,q[key].x):fallback;
+      const incoming=pts.map((q,i)=>direction(q,'tin',angles[Math.max(0,i-1)]));
+      const outgoing=pts.map((q,i)=>direction(q,'tout',angles[Math.min(i,angles.length-1)]));
       for(let pass=0;pass<job.depths.length;pass++) {
         const cutZ=job.depths[pass],moves=[];let swivels=0;
         const add=(q,z,kind)=>{
@@ -192,7 +213,7 @@
           const count=Math.ceil(Math.abs(delta)/arcStep);
           for(let n=1;n<=count;n++)add(shift(center,from+delta*n/count),z,kind);
         };
-        const align=o.knifeAlign!==false,leadLength=align?o.knifeLead:0,first=angles[0],lead={x:pts[0].x-leadLength*Math.cos(first),y:pts[0].y-leadLength*Math.sin(first)};
+        const align=o.knifeAlign!==false,leadLength=align?o.knifeLead:0,first=outgoing[0],lead={x:pts[0].x-leadLength*Math.cos(first),y:pts[0].y-leadLength*Math.sin(first)};
         const start=shift(lead,align?heading:first);
         travel+=dist(previous,start);
         add(start,o.safe,'travel');
@@ -203,17 +224,34 @@
         }
         add(shift(pts[0],first),cutZ,'lower');
         for(let i=0;i<angles.length;i++) {
-          const end=shift(pts[i+1],angles[i]);add(end,cutZ,'cut');
+          const sweep=Math.abs(turn(outgoing[i],incoming[i+1]));
+          const tight=sweep>1e-6&&dist(pts[i],pts[i+1])/sweep<d;
+          const end=shift(pts[i+1],incoming[i+1]);add(end,cutZ,tight?'curve':'cut');
           if(i+1===angles.length)continue;
-          const delta=Math.abs(turn(angles[i],angles[i+1]));
-          const sharp=delta>=o.knifeAngle*Math.PI/180-1e-10,lift=sharp&&o.knifeLift!==false;
-          if(sharp)swivels++;
-          if(lift)add(end,o.knifeSwivelZ,'lift');
-          arc(pts[i+1],angles[i],angles[i+1],lift?o.knifeSwivelZ:cutZ,sharp?'swivel':'curve');
-          if(lift)add(shift(pts[i+1],angles[i+1]),cutZ,'lower');
+          const delta=Math.abs(turn(incoming[i+1],outgoing[i+1]));
+          const makeArc=delta>(o.knifeArcAngle??10)*Math.PI/180+1e-10;
+          const lift=makeArc&&delta>=o.knifeAngle*Math.PI/180-1e-10&&o.knifeLift!==false;
+          if(makeArc){
+            swivels++;
+            if(lift)add(end,o.knifeSwivelZ,'lift');
+            arc(pts[i+1],incoming[i+1],outgoing[i+1],lift?o.knifeSwivelZ:cutZ,'swivel');
+            if(lift)add(shift(pts[i+1],outgoing[i+1]),cutZ,'lower');
+          }else if(delta>1e-10){
+            // Below the arc threshold use a straight connection, kept separate
+            // from smooth-run simplification so it cannot erase a corner.
+            add(shift(pts[i+1],outgoing[i+1]),cutZ,'transition');
+          }
         }
-        heading=angles.at(-1);previous=shift(pts.at(-1),heading);add(previous,o.safe,'retract');
-        runs.push({id:p.id,number:p.number,pass:pass+1,moves,swivels});
+        heading=incoming.at(-1);previous=shift(pts.at(-1),heading);add(previous,o.safe,'retract');
+        const optimized=[];
+        for(let i=0;i<moves.length;){
+          if(moves[i].kind!=='cut'){optimized.push(moves[i++]);continue;}
+          const start=i;while(i<moves.length&&moves[i].kind==='cut'&&moves[i].z===moves[start].z)i++;
+          const section=moves.slice(Math.max(0,start-1),i);
+          const reduced=simplify(section,o.outputTolerance??.01);
+          optimized.push(...reduced.slice(start?1:0));
+        }
+        runs.push({id:p.id,number:p.number,pass:pass+1,moves:optimized,swivels});
       }
     }
     job.knife={runs,bounds:{minX,minY,maxX,maxY},swivels:runs.reduce((n,r)=>n+r.swivels,0),initialHeading:o.knifeHeading};
@@ -226,7 +264,7 @@
     const out=['(SVG to G-code - compensated passive drag knife)',
       '(On a floating Z axis, progressive Z can change pressure rather than material depth)',
       `(Offset ${num(o.knifeOffset)} mm; final Z ${num(o.final)}; step ${num(o.step)}; swivel Z ${o.knifeLift!==false||o.knifeAlign!==false?num(o.knifeSwivelZ):'unused'})`,
-      `(Corner swivel Z lift ${o.knifeLift!==false?'ON':'OFF'})`,
+      `(Swivel arc above ${num(o.knifeArcAngle??10)} degrees; lift threshold ${num(o.knifeAngle)} degrees; lift ${o.knifeLift!==false?'ON':'OFF'})`,
       ...(o.knifeAlign!==false?[
         `(Before first pass: blade tip lies ${num(o.knifeHeading+180)} degrees CCW from +X relative to holder center)`,
         '(Entry alignment ON; blade direction is assumed unchanged during raised travel)',
@@ -244,17 +282,17 @@
         else if(m.kind==='retract')out.push('G0 Z'+num(m.z));
         else if(['lower','lift'].includes(m.kind)) {
           if(!prev||Math.abs(prev.z-m.z)>1e-9)out.push('G1 Z'+num(m.z)+' F'+num(o.plunge));
-        } else out.push('G1 X'+num(m.x)+' Y'+num(m.y)+' F'+num(['cut','curve'].includes(m.kind)?o.feed:o.knifeFeed));
+        } else out.push('G1 X'+num(m.x)+' Y'+num(m.y)+' F'+num(['cut','curve','transition'].includes(m.kind)?o.feed:o.knifeFeed));
         prev=m;
       }
     }
-    out.push('(End - remains at safe Z)');return out.join('\n')+'\n';
+    out.push('(End - remains at safe Z)');return modal(out);
   }
 
   const num = n => Number(n.toFixed(4)).toString();
   function gcode(job,o) {
     if(o.mode==='knife')return knifeGcode(job,o);
-    const out=['(SVG to G-code 0.1 - millimeters, absolute work coordinates)','(Finish all passes on each path; Z zero must match surface setting)','G21','G90','G17','G94'];
+    const out=['(SVG to G-code 0.6.0 - millimeters, absolute work coordinates)','(Finish all passes on each path; Z zero must match surface setting)','G21','G90','G17','G94'];
     const enabled=o.tool!=='none';
     if(enabled)out.push('M5');
     out.push('G0 Z'+num(o.safe));
@@ -264,14 +302,14 @@
         if(enabled)out.push('M5');
         out.push('G0 Z'+num(o.safe),'G0 X'+num(p.points[0].x)+' Y'+num(p.points[0].y),'G1 Z'+num(z)+' F'+num(o.plunge));
         if(enabled)out.push(o.tool+' S'+num(o.power));
-        p.points.slice(1).forEach((q,j)=>out.push('G1 X'+num(q.x)+' Y'+num(q.y)+(j===0?' F'+num(o.feed):'')));
+        simplify(p.points,o.outputTolerance??.01).slice(1).forEach((q,j)=>out.push('G1 X'+num(q.x)+' Y'+num(q.y)+(j===0?' F'+num(o.feed):'')));
         if(enabled)out.push('M5');
         out.push('G0 Z'+num(o.safe));
       });
     });
     if(enabled)out.push('M5');
-    out.push('(End - remains at safe Z)');return out.join('\n')+'\n';
+    out.push('(End - remains at safe Z)');return modal(out);
   }
-  const api={cleanPoints,bounds,area,depths,transform,plan,gcode,dist,length};
+  const api={simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,dist,length};
   if(typeof module!=='undefined')module.exports=api;else root.SvgCam=api;
 })(typeof window==='undefined'?globalThis:window);

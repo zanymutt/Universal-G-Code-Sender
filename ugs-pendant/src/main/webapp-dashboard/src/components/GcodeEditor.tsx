@@ -195,10 +195,14 @@ const GcodeEditor = () => {
   // also covers the "armed run-from, not yet started" case, which has no
   // currently-running line at all (0 = none, matching setCurrentRunLine's
   // own "nothing highlighted" convention).
+  // The visualizer's simulation drives the same highlight (and scroll-follow)
+  // when no real job is running - the two can't overlap, since the simulation
+  // exits itself the moment a job starts.
+  const simLine = useAppSelector((state) => state.ui.simLine);
   const currentRunLine =
     currentState === "RUN" || currentState === "HOLD" || currentState === "CHECK"
       ? fileStatus.lastCompletedLineNumber
-      : 0;
+      : simLine;
 
   const editorContainerRef = useRef<HTMLDivElement | null>(null);
   const viewRef = useRef<EditorView | null>(null);

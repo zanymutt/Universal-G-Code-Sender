@@ -6,6 +6,12 @@ export type ToolpathSegment = {
   rapid: boolean;
   arc: boolean;
   lineNumber: number;
+  // The modal feed rate for this segment in the file's own units per minute, and
+  // whether those units (coordinates and feed) are inches - together they let the
+  // simulation time a cut as length / feed. Optional: older backends don't send
+  // them, and the simulation then falls back to a uniform made-up clock.
+  feedRate?: number;
+  inches?: boolean;
 };
 
 export const getToolpath = (): Promise<ToolpathSegment[]> => {

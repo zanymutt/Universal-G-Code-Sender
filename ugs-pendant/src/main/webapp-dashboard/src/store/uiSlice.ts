@@ -32,6 +32,11 @@ type UiState = {
   // segment without GcodeEditor and Visualizer3D needing to know about each
   // other directly.
   editorCursorLine: number;
+  // The line the visualizer's toolpath simulation has most recently drawn (in
+  // the same line-number space as a running job's lastCompletedLineNumber), or
+  // 0 when no simulation is active/started. GcodeEditor highlights and scrolls
+  // to it exactly like the live "currently running" line.
+  simLine: number;
   // Bumped by socketMiddleware specifically on FileState.FILE_LOADED (see
   // its comment) - Visualizer3D watches this instead of (well, in addition
   // to) fileStatus.fileName, since fileName already updates on the much
@@ -58,6 +63,7 @@ const initialState: UiState = {
   splitRight: "edit",
   runFromLine: 0,
   editorCursorLine: 0,
+  simLine: 0,
   toolpathVersion: 0,
   editorIsDirty: false,
   bottomView: "console",
@@ -90,6 +96,9 @@ const uiSlice = createSlice({
     },
     setEditorCursorLine: (state, action: { payload: number }) => {
       state.editorCursorLine = action.payload;
+    },
+    setSimLine: (state, action: { payload: number }) => {
+      state.simLine = action.payload;
     },
     bumpToolpathVersion: (state) => {
       state.toolpathVersion += 1;

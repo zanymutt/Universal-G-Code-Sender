@@ -134,6 +134,11 @@ function gcodeToSegments(text, armedFromCommand = 0) {
   // plunge preamble, just enough to see *something* retracts/re-plunges
   // in dev before checking the real thing.
   let plungeInserted = armedFromCommand <= 0;
+  // The modal F word, stamped onto every segment as feedRate (in the file's
+  // own units per minute) the way the real backend does - the dashboard's
+  // toolpath simulation derives its playback timing from it. Real files here
+  // are all metric, so inches is always false.
+  let feed = 0;
 
   const pushSegment = (segment) => {
     if (segment.lineNumber < armedFromCommand) return;
@@ -145,10 +150,12 @@ function gcodeToSegments(text, armedFromCommand = 0) {
         rapid: false,
         arc: false,
         lineNumber: segment.lineNumber,
+        feedRate: feed,
+        inches: false,
       });
       plungeInserted = true;
     }
-    segments.push(segment);
+    segments.push({ ...segment, feedRate: feed, inches: false });
   };
 
   const getNum = (line, letter) => {
@@ -160,6 +167,9 @@ function gcodeToSegments(text, armedFromCommand = 0) {
     const line = raw.replace(/;.*/, "").replace(/\([^)]*\)/g, "").trim();
     if (!line || /^#/.test(line) || /^o\d/i.test(line)) continue;
     lineNumber++;
+
+    const nf = getNum(line, "F");
+    if (nf !== null) feed = nf;
 
     const gMatch = line.match(/G(\d+)/);
     const g = gMatch ? parseInt(gMatch[1], 10) : lastG;

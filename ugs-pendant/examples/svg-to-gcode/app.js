@@ -1,11 +1,20 @@
 (function(){
   'use strict';
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
-  const numeric=['feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
-  const knifeNumeric=['knifeOffset','knifeSwivelZ','knifePasses','knifeAngle','knifeFeed','knifeLead','knifeHeading'];
+  const importFields=['dpi','spacing','cleanup','curveSegments','tolerance','equalDistance','mergeDistance'];
+  const numeric=['outputTolerance','feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
+  const knifeNumeric=['knifeArcAngle','knifeOffset','knifeSwivelZ','knifePasses','knifeAngle','knifeFeed','knifeLead','knifeHeading'];
   const choices=['mode','tool','origin','originBounds','order','start'];
+  const tabs=[...document.querySelectorAll('[role=tab]')];
+  function showTab(tab){tabs.forEach(t=>{const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;});window.Dropdowns?.refresh();}
+  tabs.forEach((tab,i)=>{tab.onclick=()=>showTab(tab);tab.onkeydown=e=>{let index;if(e.key==='ArrowRight')index=(i+1)%tabs.length;else if(e.key==='ArrowLeft')index=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;e.preventDefault();showTab(tabs[index]);tabs[index].focus({preventScroll:true});};});
   let documentData=null,svgText='',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);return o;}
+  let importController=null;
+  function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
+  function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
+  function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
+  $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or click Reimport.');};
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
@@ -44,7 +53,7 @@
         const flush=()=>{if(group.length>1)el('polyline',{points:group.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:kind==='travel'?'#718196':kind==='cut'?'#64a9ff':'#ffa85c','stroke-width':run.id===$('selected').value?1.5:1,'vector-effect':'non-scaling-stroke','stroke-dasharray':kind==='cut'?'5 3':kind==='travel'?'4 4':'none','data-knife-move':kind,opacity:run.id===$('selected').value?.8:.55},holderLayer);};
         for(const m of run.moves){
           if(['lower','lift','retract'].includes(m.kind))continue;
-          const next=m.kind==='travel'?'travel':['cut','curve'].includes(m.kind)?'cut':'swivel';
+          const next=m.kind==='travel'?'travel':['cut','transition'].includes(m.kind)?'cut':'swivel';
           if(next!==kind){flush();group=[previous];kind=next;}
           group.push(m);previous=m;
         }
@@ -74,22 +83,29 @@
       message((job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
     }catch(e){$('passes').textContent='Check settings';$('summary').textContent='Preview invalid — correct settings before generating.';$('preview').replaceChildren();message(e.message,true);}finally{window.Dropdowns?.refresh();}
   }
-  function importSvg(){
+  async function importSvg(){
+    const request=++loadId;importController?.abort();const controller=new AbortController();importController=controller;
+    const source=svgText,options=Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),started=performance.now();
+    busy('Opening SVG…');
     invalidate();job=null;documentData=null;locks={};directions={};$('generate').disabled=true;$('selected').replaceChildren();
     for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=true;
     try{
-      documentData=SvgImport.parse(svgText,{dpi:Number($('dpi').value),spacing:Number($('spacing').value),cleanup:Number($('cleanup').value)});
+      const imported=await SvgImport.parseAsync(source,options,{signal:controller.signal,onProgress:p=>{if(request===loadId)busy(p.stage+(p.total?' · path '+p.path+' / '+p.total:''),p.fraction);}});
+      if(request!==loadId)return;
+      documentData=imported;
       importDirty=false;
       for(const p of documentData.paths){const op=document.createElement('option');op.value=p.id;op.textContent=`Path ${documentData.paths.indexOf(p)+1} - `+p.name+(p.closed?' (closed)':' (open)');$('selected').append(op);}
       for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=false;
-      $('pathDirection').value='auto';update();
-    }catch(e){$('preview').replaceChildren();$('summary').textContent='Import failed';message(e.message,true);}
+      $('pathDirection').value='auto';busy('Building preview…',1);await new Promise(resolve=>setTimeout(resolve,0));if(request!==loadId)return;update();
+      if(job)$('summary').textContent+=' · loaded in '+((performance.now()-started)/1000).toFixed(2)+' s';
+    }catch(e){if(request!==loadId||e.name==='AbortError')return;$('preview').replaceChildren();$('summary').textContent='Import failed';message(e.message,true);}
+    finally{if(request===loadId){importController=null;endBusy();}}
   }
   $('file').addEventListener('change',async()=>{
-    const file=$('file').files[0];if(!file)return;const request=++loadId;
+    const file=$('file').files[0];if(!file)return;cancelImport();const request=++loadId;busy('Reading '+file.name+'…');
     invalidate();documentData=null;job=null;$('generate').disabled=true;$('reimport').disabled=true;$('preview').replaceChildren();
-    if(file.size>5000000){message('SVG exceeds 5 MB.',true);return;}
-    try{const text=await file.text();if(request!==loadId)return;svgText=text;$('reimport').disabled=false;importSvg();}catch(e){invalidate();message(e.message,true);}
+    if(file.size>5000000){endBusy();message('SVG exceeds 5 MB.',true);return;}
+    try{const text=await file.text();if(request!==loadId)return;svgText=text;$('reimport').disabled=false;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
   });
   $('reimport').onclick=importSvg;
   $('example').onclick=()=>{
@@ -97,7 +113,7 @@
     svgText='<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="outer" x="5" y="5" width="70" height="50" rx="4"/><circle id="hole" cx="20" cy="20" r="6"/><path id="wave" d="M32 20 C40 5 55 35 65 18 M15 42 Q40 22 65 42"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
-  ['dpi','spacing','cleanup'].forEach(id=>$(id).addEventListener('input',()=>{importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply SVG import settings.');}));
+  importFields.forEach(id=>$(id).addEventListener('input',()=>{cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply SVG import settings.');}));
   [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift'].forEach(id=>$(id).addEventListener('input',()=>{
     if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';update();
   }));
@@ -131,7 +147,7 @@
     update();message('Selection applied. Manual starts: '+Object.keys(locks).length+'.');
   });
   $('generate').onclick=()=>{
-    try{const o=settings();job=SvgCam.plan(documentData,o,locks,directions);code=SvgCam.gcode(job,o);$('output').value=code;$('save').disabled=window.parent===window||savePending;$('copy').disabled=false;message(`Generated ${code.split('\n').length-1} lines. Inspect the paths and machine Z reference before running. Nothing has been sent.`);}
+    try{if(!job||importDirty)throw Error('Import and check the preview before generating.');const o=settings();code=SvgCam.gcode(job,o);$('output').value=code;$('save').disabled=window.parent===window||savePending;$('copy').disabled=false;message(`Generated ${code.split('\n').length-1} lines. Inspect the paths and machine Z reference before running. Nothing has been sent.`);}
     catch(e){invalidate();message(e.message,true);}
   };
 
@@ -184,7 +200,7 @@
     return new Promise((resolve,reject)=>{const id=++requestId;pending.set(id,{resolve,reject});window.parent.postMessage({type:'fluid-request',id,method,params},'*');});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','dpi','spacing','cleanup'];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse',...importFields];
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));
     presets.forEach((p,i)=>$('presets').append(new Option(p.name,String(i))));
@@ -202,9 +218,10 @@
   };
   $('loadPreset').onclick=()=>{
     const preset=presets[Number($('presets').value)];if($('presets').value===''||!preset)return;
-    const oldDpi=$('dpi').value,oldSpacing=$('spacing').value,oldCleanup=$('cleanup').value;
+    const oldImport=JSON.stringify(importFields.map(k=>$(k).value));
+    for(const [k,v]of Object.entries({mergeDistance:.001,curveSegments:12,tolerance:.01,equalDistance:0,outputTolerance:.01}))$(k).value=preset.values[k]??v;
     $('cleanup').value=Object.hasOwn(preset.values,'cleanup')?preset.values.cleanup:'0';
-    if(preset.values.mode==='knife'){$('knifeAlign').checked=true;$('knifeLift').checked=true;knifeNumeric.forEach(k=>$(k).value=({knifeOffset:'0.45',knifePasses:'1',knifeAngle:'30',knifeFeed:'200',knifeLead:'0',knifeHeading:'0'})[k]??'');}
+    if(preset.values.mode==='knife'){$('knifeAlign').checked=true;$('knifeLift').checked=true;knifeNumeric.forEach(k=>$(k).value=({knifeArcAngle:'10',knifeOffset:'0.45',knifePasses:'1',knifeAngle:'30',knifeFeed:'200',knifeLead:'0',knifeHeading:'0'})[k]??'');}
     presetFields.forEach(k=>{if(Object.hasOwn(preset.values,k)){if($(k).type==='checkbox')$(k).checked=!!preset.values[k];else $(k).value=preset.values[k];}});
     let migrated=false;
     if(preset.values.mode==='knife'&&Object.hasOwn(preset.values,'knifeCutZ')){
@@ -213,7 +230,7 @@
       else {$('surface').value='';$('final').value='';}
     }
     $('presetName').value=preset.name;
-    if(svgText&&(oldDpi!==$('dpi').value||oldSpacing!==$('spacing').value||oldCleanup!==$('cleanup').value))importSvg();else update();
+    if(svgText&&oldImport!==JSON.stringify(importFields.map(k=>$(k).value)))importSvg();else update();
     message('Loaded preset: '+preset.name+(migrated?'. Previous fixed cut Z was kept as Surface and Final Z; repeats are preserved. Set Surface / Final / Step down for progressive passes.':''));
   };
   $('deletePreset').onclick=async()=>{

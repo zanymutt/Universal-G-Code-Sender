@@ -86,3 +86,26 @@
     border-top: 1px solid #2f3132;
   }
 }
+
+// Desktop layout has room for everything at once, so there the Machine/
+// Macros vs Overrides tabs are dropped: both panels stack, Overrides last,
+// under Spindle / Coolant at the bottom of the column. The panels are still
+// rendered as tabpanels (just both visible), so tablet/tabbed layouts keep
+// the tab behaviour. Mirrors the breakpoints in pages/TabletDashboard.scss -
+// desktop is "desktop" mode, or "auto" wider than the tablet range.
+@mixin rail-desktop {
+  .rightRail {
+    .rightRailTabs { display: none; }
+    // Bootstrap's reboot forces [hidden] to display:none !important.
+    .rightRailTabPanel[hidden] { display: flex !important; }
+    .rightRailTabPanel:last-child { flex: 0 0 auto; }
+    .rightRailOverrides {
+      padding-top: 8px;
+      border-top: 1px solid #2f3132;
+    }
+  }
+}
+html[data-dashboard-layout="desktop"] { @include rail-desktop; }
+@media (min-width: 1401px) {
+  html[data-dashboard-layout="auto"] { @include rail-desktop; }
+}

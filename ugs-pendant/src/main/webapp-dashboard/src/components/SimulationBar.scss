@@ -1,0 +1,131 @@
+// Floats along the bottom of the viewport. The right inset keeps it clear of
+// the zoom control (VisualizerZoomControl) on that edge.
+.simulationBar {
+  position: absolute;
+  left: 10px;
+  right: 76px;
+  bottom: 10px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: rgba(17, 18, 19, 0.82);
+  border: 1px solid #2f3132;
+  // Keeps a drag on the scrubber from scrolling the page.
+  touch-action: none;
+  user-select: none;
+  // Lets the layout below react to the bar's own width (a narrow split pane)
+  // rather than the whole window's.
+  container-type: inline-size;
+
+  .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+.simulationBarRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.simulationSpeeds .btn {
+  min-width: 48px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+// Narrow (e.g. the visualizer in a split pane): transport + line + close on the
+// first row, the speed buttons stretched across their own row beneath it.
+@container (max-width: 740px) {
+  .simulationSpeeds {
+    order: 3;
+    flex: 1 1 100%;
+
+    .btn {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+  }
+}
+
+.simulationReadout {
+  flex: 1 1 auto;
+  min-width: 80px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.simulationLine {
+  color: #c3c8cb;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.simulationClock {
+  color: #8a8f92;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulationRapidMenu {
+  padding: 12px;
+  width: 260px;
+  background: #1f2122;
+  border: 1px solid #2f3132;
+
+  .form-label {
+    color: #c3c8cb;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .form-text {
+    color: #8a8f92;
+    font-size: 0.75rem;
+  }
+}
+
+// Restyled from scratch (the native thumb is too small to grab on a
+// touchscreen): the scrubber is the main way to jump around a long job.
+.simulationScrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 32px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+
+  &::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #3a3d3f;
+  }
+  &::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 26px;
+    height: 26px;
+    margin-top: -11px; // centers the thumb on the 4px track
+    border-radius: 50%;
+    background: #e6edf1;
+    border: 2px solid #7bdcff;
+  }
+  &::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: #3a3d3f;
+  }
+  &::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #e6edf1;
+    border: 2px solid #7bdcff;
+  }
+}

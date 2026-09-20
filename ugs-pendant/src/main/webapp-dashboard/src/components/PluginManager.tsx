@@ -1,6 +1,7 @@
-import { createContext, ReactNode, useContext, useEffect, useReducer, useState } from "react";
+import { createContext, ReactNode, useContext, useEffect, useMemo, useReducer, useState } from "react";
 import { listPlugins, PluginInfo } from "../services/plugins";
 import PluginWindow from "./PluginWindow";
+import PluginTray from "./PluginTray";
 import { initialPluginWindows, pluginWindowsReducer } from "../store/pluginWindows";
 
 // Staggers each newly opened window a bit further down/right than the last
@@ -14,6 +15,10 @@ type PluginManagerValue = {
   plugins: PluginInfo[];
   refreshPlugins: () => void;
   openPlugin: (plugin: PluginInfo) => void;
+  // Per plugin id: "open" if any of its windows is showing, "minimized" if it
+  // has windows but all are minimized, absent if none. Lets the list panel
+  // mark which plugins are already running.
+  pluginStates: Record<string, "open" | "minimized">;
 };
 
 const PluginManagerContext = createContext<PluginManagerValue | null>(null);
@@ -63,8 +68,17 @@ const PluginManagerProvider = ({ children }: Props) => {
     dispatchWindow({ type: "close", key });
   };
 
+  const pluginStates = useMemo(() => {
+    const states: Record<string, "open" | "minimized"> = {};
+    for (const w of windowState.windows) {
+      if (!w.minimized) states[w.plugin.id] = "open";
+      else if (!states[w.plugin.id]) states[w.plugin.id] = "minimized";
+    }
+    return states;
+  }, [windowState.windows]);
+
   return (
-    <PluginManagerContext.Provider value={{ plugins, refreshPlugins, openPlugin }}>
+    <PluginManagerContext.Provider value={{ plugins, refreshPlugins, openPlugin, pluginStates }}>
       {children}
 
       {windowState.windows.map((openWindow, index) => (
@@ -79,8 +93,16 @@ const PluginManagerProvider = ({ children }: Props) => {
             y: 80 + STAGGER_STEP * (index % STAGGER_MAX_STEPS),
           }}
           onClose={() => closeWindow(openWindow.key)}
+          minimized={openWindow.minimized}
+          onMinimize={() => dispatchWindow({ type: "minimize", key: openWindow.key })}
         />
       ))}
+
+      <PluginTray
+        items={windowState.windows.filter(w => w.minimized)}
+        onRestore={(key) => dispatchWindow({ type: "restore", key })}
+        onClose={closeWindow}
+      />
     </PluginManagerContext.Provider>
   );
 };
