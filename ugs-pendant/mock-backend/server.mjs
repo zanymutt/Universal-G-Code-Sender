@@ -1,7 +1,7 @@
 import { createServer } from "http";
-import { readFileSync } from "fs";
+import { existsSync, readdirSync, readFileSync } from "fs";
 import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { dirname, extname, join, normalize } from "path";
 import { WebSocketServer } from "ws";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -237,6 +237,35 @@ function gcodeToSegments(text, armedFromCommand = 0) {
   return segments;
 }
 
+// The in-repo example plugins (../examples/<id>/plugin.json) stand in for the
+// real backend's ~/.ugs/dashboard-plugins folder, so plugin windows can be
+// exercised without a real UGS running.
+const pluginsDir = join(__dirname, "..", "examples");
+const pluginManifest = (id) => {
+  try {
+    return JSON.parse(readFileSync(join(pluginsDir, id, "plugin.json"), "utf8"));
+  } catch {
+    return null;
+  }
+};
+const listMockPlugins = () =>
+  readdirSync(pluginsDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && existsSync(join(pluginsDir, entry.name, "plugin.json")))
+    .map((entry) => {
+      const manifest = pluginManifest(entry.name);
+      const fileUrl = (file) => `/api/v1/plugins/${entry.name}/files/${file}`;
+      return {
+        id: entry.name,
+        name: manifest.name ?? entry.name,
+        description: manifest.description,
+        version: manifest.version,
+        entryUrl: fileUrl(manifest.entry ?? "index.html"),
+        iconUrl: manifest.icon ? fileUrl(manifest.icon) : undefined,
+        allowMultipleInstances: manifest.allowMultipleInstances === true,
+      };
+    });
+const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
+
 function json(res, data, status_ = 200) {
   res.writeHead(status_, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
   res.end(JSON.stringify(data));
@@ -247,6 +276,16 @@ const server = createServer((req, res) => {
   const p = url.pathname;
   console.log(req.method, p);
 
+  if (p === "/api/v1/plugins/list") return json(res, listMockPlugins());
+  const pluginFile = p.match(/^\/api\/v1\/plugins\/([^/]+)\/files\/(.+)$/);
+  if (pluginFile) {
+    const root = join(pluginsDir, decodeURIComponent(pluginFile[1]));
+    const file = normalize(join(root, decodeURIComponent(pluginFile[2])));
+    if (!file.startsWith(root) || !existsSync(file)) return json(res, { error: "not found" }, 404);
+    res.writeHead(200, { "Content-Type": MIME[extname(file)] ?? "application/octet-stream" });
+    return res.end(readFileSync(file));
+  }
+  if (p.match(/^\/api\/v1\/plugins\/[^/]+\/settings$/)) return json(res, {});
   if (p === "/api/v1/settings/getSettings") return json(res, settings);
   if (p === "/api/v1/settings/setSettings") {
     let body = "";
@@ -586,4 +625,5 @@ wss.on("connection", (ws) => {
   });
 });
 
-server.listen(8080, () => console.log("Mock UGS backend on :8080"));
+const port = Number(process.env.MOCK_PORT) || 8080;
+server.listen(port, () => console.log(`Mock UGS backend on :${port}`));

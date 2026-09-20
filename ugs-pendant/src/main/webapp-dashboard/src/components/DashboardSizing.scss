@@ -56,8 +56,10 @@ html[data-dashboard-density="compact"] {
     gap: 4px;
   }
   .jogPad .jogBtn { min-width: 0; min-height: 48px; }
-  .jogPad .jogZ { padding: 4px; gap: 4px; }
-  .jogPad .jogZ .jogBtn { width: 52px; min-height: 0; }
+  // Stretched to the XY pad's full height (see JogPad.scss) rather than fixed
+  // and centered, so the Z buttons line up with the top and bottom key rows.
+  .jogPad .jogZ { padding: 0 0 0 4px; gap: 4px; }
+  .jogPad .jogZ .jogBtn { width: 52px; flex: 1; min-height: 0; }
   .jogPad .jogSettings { gap: 6px; }
   .pinsStatus { gap: 4px; }
   .pinBadge { padding: 0 4px; height: 28px; font-size: 12px; }

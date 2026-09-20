@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Button, ButtonGroup } from "react-bootstrap";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faBroom, faListOl, faPlay, faStop, faObjectGroup } from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { uiActions } from "../store/uiSlice";
@@ -14,6 +16,8 @@ import {
   ToolpathSimulation,
 } from "../utils/toolpathSimulation";
 import SimulationBar from "./SimulationBar";
+import ViewCubeIcon from "./ViewCubeIcon";
+import VisualizerReadout from "./VisualizerReadout";
 import VisualizerZoomControl from "./VisualizerZoomControl";
 import "./Visualizer3D.scss";
 
@@ -40,7 +44,7 @@ const Y_AXIS_COLOR = "#8affa0";
 const MIN_ZOOM = 0.2;
 const MAX_ZOOM = 40;
 
-type Bounds = { minX: number; maxX: number; minY: number; maxY: number };
+type Bounds = { minX: number; maxX: number; minY: number; maxY: number; inches: boolean };
 type ViewPreset = "top" | "bottom" | "left" | "right" | "3d";
 
 // What the simulation bar renders, mirrored out of ToolpathSimulation (which
@@ -55,6 +59,10 @@ type SimUi = {
   totalSeconds: number;
   progress: number;
   line: number;
+  x: number;
+  y: number;
+  z: number;
+  inches: boolean;
 };
 const INITIAL_SIM_UI: SimUi = {
   active: false,
@@ -66,18 +74,29 @@ const INITIAL_SIM_UI: SimUi = {
   totalSeconds: 0,
   progress: 0,
   line: 0,
+  x: 0,
+  y: 0,
+  z: 0,
+  inches: false,
 };
-const snapshotSim = (sim: ToolpathSimulation): SimUi => ({
-  active: sim.isActive(),
-  playing: sim.isPlaying(),
-  speed: sim.getSpeed(),
-  speeds: sim.getSpeeds(),
-  realTime: sim.isRealTiming(),
-  elapsedSeconds: sim.getElapsedSeconds(),
-  totalSeconds: sim.getTotalSeconds(),
-  progress: sim.getProgress(),
-  line: sim.getCurrentLine(),
-});
+const snapshotSim = (sim: ToolpathSimulation): SimUi => {
+  const position = sim.getPosition();
+  return {
+    active: sim.isActive(),
+    playing: sim.isPlaying(),
+    speed: sim.getSpeed(),
+    speeds: sim.getSpeeds(),
+    realTime: sim.isRealTiming(),
+    elapsedSeconds: sim.getElapsedSeconds(),
+    totalSeconds: sim.getTotalSeconds(),
+    progress: sim.getProgress(),
+    line: sim.getCurrentLine(),
+    x: position.x,
+    y: position.y,
+    z: position.z,
+    inches: sim.isInches(),
+  };
+};
 const sameSimUi = (a: SimUi, b: SimUi) =>
   a.active === b.active &&
   a.playing === b.playing &&
@@ -87,7 +106,19 @@ const sameSimUi = (a: SimUi, b: SimUi) =>
   a.elapsedSeconds === b.elapsedSeconds &&
   a.totalSeconds === b.totalSeconds &&
   a.progress === b.progress &&
-  a.line === b.line;
+  a.line === b.line &&
+  a.x === b.x &&
+  a.y === b.y &&
+  a.z === b.z &&
+  a.inches === b.inches;
+
+const VIEW_BUTTONS: { view: ViewPreset; label: string; face: "top" | "left" | "right" | "bottom" | "all" }[] = [
+  { view: "top", label: "Top", face: "top" },
+  { view: "left", label: "Left", face: "left" },
+  { view: "right", label: "Right", face: "right" },
+  { view: "bottom", label: "Bottom", face: "bottom" },
+  { view: "3d", label: "3D", face: "all" },
+];
 
 const RAPID_RATE_STORAGE_KEY = "ugs.dashboard.simulation.rapidRate";
 // Wrapped because localStorage can be missing or throw (private windows, blocked
@@ -973,6 +1004,7 @@ const Visualizer3D = () => {
         maxX: cutPoints.max.x,
         minY: cutPoints.min.y,
         maxY: cutPoints.max.y,
+        inches: segments[0]?.inches === true,
       });
 
       // Grid grows to fit the loaded job, padded out on every side, so the whole
@@ -1013,22 +1045,17 @@ const Visualizer3D = () => {
   return (
     <div className="visualizer3D">
       <div className="visualizer3DToolbar">
+        {/* Each button carries both a text label and an icon; the toolbar's
+            container query (Visualizer3D.scss) swaps to icons only once the
+            labels stop fitting on one row. title/aria-label keep the icon-only
+            buttons identifiable. */}
         <ButtonGroup>
-          <Button variant="outline-secondary" onClick={() => setView("top")}>
-            Top
-          </Button>
-          <Button variant="outline-secondary" onClick={() => setView("left")}>
-            Left
-          </Button>
-          <Button variant="outline-secondary" onClick={() => setView("right")}>
-            Right
-          </Button>
-          <Button variant="outline-secondary" onClick={() => setView("bottom")}>
-            Bottom
-          </Button>
-          <Button variant="outline-secondary" onClick={() => setView("3d")}>
-            3D
-          </Button>
+          {VIEW_BUTTONS.map(({ view, label, face }) => (
+            <Button key={view} variant="outline-secondary" title={`${label} view`} aria-label={`${label} view`} onClick={() => setView(view)}>
+              <span className="visualizer3DButtonIcon"><ViewCubeIcon face={face} /></span>
+              <span className="visualizer3DButtonLabel">{label}</span>
+            </Button>
+          ))}
         </ButtonGroup>
 
         <ButtonGroup>
@@ -1037,39 +1064,31 @@ const Visualizer3D = () => {
             disabled={simUi.active ? false : !bounds || isJobActive}
             onClick={simUi.active ? exitSim : enterSim}
             title="Play the toolpath back in program order to see what gets cut when"
+            aria-label="Simulate"
           >
-            Simulate
+            <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={simUi.active ? faStop : faPlay} /></span>
+            <span className="visualizer3DButtonLabel">Simulate</span>
           </Button>
           <Button
             variant={colorByOrder ? "primary" : "outline-primary"}
             disabled={!bounds}
             onClick={() => setColorByOrder(!colorByOrder)}
             title="Color the toolpath from blue (first) to red (last) to show the cutting order"
+            aria-label="Order"
           >
-            Order
+            <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faListOl} /></span>
+            <span className="visualizer3DButtonLabel">Order</span>
           </Button>
           <Button
             variant={cleanView ? "primary" : "outline-primary"}
             onClick={() => setCleanView(!cleanView)}
             title="Clean image: hide rapid moves and the grid, leaving just the cutting path"
+            aria-label="Clean"
           >
-            Clean
+            <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faBroom} /></span>
+            <span className="visualizer3DButtonLabel">Clean</span>
           </Button>
         </ButtonGroup>
-        {colorByOrder && (
-          <div className="visualizer3DOrderLegend" title="First move to last move">
-            <span>start</span>
-            <div className="visualizer3DOrderRamp" style={{ background: ORDER_GRADIENT }} />
-            <span>end</span>
-          </div>
-        )}
-
-        {bounds && (
-          <div className="visualizer3DBounds">
-            X: {bounds.minX.toFixed(1)} &rarr; {bounds.maxX.toFixed(1)} &nbsp; Y:{" "}
-            {bounds.minY.toFixed(1)} &rarr; {bounds.maxY.toFixed(1)}
-          </div>
-        )}
 
         <Button
           className="visualizer3DBoundary"
@@ -1077,14 +1096,46 @@ const Visualizer3D = () => {
           disabled={!bounds || !isIdle}
           onClick={runBoundary}
           title="Rapid the machine around the toolpath's bounding box at the current Z, to check stock/part alignment before running"
+          aria-label="Run boundary"
         >
-          Run boundary
+          <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faObjectGroup} /></span>
+          <span className="visualizer3DButtonLabel">Run boundary</span>
         </Button>
       </div>
 
       <div className="visualizer3DBody">
         {isEmpty && <div className="visualizer3DEmpty">No file loaded to visualize.</div>}
         <div className="visualizer3DCanvas" ref={containerRef} />
+        {simUi.active ? (
+          <VisualizerReadout
+            live
+            label="Simulated tool position"
+            units={simUi.inches ? "in" : "mm"}
+            rows={[
+              { axis: "X", value: simUi.x.toFixed(3) },
+              { axis: "Y", value: simUi.y.toFixed(3) },
+              { axis: "Z", value: simUi.z.toFixed(3) },
+            ]}
+          />
+        ) : (
+          bounds && (
+            <VisualizerReadout
+              label="Toolpath extents"
+              units={bounds.inches ? "in" : "mm"}
+              rows={[
+                { axis: "X", value: `${bounds.minX.toFixed(bounds.inches ? 2 : 1)} → ${bounds.maxX.toFixed(bounds.inches ? 2 : 1)}` },
+                { axis: "Y", value: `${bounds.minY.toFixed(bounds.inches ? 2 : 1)} → ${bounds.maxY.toFixed(bounds.inches ? 2 : 1)}` },
+              ]}
+            />
+          )
+        )}
+        {colorByOrder && (
+          <div className="visualizer3DOrderLegend" title="First move to last move">
+            <span>start</span>
+            <div className="visualizer3DOrderRamp" style={{ background: ORDER_GRADIENT }} />
+            <span>end</span>
+          </div>
+        )}
         {simUi.active && (
           <SimulationBar
             playing={simUi.playing}

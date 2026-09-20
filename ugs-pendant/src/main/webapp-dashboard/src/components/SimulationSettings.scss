@@ -1,0 +1,53 @@
+// Placed inline by SimulationSettings.tsx (left/top/width/max-height), fixed
+// inside .app. Above the plugin windows (40/41) and their tray (42).
+.simulationSettings {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #1f2122;
+  border: 1px solid #2f3132;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overscroll-behavior: contain;
+
+  .simulationSettingsHeading,
+  .form-label {
+    margin-bottom: 6px;
+    color: #c3c8cb;
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  // Two rows of three instead of a tall list, which is what kept this menu
+  // from fitting on a short screen.
+  .simulationSettingsSpeedGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+
+    .btn {
+      min-height: 40px;
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+  }
+
+  .simulationHelp {
+    margin-left: 6px;
+    padding: 0 2px;
+    border: 0;
+    background: none;
+    color: #8a8f92;
+    line-height: 1;
+    cursor: help;
+
+    &:hover,
+    &:focus-visible {
+      color: #c3c8cb;
+    }
+  }
+}

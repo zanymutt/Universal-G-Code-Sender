@@ -165,20 +165,46 @@
     if(!job)return;event.preventDefault();const matrix=$('preview').getScreenCTM();if(!matrix)return;
     zoom(Math.exp(-event.deltaY*.002),new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()));
   },{passive:false});
-  let pan=null,suppressClick=false;
+  let pan=null,pinch=null,suppressClick=false;
+  const pointers=new Map();
+  function screenPoint(event,inverse){return new DOMPoint(event.clientX,event.clientY).matrixTransform(inverse);}
+  function pointerPair(){return [...pointers.values()].slice(0,2);}
   $('preview').addEventListener('pointerdown',event=>{
-    suppressClick=false;if(!job||pick||event.button!==0)return;
+    suppressClick=false;if(!job||pick||(event.pointerType==='mouse'&&event.button!==0))return;
     const matrix=$('preview').getScreenCTM();if(!matrix)return;
-    pan={id:event.pointerId,x:event.clientX,y:event.clientY,box:{...viewBox},inverse:matrix.inverse()};
+    pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     $('preview').setPointerCapture(event.pointerId);
+    if(pointers.size===1){
+      pan={id:event.pointerId,x:event.clientX,y:event.clientY,box:{...viewBox},inverse:matrix.inverse()};pinch=null;
+    }else if(pointers.size===2){
+      const [one,two]=pointerPair();
+      pinch={start:{...viewBox},inverse:matrix.inverse(),center:{x:(one.x+two.x)/2,y:(one.y+two.y)/2},distance:Math.max(1,Math.hypot(one.x-two.x,one.y-two.y))};
+      pan=null;suppressClick=true;
+    }
   });
   $('preview').addEventListener('pointermove',event=>{
+    if(!pointers.has(event.pointerId))return;
+    pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+    if(pinch){
+      const [one,two]=pointerPair();if(!one||!two)return;
+      const center={x:(one.x+two.x)/2,y:(one.y+two.y)/2};
+      const distance=Math.max(1,Math.hypot(one.x-two.x,one.y-two.y));
+      const q=screenPoint({clientX:pinch.center.x,clientY:pinch.center.y},pinch.inverse);
+      const now=screenPoint({clientX:center.x,clientY:center.y},pinch.inverse);
+      const scale=Math.max(1,Math.min(32,fitBox.w/pinch.start.w*distance/pinch.distance));
+      const w=fitBox.w/scale,h=fitBox.h/scale;
+      const x=q.x-(q.x-pinch.start.x)*w/pinch.start.w+q.x-now.x;
+      const y=q.y-(q.y-pinch.start.y)*h/pinch.start.h+q.y-now.y;
+      viewBox={x,y,w,h};suppressClick=true;applyView();return;
+    }
     if(!pan||pan.id!==event.pointerId)return;
     const from=new DOMPoint(pan.x,pan.y).matrixTransform(pan.inverse),to=new DOMPoint(event.clientX,event.clientY).matrixTransform(pan.inverse);
     if(Math.hypot(event.clientX-pan.x,event.clientY-pan.y)>3)suppressClick=true;
     viewBox={...pan.box,x:pan.box.x+from.x-to.x,y:pan.box.y+from.y-to.y};applyView();
   });
-  for(const event of ['pointerup','pointercancel','lostpointercapture'])$('preview').addEventListener(event,()=>{pan=null;});
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])$('preview').addEventListener(event,e=>{
+    pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;if(!pointers.size)pan=null;
+  });
   const divider=$('divider');let resizing=false,split=55;
   function setSplit(value){split=Math.max(25,Math.min(75,value));$('work').style.setProperty('--split',split+'%');divider.setAttribute('aria-valuenow',Math.round(split));}
   divider.addEventListener('pointerdown',event=>{if(event.button!==0)return;resizing=true;divider.setPointerCapture(event.pointerId);event.preventDefault();});

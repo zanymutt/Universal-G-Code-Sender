@@ -126,12 +126,12 @@ const CenterPanel = () => {
   const splitDragRef = useRef({ x: 0, width: 0 });
   const splitRowRef = useRef<HTMLDivElement | null>(null);
 
-  const onResizeStart = (e: React.PointerEvent<HTMLDivElement>) => {
+  const onResizeStart = (e: React.PointerEvent<HTMLButtonElement>) => {
     dragStartRef.current = { y: e.clientY, height: consoleHeight };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const onResizeMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const onResizeMove = (e: React.PointerEvent<HTMLButtonElement>) => {
     if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
     // Dragging the handle up should grow the console (it sits below the
     // visualizer/editor), so height moves opposite to the pointer's Y delta.
@@ -247,8 +247,12 @@ const CenterPanel = () => {
             style={isSplit ? { order: 4 } : undefined}
           >
             <Nav.Item>
-              <Nav.Link eventKey="split">
-                <FontAwesomeIcon icon={faColumns} /> Split
+              <Nav.Link
+                eventKey="split"
+                aria-label={isSplit ? "Close top split view" : "Split top view"}
+                title={isSplit ? "Close top split view" : "Split top view"}
+              >
+                <FontAwesomeIcon icon={faColumns} />
               </Nav.Link>
             </Nav.Item>
           </Nav>
@@ -260,7 +264,7 @@ const CenterPanel = () => {
             (if any) a component is visually placed into changes, via the
             order/flex-basis in contentStyle(). */}
         <div className={"centerPanelContentRow " + (isSplit ? "split" : "")} ref={splitRowRef}>
-          <div className="centerPanelContent" style={contentStyle("visualize")} hidden={!isVisible("visualize")}>
+          <div className="centerPanelContent centerPanelVisualizerContent" style={contentStyle("visualize")} hidden={!isVisible("visualize")}>
             <Visualizer3D />
           </div>
           {/* Portal target, not a direct <GcodeEditor/> render - see the
@@ -291,17 +295,23 @@ const CenterPanel = () => {
         </div>
       </div>
 
-      <div
-        className="centerPanelResizer"
-        onPointerDown={onResizeStart}
-        onPointerMove={onResizeMove}
-        title="Drag to resize the console"
-      />
       <div className="centerPanelConsole" style={{ flexBasis: consoleHeight }}>
         <div className="centerPanelConsoleHeader">
-          <h6 className="centerPanelHeading">
-            {bottomView === "edit" ? "Edit" : bottomView === "split" ? "Console + Edit" : "Console"}
-          </h6>
+          {isBottomSplit && <h6 className="centerPanelHeading">Console + Edit</h6>}
+          <button
+            type="button"
+            className="centerPanelResizer"
+            onPointerDown={onResizeStart}
+            onPointerMove={onResizeMove}
+            onKeyDown={(e) => {
+              if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+              e.preventDefault();
+              setConsoleHeight((height) => Math.min(CONSOLE_MAX_HEIGHT,
+                Math.max(CONSOLE_MIN_HEIGHT, height + (e.key === "ArrowUp" ? 10 : -10))));
+            }}
+            aria-label="Resize console height"
+            title="Drag to resize the console, or use the up and down arrow keys"
+          />
           <div className="centerPanelConsoleHeaderRight">
             {/* Only meaningful (and only shown) while the bottom panel isn't
                 split - while split, both are always shown together, so
@@ -333,9 +343,10 @@ const CenterPanel = () => {
               <Nav.Item>
                 <Nav.Link
                   eventKey="split"
+                  aria-label={isBottomSplit ? "Close console split view" : "Split console and editor"}
                   title={isBottomSplit ? "Show one at a time" : "Split: show the gcode editor alongside the console"}
                 >
-                  <FontAwesomeIcon icon={faColumns} /> Split
+                  <FontAwesomeIcon icon={faColumns} />
                 </Nav.Link>
               </Nav.Item>
             </Nav>

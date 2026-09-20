@@ -21,7 +21,10 @@
   }
 
   .feedSpindleValue {
+    // min-width:0 lets the digits shrink instead of pushing the units past
+    // the edge (which used to give the left column a horizontal scrollbar).
     flex: 1;
+    min-width: 0;
     display: flex;
     justify-content: flex-end;
     font-family: "lcd", monospace;
@@ -32,11 +35,14 @@
 
   // A fixed-width, left-aligned unit column keeps the digits themselves lined up
   // between rows, instead of "mm/min" vs "rpm" pushing them to different widths.
+  // Sized for the longest unit ("inch/min" is 8 characters, "mm/min" 6).
   .feedSpindleUnits {
     display: inline-block;
-    width: 4.5ch;
+    flex: 0 0 auto;
+    width: 8ch;
     margin-left: 6px;
-    font-size: 1rem;
+    font-size: 0.8rem;
+    white-space: nowrap;
     color: #6b7280;
     text-align: left;
   }

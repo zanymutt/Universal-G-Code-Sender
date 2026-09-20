@@ -7,6 +7,19 @@
   flex-wrap: wrap;
   gap: 6px;
   z-index: 42;
+
+  // Over the top bar: one centered row that shrinks its chips (their labels
+  // ellipsize) rather than wrapping down onto the page below. left/top/width
+  // are set inline from the free stretch of the bar.
+  &.pluginTrayTop {
+    max-width: none;
+    flex-wrap: nowrap;
+    justify-content: center;
+
+    .pluginTrayChip {
+      flex: 0 1 auto;
+    }
+  }
 }
 
 .pluginTrayChip {

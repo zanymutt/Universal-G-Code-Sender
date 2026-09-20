@@ -13,39 +13,93 @@
   flex: 0 0 auto;
   border-bottom: 1px solid #2f3132;
   flex-wrap: wrap;
+  // Same idea as GcodeEditor's toolbar: this pane can be full width or half of
+  // a split, so the labels-to-icons switch below keys off the toolbar's own
+  // width, not the window's.
+  container-type: inline-size;
 
   .btn {
     min-height: 38px;
-  }
-
-  .visualizer3DBounds {
-    // Brighter and a touch bigger than the original #8a8f92/0.8rem - that
-    // was low-contrast enough against the dark toolbar to be hard to read
-    // at a glance, for a readout (the toolpath's actual X/Y extent) worth
-    // seeing clearly rather than treating as decorative label text.
-    color: #c3c8cb;
-    font-size: 0.85rem;
-    font-weight: 600;
     white-space: nowrap;
   }
 
-  .visualizer3DOrderLegend {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    color: #c3c8cb;
-    font-size: 0.75rem;
-    white-space: nowrap;
+  .visualizer3DButtonIcon {
+    display: none;
   }
+
+  .visualizer3DBoundary {
+    margin-left: auto;
+  }
+
+  // Below this the text labels no longer fit on one row, so every button
+  // drops to an icon (title/aria-label still name it). Sized just above the
+  // full-label row's natural width (~650px), with a little headroom.
+  @container (max-width: 670px) {
+    .visualizer3DButtonLabel {
+      display: none;
+    }
+
+    .visualizer3DButtonIcon {
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .btn {
+      min-width: 44px;
+    }
+  }
+
+  // Icon-only buttons still need room for three control groups and the
+  // boundary action. Shrink their chrome before allowing the toolbar to wrap.
+  @container (max-width: 600px) {
+    gap: 4px;
+    padding: 4px;
+    flex-wrap: nowrap;
+
+    .btn {
+      min-width: 36px;
+      min-height: 34px;
+      padding: 4px 6px;
+    }
+
+    .visualizer3DBoundary {
+      margin-left: 0;
+    }
+  }
+
+  @container (max-width: 440px) {
+    .btn {
+      min-width: 32px;
+      min-height: 32px;
+      padding: 3px 5px;
+    }
+  }
+}
+
+// Over the top center of the viewport (the readout is top-left, the zoom
+// control on the right edge).
+.visualizer3DOrderLegend {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(17, 18, 19, 0.72);
+  border: 1px solid #2f3132;
+  color: #c3c8cb;
+  font-size: 0.75rem;
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
 
   .visualizer3DOrderRamp {
     width: 80px;
     height: 8px;
     border-radius: 4px;
-  }
-
-  .visualizer3DBoundary {
-    margin-left: auto;
   }
 }
 

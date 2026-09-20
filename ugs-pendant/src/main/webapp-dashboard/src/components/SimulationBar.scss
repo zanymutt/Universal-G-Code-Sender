@@ -1,9 +1,10 @@
-// Floats along the bottom of the viewport. The right inset keeps it clear of
-// the zoom control (VisualizerZoomControl) on that edge.
+// Floats along the bottom of the viewport. The zoom control is hidden in the
+// dashboard, so the bar can use the full width up to the normal edge inset.
 .simulationBar {
+  --simulation-control-size: 38px;
   position: absolute;
   left: 10px;
-  right: 76px;
+  right: 10px;
   bottom: 10px;
   z-index: 2;
   display: flex;
@@ -21,8 +22,8 @@
   container-type: inline-size;
 
   .btn {
-    min-height: 44px;
-    min-width: 44px;
+    min-height: var(--simulation-control-size);
+    min-width: var(--simulation-control-size);
   }
 }
 
@@ -39,17 +40,162 @@
   padding-right: 8px;
 }
 
-// Narrow (e.g. the visualizer in a split pane): transport + line + close on the
-// first row, the speed buttons stretched across their own row beneath it.
+.simulationRapidToggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  line-height: 1;
+}
+
+.simulationSpeedChip {
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.simulationSpeedCaret {
+  font-size: 0.75rem;
+  opacity: 0.7;
+}
+
+.simulationBarRow > .btn,
+.simulationBarRow > .dropdown > .btn,
+.simulationBarRow > .btn-group .btn {
+  height: var(--simulation-control-size);
+  min-height: var(--simulation-control-size);
+  box-sizing: border-box;
+}
+
+// Narrow (e.g. the visualizer in a split pane): keep the transport row intact
+// and move speed selection into the settings popover (SimulationSettings),
+// whose button then becomes a chip showing the current speed.
 @container (max-width: 740px) {
   .simulationSpeeds {
-    order: 3;
-    flex: 1 1 100%;
+    display: none;
+  }
+}
 
-    .btn {
-      flex: 1 1 0;
-      min-width: 0;
-    }
+@container (max-width: 600px) {
+  .simulationBar {
+    --simulation-control-size: 34px;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .simulationBarRow {
+    gap: 6px;
+  }
+
+  .simulationRapidToggle {
+    max-height: var(--simulation-control-size);
+  }
+}
+
+// Once the icon-only layout would otherwise start wrapping, compact the
+// controls before giving the row permission to take a second line. This is
+// keyed to the bar itself because dashboard panes can be resized independently.
+@container (max-width: 520px) {
+  .simulationBar {
+    gap: 4px;
+    padding: 4px 6px;
+  }
+
+  .simulationBarRow {
+    flex-wrap: nowrap;
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .simulationBarRow > .btn,
+  .simulationBarRow > .dropdown > .btn,
+  .simulationBarRow > .btn-group .btn {
+    min-width: 36px;
+    padding: 4px 7px;
+  }
+
+  .simulationRapidToggle {
+    max-height: var(--simulation-control-size);
+  }
+
+  .simulationReadout {
+    min-width: 0;
+  }
+
+  .simulationLine {
+    font-size: 0.8rem;
+  }
+
+  .simulationClock {
+    font-size: 0.7rem;
+  }
+
+  .simulationSpeedChip {
+    font-size: 0.75rem;
+  }
+
+  .simulationClose {
+    flex: 0 0 36px;
+  }
+}
+
+@container (max-width: 400px) {
+  .simulationBar {
+    --simulation-control-size: 32px;
+  }
+
+  .simulationBarRow > .btn,
+  .simulationBarRow > .dropdown > .btn,
+  .simulationBarRow > .btn-group .btn {
+    min-width: 32px;
+    padding: 3px 5px;
+  }
+
+  .simulationClose {
+    flex-basis: 32px;
+  }
+
+  .simulationRapidToggle {
+    max-height: var(--simulation-control-size);
+  }
+}
+
+@container (max-width: 440px) {
+  .simulationBar {
+    --simulation-control-size: 32px;
+  }
+}
+
+// Last compact tier for a very narrow split pane. Removing the text beside
+// the gear preserves the setting's discoverability while keeping the bar
+// background around every control instead of letting the close button spill
+// outside it.
+@container (max-width: 320px) {
+  .simulationBar {
+    --simulation-control-size: 32px;
+  }
+
+  .simulationBarRow > .btn,
+  .simulationBarRow > .dropdown > .btn,
+  .simulationBarRow > .btn-group .btn {
+    min-width: 28px;
+    padding: 2px 4px;
+  }
+
+  .simulationClose {
+    flex-basis: 28px;
+  }
+
+  .simulationRapidToggle {
+    max-height: var(--simulation-control-size);
+  }
+
+  .simulationLine {
+    font-size: 0.72rem;
+  }
+
+  .simulationClock {
+    font-size: 0.62rem;
   }
 }
 
@@ -70,24 +216,6 @@
   color: #8a8f92;
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
-}
-
-.simulationRapidMenu {
-  padding: 12px;
-  width: 260px;
-  background: #1f2122;
-  border: 1px solid #2f3132;
-
-  .form-label {
-    color: #c3c8cb;
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  .form-text {
-    color: #8a8f92;
-    font-size: 0.75rem;
-  }
 }
 
 // Restyled from scratch (the native thumb is too small to grab on a

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ToolpathSegment } from "../services/visualizer";
+import { ToolpathPoint, ToolpathSegment } from "../services/visualizer";
 
 // Speed presets, as multiples of the simulation's own clock. With real timing
 // (the file carries feed rates) 1x is real time, so the presets climb steeply -
@@ -22,6 +22,7 @@ const MM_PER_INCH = 25.4;
 const GHOST_OPACITY = 0.18;
 const HEAD_COLOR = new THREE.Color("rgb(237, 255, 0)");
 const MARKER_COLOR = "#ff7a1a";
+const ZERO_POINT: ToolpathPoint = { x: 0, y: 0, z: 0 };
 
 export type SimulationColorFn = (segment: ToolpathSegment, index: number) => THREE.Color;
 
@@ -116,6 +117,29 @@ export class ToolpathSimulation {
 
   getElapsedSeconds() {
     return this.time;
+  }
+
+  // Where the simulated tool is now, in the file's own coordinates (the
+  // start of the toolpath until playback moves it).
+  getPosition(): ToolpathPoint {
+    if (this.segments.length === 0) return ZERO_POINT;
+    const completed = this.completedCount();
+    if (completed < this.segments.length && this.time > this.cumulative[completed]) {
+      const segment = this.segments[completed];
+      const span = this.cumulative[completed + 1] - this.cumulative[completed];
+      const f = span > 0 ? (this.time - this.cumulative[completed]) / span : 1;
+      return {
+        x: segment.start.x + (segment.end.x - segment.start.x) * f,
+        y: segment.start.y + (segment.end.y - segment.start.y) * f,
+        z: segment.start.z + (segment.end.z - segment.start.z) * f,
+      };
+    }
+    return completed === 0 ? this.segments[0].start : this.segments[completed - 1].end;
+  }
+
+  // Whether the file's coordinates are inches (else millimetres).
+  isInches() {
+    return this.segments.length > 0 && this.segments[0].inches === true;
   }
 
   getTotalSeconds() {

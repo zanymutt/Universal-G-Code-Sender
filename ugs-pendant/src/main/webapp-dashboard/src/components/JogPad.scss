@@ -45,11 +45,13 @@
   // Visually separated from the XY pad (own border) so a touch aimed at Z can't
   // land on an XY move by accident, and stretched (via align-items: stretch on
   // .jogArrows) to fill the same height as the XY grid, split evenly top/bottom.
+  // No vertical padding, so the buttons' outer edges line up with the top and
+  // bottom rows of the XY pad.
   .jogZ {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 8px;
+    padding: 0 0 0 8px;
     border-left: 2px solid #3a3d3e;
 
     .jogBtn {
@@ -61,6 +63,15 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
+    }
+
+    .jogZIcon,
+    .jogZLabel {
+      line-height: 1;
+    }
+
+    .jogZIcon {
+      display: block;
     }
   }
 

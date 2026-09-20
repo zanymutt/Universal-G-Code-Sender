@@ -72,14 +72,12 @@ const JogPad = () => {
 
         <div className="jogZ">
           <Button variant="secondary" className="jogBtn" disabled={!isEnabled} onClick={() => jog(0, 0, 1)}>
-            <FontAwesomeIcon icon={faCaretUp} size="xl" />
-            <br />
-            Z+
+            <span className="jogZIcon"><FontAwesomeIcon icon={faCaretUp} size="xl" /></span>
+            <span className="jogZLabel">Z+</span>
           </Button>
           <Button variant="secondary" className="jogBtn" disabled={!isEnabled} onClick={() => jog(0, 0, -1)}>
-            <FontAwesomeIcon icon={faCaretDown} size="xl" />
-            <br />
-            Z-
+            <span className="jogZIcon"><FontAwesomeIcon icon={faCaretDown} size="xl" /></span>
+            <span className="jogZLabel">Z-</span>
           </Button>
         </div>
       </div>

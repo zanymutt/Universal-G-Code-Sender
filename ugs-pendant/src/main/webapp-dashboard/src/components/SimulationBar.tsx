@@ -1,15 +1,15 @@
-import { useEffect, useState } from "react";
-import { Button, ButtonGroup, Dropdown, Form } from "react-bootstrap";
+import { useEffect, useRef, useState } from "react";
+import { Button, ButtonGroup } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faBackwardStep,
   faForwardStep,
-  faGear,
   faPause,
   faPlay,
   faRotateLeft,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
+import SimulationSettings from "./SimulationSettings";
 import "./SimulationBar.scss";
 
 type Props = {
@@ -46,35 +46,6 @@ const formatClock = (seconds: number) => {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 };
 
-// The rapid-rate number field keeps its own text while you type (so clearing
-// it to retype doesn't fight a committed value) and only commits valid, positive
-// numbers upward.
-const RapidRateField = ({ rate, onChange }: { rate: number; onChange: (rate: number) => void }) => {
-  const [text, setText] = useState(String(rate));
-  useEffect(() => setText(String(rate)), [rate]);
-  return (
-    <Form.Group className="simulationRapidField">
-      <Form.Label>Rapid speed (mm/min)</Form.Label>
-      <Form.Control
-        type="number"
-        inputMode="numeric"
-        min={1}
-        step={100}
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value);
-          const value = Number(event.target.value);
-          if (Number.isFinite(value) && value > 0) onChange(value);
-        }}
-      />
-      <Form.Text>
-        How fast rapid moves are assumed to travel. Cuts use the file&apos;s own feed rates. Real machines
-        accelerate and pause, so an actual run is usually a little longer.
-      </Form.Text>
-    </Form.Group>
-  );
-};
-
 const SCRUBBER_STEPS = 1000;
 
 // Transport controls for the toolpath simulation, floated along the bottom of
@@ -99,8 +70,25 @@ const SimulationBar = ({
   onSpeed,
   onRapidRate,
   onClose,
-}: Props) => (
-  <div className="simulationBar">
+}: Props) => {
+  const [compactControls, setCompactControls] = useState(false);
+  const simulationBarRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const element = simulationBarRef.current;
+    if (!element) return;
+
+    const updateCompactControls = () => {
+      setCompactControls(element.getBoundingClientRect().width <= 740);
+    };
+
+    updateCompactControls();
+    const observer = new ResizeObserver(updateCompactControls);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  return <div className="simulationBar" ref={simulationBarRef}>
     <div className="simulationBarRow">
       <ButtonGroup>
         <Button variant="outline-secondary" aria-label="Restart" title="Restart" onClick={onRestart}>
@@ -147,15 +135,16 @@ const SimulationBar = ({
         )}
       </div>
 
-      {realTime && (
-        <Dropdown drop="up" align="end" autoClose="outside">
-          <Dropdown.Toggle variant="outline-secondary" className="simulationRapidToggle" aria-label="Timing settings">
-            <FontAwesomeIcon icon={faGear} />
-          </Dropdown.Toggle>
-          <Dropdown.Menu className="simulationRapidMenu">
-            <RapidRateField rate={rapidRate} onChange={onRapidRate} />
-          </Dropdown.Menu>
-        </Dropdown>
+      {(realTime || compactControls) && (
+        <SimulationSettings
+          speed={speed}
+          speeds={speeds}
+          showSpeeds={compactControls}
+          realTime={realTime}
+          rapidRate={rapidRate}
+          onSpeed={onSpeed}
+          onRapidRate={onRapidRate}
+        />
       )}
 
       <Button variant="outline-secondary" className="simulationClose" aria-label="Exit simulation" onClick={onClose}>
@@ -174,6 +163,6 @@ const SimulationBar = ({
       onChange={(event) => onSeek(Number(event.target.value) / SCRUBBER_STEPS)}
     />
   </div>
-);
+};
 
 export default SimulationBar;

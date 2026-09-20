@@ -3,14 +3,14 @@
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: 10px;
+  gap: 2px;
 
   .centerPanelTop {
     flex: 1 1 auto;
     min-height: 0;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 2px;
   }
 
   .centerPanelContentRow {
@@ -49,6 +49,27 @@
   .centerPanelBottomViewNav,
   .centerPanelConsoleSplitNav {
     flex: 0 0 auto;
+    min-width: 0;
+    gap: 3px;
+
+    .nav-link {
+      padding: 2px 10px;
+      min-height: 26px;
+      border-radius: 4px;
+      color: #3690ff;
+
+      &.active {
+        background-color: #193b66;
+        color: #73b3ff;
+        box-shadow: inset 0 0 0 1px #315c90;
+      }
+    }
+  }
+
+  // Hide only the on-screen control; retain the slider and wheel/pinch zoom.
+  // Remove this rule to restore the slider later.
+  .visualizerZoomControl {
+    display: none;
   }
 
   // Matches the content row's resizer's own effective footprint (visually
@@ -99,8 +120,14 @@
     overflow: hidden;
   }
 
-  // Height comes from the inline flexBasis style (dragged via .centerPanelResizer
-  // above it) - flex-grow/shrink stay off so it holds exactly that height.
+  // The visualizer's dropup needs to escape the pane's canvas clip when the
+  // pane is short. The canvas itself is sized to this element, so only the
+  // overlaid playback menu extends outside it; other panes remain clipped.
+  .centerPanelVisualizerContent {
+    overflow: visible;
+  }
+
+  // The header's resize grip sets the inline flexBasis; keep that height fixed.
   .centerPanelConsole {
     flex: 0 0 auto;
     min-height: 0;
@@ -145,9 +172,14 @@
   }
 
   .centerPanelResizer {
-    flex: 0 0 auto;
-    height: 14px;
-    margin: -6px 0;
+    grid-column: 2;
+    grid-row: 1;
+    align-self: start;
+    width: 56px;
+    height: 26px;
+    border: 0;
+    padding: 0;
+    background: transparent;
     cursor: ns-resize;
     position: relative;
     z-index: 1;
@@ -159,12 +191,12 @@
       content: "";
       position: absolute;
       left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
+      top: 8px;
+      transform: translateX(-50%);
       width: 48px;
       height: 4px;
       border-radius: 2px;
-      background-color: #3a3d3e;
+      background-color: #687078;
     }
 
     &:hover::after,
@@ -174,21 +206,30 @@
   }
 
   .centerPanelConsoleHeader {
-    display: flex;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 56px minmax(0, 1fr);
     align-items: center;
-    gap: 12px;
-    margin-bottom: 6px;
+    gap: 3px;
+    padding: 2px 0;
+    margin-bottom: 2px;
     flex: 0 0 auto;
   }
 
-  // Groups the Console/Edit selector (only while not split) and the Split
-  // toggle together at the end of the row, leaving the heading on its own
-  // at the start.
+  // Keep controls in the header grid, with the grip centered on the same row.
   .centerPanelConsoleHeaderRight {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-left: auto;
+    display: contents;
+  }
+
+  .centerPanelBottomViewNav,
+  .centerPanelHeading {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .centerPanelConsoleSplitNav {
+    grid-column: 3;
+    grid-row: 1;
+    justify-self: end;
   }
 
   .centerPanelHeading {
@@ -197,5 +238,14 @@
     font-size: 0.75rem;
     letter-spacing: 0.05em;
     margin-bottom: 0;
+  }
+
+  @media (pointer: coarse) {
+    .centerPanelNavRow .nav-link,
+    .centerPanelConsoleHeader .nav-link,
+    .centerPanelResizer {
+      min-height: 44px;
+      min-width: 44px;
+    }
   }
 }

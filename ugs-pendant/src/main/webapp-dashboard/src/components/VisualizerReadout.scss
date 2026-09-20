@@ -1,0 +1,50 @@
+// Top-left of the viewport; the zoom control is on the right edge, the order
+// legend top-center and the transport bar along the bottom.
+.visualizerReadout {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(17, 18, 19, 0.72);
+  border: 1px solid #2f3132;
+  font-family: "lcd", monospace;
+  line-height: 1.2;
+  pointer-events: none;
+  user-select: none;
+
+  .visualizerReadoutRow {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .visualizerReadoutAxis {
+    width: 1.2ch;
+    font-size: 1rem;
+    color: #8a8f92;
+  }
+
+  .visualizerReadoutValue {
+    text-align: right;
+    font-size: 1.2rem;
+    color: #4ade80;
+    white-space: nowrap;
+  }
+
+  .visualizerReadoutUnits {
+    font-size: 0.8rem;
+    color: #6b7280;
+  }
+
+  &.visualizerReadoutLive {
+    .visualizerReadoutValue {
+      min-width: 9ch;
+      font-size: 1.5rem;
+    }
+    .visualizerReadoutUnits {
+      width: 2ch;
+    }
+  }
+}

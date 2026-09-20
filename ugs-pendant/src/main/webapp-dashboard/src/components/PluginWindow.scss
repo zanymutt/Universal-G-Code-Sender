@@ -91,6 +91,7 @@
 }
 
 .pluginWindowMinimize,
+.pluginWindowMaximize,
 .pluginWindowClose {
   flex-shrink: 0;
   background: none;
@@ -119,4 +120,18 @@
   // finishes loading (or if it never sets one) this keeps the frame from
   // flashing white against the rest of the dark UI.
   background: #0c0e0f;
+}
+
+// Fills the dashboard's main area - PluginWindow.tsx sets left/top/width/height
+// inline from that area's measured box, so the top and bottom bars stay clear.
+// No grip to reserve room for, and no dragging.
+.pluginWindowMaximized {
+  resize: none;
+  max-width: none;
+  max-height: none;
+  padding-bottom: 0;
+
+  .pluginWindowHeader {
+    cursor: default;
+  }
 }

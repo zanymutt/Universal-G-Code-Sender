@@ -253,36 +253,42 @@
     if (!layout || !geo || !built) { drawPart(svg); return; }
 
     const a = built.anchor, f = layout.frame;
-    const frame = [{ x: -a.x, y: -a.y }, { x: f.w - a.x, y: f.h - a.y }];
-    const size = fit([...frame, { x: 0, y: 0 }]);
+    // Draw the sheet in stable layout coordinates. The output origin is the
+    // crosshair inside that sheet, so changing the origin moves only the
+    // crosshair instead of shifting the artwork under the camera.
+    const frame = [{ x: 0, y: 0 }, { x: f.w, y: f.h }];
+    const outputPoint = p => ({ x: p.x + a.x, y: p.y + a.y });
+    const size = fit([...frame, a]);
     const partSize = Math.max(src.bbox.maxX - src.bbox.minX, src.bbox.maxY - src.bbox.minY) * src.mmPerUnit;
     const font = Math.max(partSize * 0.09, size * 0.012);
-    el('rect', { x: frame[0].x, y: -frame[1].y, width: f.w, height: f.h, fill: 'none', stroke: '#718196', 'stroke-width': 1, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, svg);
+    el('rect', { x: 0, y: -f.h, width: f.w, height: f.h, fill: 'none', stroke: '#718196', 'stroke-width': 1, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, svg);
     // Travel: work zero -> first cut -> ... -> last cut -> work zero (the program's park move).
-    let prev = { x: 0, y: 0 };
+    let prev = a;
     const travel = el('g', {}, svg);
     const dash = (from, to) => el('line', { x1: from.x, y1: -from.y, x2: to.x, y2: -to.y, stroke: '#ffbf69', 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.6, 'vector-effect': 'non-scaling-stroke' }, travel);
-    for (const item of geo.sequence) { dash(prev, item.start); prev = item.end; }
-    dash(prev, { x: 0, y: 0 });
+    for (const item of geo.sequence) { const start = outputPoint(item.start), end = outputPoint(item.end); dash(prev, start); prev = end; }
+    dash(prev, a);
     for (const p of geo.parts) {
       const g = el('g', { 'data-part': p.index + 1 }, svg);
       for (const c of p.contours) {
+        const points = c.pts.map(outputPoint);
         if (c.top) {
-          el('polygon', { points: pointList(c.pts), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+          el('polygon', { points: pointList(points), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
         } else {
-          el('polyline', { points: pointList(c.pts), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
+          el('polyline', { points: pointList(points), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
         }
       }
     }
     for (const item of geo.sequence) {
+      const start = outputPoint(item.start);
       const g = el('g', { 'data-cut': item.seq }, svg);
-      el('circle', { cx: item.start.x, cy: -item.start.y, r: size * 0.005, fill: '#ffbf69' }, g);
-      const t = el('text', { x: item.start.x + font * 0.35, y: -item.start.y - font * 0.5, 'font-size': font, 'pointer-events': 'none' }, g);
+      el('circle', { cx: start.x, cy: -start.y, r: size * 0.005, fill: '#ffbf69' }, g);
+      const t = el('text', { x: start.x + font * 0.35, y: -start.y - font * 0.5, 'font-size': font, 'pointer-events': 'none' }, g);
       t.textContent = String(item.seq);
       const part = geo.parts[item.part];
       el('title', {}, g).textContent = `Cut ${item.seq} · part ${item.part + 1} · ${src.blocks.length > 1 ? (item.internal ? 'inner' : 'outer') + ' cut · ' : ''}rotated ${fmt(part.angle, 2)}°`;
     }
-    el('path', { d: `M ${-size * 0.02} 0 H ${size * 0.02} M 0 ${-size * 0.02} V ${size * 0.02}`, stroke: '#ff7272', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, svg);
+    el('path', { d: `M ${a.x - size * 0.02} ${-a.y} H ${a.x + size * 0.02} M ${a.x} ${-a.y - size * 0.02} V ${-a.y + size * 0.02}`, stroke: '#ff7272', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, svg);
   }
   function drawPart(svg) {
     const s = src.mmPerUnit;
@@ -320,16 +326,46 @@
     if (!m) return;
     zoom(Math.exp(-event.deltaY * 0.002), new DOMPoint(event.clientX, event.clientY).matrixTransform(m.inverse()));
   }, { passive: false });
-  let pan = null, suppressClick = false;
+  let pan = null, pinch = null, suppressClick = false;
+  const pointers = new Map();
+  function screenPoint(event, inverse) { return new DOMPoint(event.clientX, event.clientY).matrixTransform(inverse); }
+  function pointerPair() { return [...pointers.values()].slice(0, 2); }
   $('preview').addEventListener('pointerdown', event => {
     suppressClick = false;
-    if (!src || picking || event.button !== 0) return;
+    if (!src || picking || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const m = $('preview').getScreenCTM();
     if (!m) return;
-    pan = { id: event.pointerId, x: event.clientX, y: event.clientY, box: { ...viewBox }, inverse: m.inverse() };
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
     $('preview').setPointerCapture(event.pointerId);
+    if (pointers.size === 1) {
+      pan = { id: event.pointerId, x: event.clientX, y: event.clientY, box: { ...viewBox }, inverse: m.inverse() };
+      pinch = null;
+    } else if (pointers.size === 2) {
+      const [one, two] = pointerPair();
+      pinch = { start: { ...viewBox }, inverse: m.inverse(), center: { x: (one.x + two.x) / 2, y: (one.y + two.y) / 2 }, distance: Math.max(1, Math.hypot(one.x - two.x, one.y - two.y)) };
+      pan = null;
+      suppressClick = true;
+    }
   });
   $('preview').addEventListener('pointermove', event => {
+    if (!pointers.has(event.pointerId)) return;
+    pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pinch) {
+      const [one, two] = pointerPair();
+      if (!one || !two) return;
+      const center = { x: (one.x + two.x) / 2, y: (one.y + two.y) / 2 };
+      const distance = Math.max(1, Math.hypot(one.x - two.x, one.y - two.y));
+      const q = screenPoint({ clientX: pinch.center.x, clientY: pinch.center.y }, pinch.inverse);
+      const now = screenPoint({ clientX: center.x, clientY: center.y }, pinch.inverse);
+      const scale = Math.max(1, Math.min(32, fitBox.w / pinch.start.w * distance / pinch.distance));
+      const w = fitBox.w / scale, h = fitBox.h / scale;
+      const x = q.x - (q.x - pinch.start.x) * w / pinch.start.w + q.x - now.x;
+      const y = q.y - (q.y - pinch.start.y) * h / pinch.start.h + q.y - now.y;
+      viewBox = { x, y, w, h };
+      suppressClick = true;
+      applyView();
+      return;
+    }
     if (!pan || pan.id !== event.pointerId) return;
     const from = new DOMPoint(pan.x, pan.y).matrixTransform(pan.inverse);
     const to = new DOMPoint(event.clientX, event.clientY).matrixTransform(pan.inverse);
@@ -337,7 +373,11 @@
     viewBox = { ...pan.box, x: pan.box.x + from.x - to.x, y: pan.box.y + from.y - to.y };
     applyView();
   });
-  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) $('preview').addEventListener(ev, () => { pan = null; });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) $('preview').addEventListener(ev, event => {
+    pointers.delete(event.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (!pointers.size) pan = null;
+  });
   $('pickOrigin').onclick = () => {
     if (!layout) return;
     setPick(true);
@@ -350,10 +390,10 @@
     const m = $('preview').getScreenCTM();
     if (!m) return;
     const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(m.inverse());
-    // Preview is drawn in output coordinates; custom origin is measured from the frame's bottom-left.
+    // Preview is drawn in sheet coordinates; custom origin is measured from the frame's bottom-left.
     $('origin').value = 'custom';
-    $('originX').value = (p.x + built.anchor.x).toFixed(3);
-    $('originY').value = (-p.y + built.anchor.y).toFixed(3);
+    $('originX').value = p.x.toFixed(3);
+    $('originY').value = (-p.y).toFixed(3);
     $('origin').dispatchEvent(new Event('input', { bubbles: true }));
     setPick(false);
     message('Origin moved. Machine zero is unchanged; zero the torch at the same point on the sheet.');

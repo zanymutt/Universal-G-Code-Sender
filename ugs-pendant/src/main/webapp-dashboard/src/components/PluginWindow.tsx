@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faMinus, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { faMinus, faWindowMaximize, faWindowRestore, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
+import { useLayoutRect } from "../hooks/useLayoutRect";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
 import {
@@ -17,6 +18,7 @@ import { sendGcode } from "../services/machine";
 import { acquireLineSubscription, releaseLineSubscription } from "../store/pluginLineSubscription";
 import { refreshFileState } from "../store/refreshFileState";
 import { getFileName } from "../utils/getFileName";
+import { loadPluginWindowSize, PluginWindowSize, savePluginWindowSize } from "../utils/pluginWindowSize";
 import { Status } from "../model/Status";
 import SaveAsModal from "./SaveAsModal";
 import OpenFileModal from "./OpenFileModal";
@@ -86,6 +88,50 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     windowRef.current?.focus({ preventScroll: true });
   }, [focusRequest]);
   const [position, setPosition] = useState(initialOffset);
+  // Maximized fills the dashboard's main area (between the top and bottom
+  // bars). It's only a style change - the iframe stays mounted, so the plugin
+  // keeps its state - and the normal size/position are left untouched to
+  // come back to.
+  const [maximized, setMaximized] = useState(false);
+  const maximizedRef = useRef(false);
+  maximizedRef.current = maximized;
+  const mainArea = useLayoutRect(".dashboardBody", maximized);
+  // The size the person last gave this window (remembered per plugin across
+  // launches). A ref, not state: it changes on every frame of a resize drag and
+  // nothing needs to re-render for it - it's only read back when the window
+  // goes from maximized to normal and needs its size re-applied.
+  const sizeRef = useRef<PluginWindowSize | null>(null);
+  if (sizeRef.current === null) sizeRef.current = loadPluginWindowSize(plugin.id);
+  // Remembers the size after the person resizes the window (the native
+  // `resize: both` grip sets it as an inline style - see PluginWindow.scss).
+  // The observer also fires for the initial layout and for maximizing, which
+  // aren't the person's own size, so those are skipped.
+  useEffect(() => {
+    const element = windowRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    let timer: number | undefined;
+    // With nothing remembered, the first observation is just the default size -
+    // noted as the baseline to restore to, but not worth persisting.
+    let baseline = sizeRef.current === null;
+    const observer = new ResizeObserver(() => {
+      if (maximizedRef.current || element.offsetWidth === 0) return;
+      const size = { width: element.offsetWidth, height: element.offsetHeight };
+      const known = sizeRef.current;
+      if (known && Math.abs(known.width - size.width) < 1 && Math.abs(known.height - size.height) < 1) return;
+      sizeRef.current = size;
+      if (baseline) {
+        baseline = false;
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => savePluginWindowSize(plugin.id, size), 250);
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+    };
+  }, [plugin.id]);
   const [subscribedEvents, setSubscribedEvents] = useState<Set<SubscribableEvent>>(new Set());
   const [saveAsRequest, setSaveAsRequest] = useState<SaveAsRequest | null>(null);
   const [pickFileRequest, setPickFileRequest] = useState<PickFileRequest | null>(null);
@@ -156,6 +202,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     // Not the close button - that has its own onClick and shouldn't also
     // start a drag underneath it.
     if ((e.target as HTMLElement).closest("button")) return;
+    if (maximizedRef.current) return;
     dragRef.current = { startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
     e.currentTarget.setPointerCapture(e.pointerId);
   };
@@ -425,7 +472,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         }}
       />
     )}
-    <div className="pluginWindow" ref={windowRef} tabIndex={-1}
+    <div className={"pluginWindow" + (maximized ? " pluginWindowMaximized" : "")} ref={windowRef} tabIndex={-1}
       aria-label={plugin.name}
       onPointerDownCapture={onActivate}
       onFocusCapture={onActivate}
@@ -434,19 +481,31 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
       // visibility (not display:none) so the frame keeps its layout size -
       // a display:none iframe is 0x0, and plugins that size a canvas off
       // their viewport would see a bogus resize on restore.
-      style={{ left: position.x, top: position.y, zIndex: isFront ? 41 : 40,
-        visibility: minimized ? "hidden" : "visible" }}>
+      style={{
+        ...(maximized
+          ? mainArea && { left: mainArea.left, top: mainArea.top, width: mainArea.width, height: mainArea.height }
+          : { left: position.x, top: position.y, width: sizeRef.current?.width, height: sizeRef.current?.height }),
+        zIndex: isFront ? 41 : 40,
+        visibility: minimized ? "hidden" : "visible",
+      }}>
       <div
         className="pluginWindowHeader"
         onPointerDown={handleHeaderPointerDown}
         onPointerMove={handleHeaderPointerMove}
         onPointerUp={endHeaderDrag}
         onPointerCancel={endHeaderDrag}
+        onDoubleClick={(e) => {
+          if (!(e.target as HTMLElement).closest("button")) setMaximized((value) => !value);
+        }}
       >
         {plugin.iconUrl && <img src={plugin.iconUrl} alt="" className="pluginWindowIcon" />}
         <span className="pluginWindowTitle">{plugin.name}</span>
         <button type="button" className="pluginWindowMinimize" onClick={onMinimize} aria-label="Minimize plugin" title="Minimize">
           <FontAwesomeIcon icon={faMinus} />
+        </button>
+        <button type="button" className="pluginWindowMaximize" onClick={() => setMaximized((value) => !value)}
+          aria-label={maximized ? "Restore plugin size" : "Maximize plugin"} title={maximized ? "Restore" : "Maximize"}>
+          <FontAwesomeIcon icon={maximized ? faWindowRestore : faWindowMaximize} />
         </button>
         <button type="button" className="pluginWindowClose" onClick={onClose} aria-label="Close plugin" title="Close">
           <FontAwesomeIcon icon={faXmark} />
