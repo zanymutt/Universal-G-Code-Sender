@@ -5,6 +5,11 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   base: "/dashboard/",
+  // Off here; vite.demo.config.ts turns it on. A literal, so the demo code is
+  // dead code (and dropped) in the normal build.
+  define: {
+    "import.meta.env.VITE_DEMO": JSON.stringify("false"),
+  },
   build: {
     outDir: "../../../target/classes/resources/ugs-dashboard",
   },

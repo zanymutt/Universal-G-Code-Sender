@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 node/*
+
+# Online demo build output (see vite.demo.config.ts)
+dist-demo

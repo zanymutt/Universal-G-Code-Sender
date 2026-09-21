@@ -12,6 +12,8 @@ import RightRail from "../components/RightRail";
 import JobBar from "../components/JobBar";
 import AlarmModal from "../components/AlarmModal";
 import PluginManagerProvider from "../components/PluginManager";
+import DemoBanner from "../demo/DemoBanner";
+import { isDemo } from "../demo/isDemo";
 import "./Dashboard.scss";
 import "./TabletDashboard.scss";
 
@@ -34,6 +36,7 @@ const Dashboard = () => {
   return (
     <PluginManagerProvider>
       <div className="dashboard" data-panel={panel} data-console-open={consoleOpen}>
+        {isDemo && <DemoBanner />}
         <TopBar />
         <div className="tabletReadout" aria-label="Current work position">
           {(["x", "y", "z"] as const).map(axis => <span key={axis}>{axis.toUpperCase()} <strong>{Number(status.workCoord?.[axis] ?? 0).toFixed(3)}</strong></span>)}

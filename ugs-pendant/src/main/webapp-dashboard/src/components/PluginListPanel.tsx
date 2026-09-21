@@ -1,4 +1,5 @@
 import { usePluginManager } from "./PluginManager";
+import { isDemo } from "../demo/isDemo";
 import "./PluginListPanel.scss";
 
 // Inline list for RightRail - same "grid of small buttons" look as
@@ -10,7 +11,9 @@ const PluginListPanel = () => {
   if (plugins.length === 0) {
     return (
       <p className="pluginListEmpty">
-        No plugins installed. Drop a plugin folder into the dashboard-plugins directory and reload.
+        {isDemo
+          ? "Plugins aren't part of the online demo."
+          : "No plugins installed. Drop a plugin folder into the dashboard-plugins directory and reload."}
       </p>
     );
   }

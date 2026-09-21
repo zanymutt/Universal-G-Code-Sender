@@ -1,0 +1,55 @@
+name: Dashboard online demo
+
+# Builds the dashboard against a simulated machine (see
+# ugs-pendant/src/main/webapp-dashboard/src/demo) and publishes it to the
+# gh-pages branch, which GitHub Pages serves. Publishing to a branch (rather than
+# the actions/deploy-pages flow) keeps it working from any branch, since Pages
+# environments only accept deployments from the default branch by default.
+#
+# One-time setup on the fork: Settings > Pages > Build and deployment > Source:
+# "Deploy from a branch" > gh-pages / (root).
+
+on:
+  push:
+    branches: [feature/pendant-dashboard-ui]
+    paths:
+      - "ugs-pendant/src/main/webapp-dashboard/**"
+      - ".github/workflows/dashboard-demo.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: dashboard-demo
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    if: github.repository_owner == 'zanymutt'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ugs-pendant/src/main/webapp-dashboard/package-lock.json
+
+      - name: Build the demo
+        working-directory: ugs-pendant/src/main/webapp-dashboard
+        run: |
+          npm ci
+          npm run build:demo
+          touch dist-demo/.nojekyll
+
+      - name: Publish to gh-pages
+        working-directory: ugs-pendant/src/main/webapp-dashboard/dist-demo
+        run: |
+          git init -q -b gh-pages
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Publish dashboard demo from ${GITHUB_SHA}"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git" gh-pages

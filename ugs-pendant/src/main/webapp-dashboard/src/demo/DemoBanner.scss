@@ -1,0 +1,43 @@
+.demoBanner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 4px 12px;
+  background: #193b66;
+  border-bottom: 1px solid #315c90;
+  color: #d7e6f8;
+  font-size: 0.8rem;
+  line-height: 1.3;
+
+  strong {
+    color: #fff;
+  }
+
+  .demoBannerActions {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    gap: 10px;
+
+    a {
+      color: #73b3ff;
+    }
+
+    .btn {
+      padding: 1px 8px;
+      font-size: 0.75rem;
+    }
+  }
+
+  .demoBannerClose {
+    background: none;
+    border: 0;
+    padding: 0 4px;
+    color: #d7e6f8;
+    font-size: 1.2rem;
+    line-height: 1;
+    cursor: pointer;
+  }
+}

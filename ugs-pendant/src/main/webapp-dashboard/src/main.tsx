@@ -5,8 +5,20 @@ import { store } from "./store/store.ts";
 
 import "./index.css";
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <Provider store={store}>
-    <App />
-  </Provider>
-);
+const start = async () => {
+  // The online demo swaps the backend for an in-browser simulation before the
+  // app makes its first request. The flag is a compile-time constant (see
+  // vite.config.ts), so the normal build drops this branch and the demo code.
+  // Written out here rather than via isDemo so the bundler prunes the import().
+  if (import.meta.env.VITE_DEMO === "true") {
+    const { installDemo } = await import("./demo/installDemo");
+    installDemo();
+  }
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <Provider store={store}>
+      <App />
+    </Provider>
+  );
+};
+
+start();
