@@ -1,7 +1,7 @@
 {
   "name": "Nesting",
-  "description": "Nest copies of the open G-code part onto a sheet using its outer shape, with rotation, gap, origin and time estimate.",
-  "version": "0.2.2",
+  "description": "Nest requested copies of multiple G-code files onto a sheet using their outer shapes, with rotation, gap, origin and time estimate.",
+  "version": "0.3.1",
   "entry": "index.html",
   "allowMultipleInstances": false
 }

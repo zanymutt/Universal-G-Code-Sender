@@ -1,8 +1,8 @@
 # Nesting — Dashboard plugin
 
-Packs copies of one G-code part onto a sheet using the part's **outer shape**, so shapes can interlock (a triangle beside an inverted triangle). It writes a new program with every copy rotated and moved into place. It never sends machine commands or starts a job.
+Packs requested copies of multiple G-code parts onto a sheet using each part's **outer shape**, so different shapes can interlock (a triangle beside an inverted triangle). It writes a new program with every copy rotated and moved into place. It never sends machine commands or starts a job.
 
-Version 0.2.2. Written for plasma-style programs (probe, pierce, cut, retract) but it only depends on the file structure described below.
+Version 0.3.0. Written for plasma-style programs (probe, pierce, cut, retract) but it only depends on the file structure described below.
 
 ## Install
 
@@ -13,26 +13,27 @@ Copy these files into `~/.ugs/dashboard-plugins/nesting/` on the computer runnin
 
 ## Workflow
 
-1. **Part** source: **Use file open in Dashboard**, or **G-code file** to pick one from this device. It works with nothing open in Dashboard. If a file is open when the plugin starts it is loaded automatically.
-2. **Layout** tab: choose a mode, counts/sizes, gap and search effort, then **Nest & generate**.
+1. **Files** tab: add the file open in Dashboard, one or more files from this device, or the built-in example. Set **Copies** for each file. It works with nothing open in Dashboard. If a file is open when the plugin starts it is loaded automatically.
+2. **Part** tab: choose rotation settings shared by all files.
+3. **Layout** tab: choose a mode, sizes, gap and search effort, then **Nest & generate**. Every requested copy is placed; a layout that cannot fit all copies reports an error.
 3. Check the preview, the summary line and the smallest achieved gap.
-4. **Output** tab: origin, cut sequence, walk between cuts, comments, rapid rate for the time estimate. These re-generate instantly, no re-nesting.
+4. **Output** tab: origin, cut sequence, walk between cuts, comments, rapid rate for the time estimate. Most changes re-generate instantly; when **Compact block** is selected, changing the origin corner asks you to nest again so the block can be packed against that corner.
 5. **Save As into Dashboard** (uses the Dashboard's own dialog) or **Copy G-code**.
 
 Layout modes:
 
 | Mode | You give | You get |
 |---|---|---|
-| Fixed width X | N parts, **maximum** X | minimum Y |
-| Fixed height Y | N parts, **maximum** Y | minimum X |
-| N parts → minimum area | N parts, optional X/Y limits | smallest bounding rectangle (unlimited, this is often one long narrow strip; use a limit) |
-| Sheet X × Y → maximum parts | sheet size | as many as fit (tries both directions) |
+| Fixed width X | **maximum** X | minimum Y for all requested copies |
+| Fixed height Y | **maximum** Y | minimum X for all requested copies |
+| Requested copies → minimum area | optional X/Y limits | smallest bounding rectangle (unlimited, this is often one long narrow strip; use a limit) |
+| Sheet X × Y · fit requested copies | sheet size | all requested copies, if they fit (tries both directions) |
 
 Every size you enter is a **limit**. The frame (and the origin corners) is the tight bounding box of what was actually placed, so it can be smaller than the limit; only maximum-parts mode keeps your sheet as the frame.
 
 Settings: rotation on/off and step (15° = 24 orientations; parts are never mirrored), minimum gap, result preference, effort (1/3/5 scoring passes, best result kept).
 
-**Result preference.** *Compact block* (default) keeps the smallest frame area among results within 3% of the shortest length; *Shortest length* is strict. The two can differ because the shortest layouts sometimes stagger columns so the lead-in tips of one column tuck into gaps of the next, saving a few mm of length but leaving visible gaps and a bigger frame. Origin: bottom-left/right, top-left/right, nest center or custom (typed or picked in the preview), measured on the nest frame — the fixed width/height you entered or the sheet, with the free side taken from the result. There is no stock margin; put that in the origin.
+**Result preference.** *Compact block* (default) keeps the smallest frame area among results within 3% of the shortest length and builds the nest outward from the selected origin corner; *Shortest length* is strict. The two can differ because the shortest layouts sometimes stagger columns so the lead-in tips of one column tuck into gaps of the next, saving a few mm of length but leaving visible gaps and a bigger frame. Origin: bottom-left/right, top-left/right, nest center or custom (typed or picked in the preview), measured on the nest frame — the fixed width/height you entered or the sheet, with the free side taken from the result. Changing a corner origin requires Nest & generate again when Compact block is selected. There is no stock margin; put that in the origin.
 
 ## Cut order (inner cuts first)
 
@@ -46,11 +47,13 @@ A file that cannot be split safely (tool changes, work-offset changes, a cut wit
 
 ## How the file is treated
 
-The whole file is **one part**. It is split into:
+Each listed file is **one part type**. Its requested copy count is packed together with the other file types. Files must use the same units (all mm or all inches). The first file supplies the combined program footer; each additional file's setup header is emitted once before its first copy.
 
-- **header** — everything before the first X/Y move (modal setup such as `G90 G21 G54`). Written once.
+Each file is split into:
+
+- **header** — everything before the first X/Y move (modal setup such as `G90 G21 G54`). Written once for each file type.
 - **body** — from the first X/Y move to the last cut and its retract (approach, height probe, pierce, cut, `M5`, dwell, lift). Repeated for every copy; made of one or more cut blocks (see above).
-- **footer** — from the first X/Y move or `M2`/`M30` after the last cut (park move, program end). Written once, so `G0 X0 Y0` and `M30` appear a single time at the end.
+- **footer** — from the first X/Y move or `M2`/`M30` after the last cut (park move, program end). The first file's footer is written once at the end, so `G0 X0 Y0` and `M30` appear a single time.
 
 Inside each copy only the X/Y words of plain `G0`–`G3` moves, and arc `I`/`J`, are rotated and translated (arcs stay arcs). Everything else is copied verbatim: probe macros, `#` variables and `o` blocks, `G10`/`G53`/`G92` lines, M-codes, dwells, feeds and comments. Lines containing expressions or machine-coordinate words are never touched. Modal single-axis lines (`Y20`) and `G91` relative moves are handled. G20 inch files are packed in mm and written back in inches.
 
@@ -58,7 +61,7 @@ The probe macro therefore runs once per copy, and so does any end-of-operation d
 
 ## Packing
 
-The outer contour(s) of the cutting path — contours not inside another — form the shape, **including lead-in/lead-out**, because a pierce landing on a neighbour would ruin it. Inner cuts do not matter for packing. Each orientation is reduced to a per-column vertical extent and grown by half the gap on each side; every placed part records the interval it occupies in each x-column, so later parts can slide under an overhang or into a pocket. Placement is bottom-left with tolerance-based tie-breaking, run with several scoring variants (the effort setting). After placing, a **compaction** pass takes each part out and lets it fall toward the origin corner as far as the others allow, so nothing is left hanging where it first landed. When rotation is on, the quarter-turn-only subset is also tried, so a finer step is never worse than a coarser one.
+The outer contour(s) of the cutting path — contours not inside another — form the shape, **including lead-in/lead-out**, because a pierce landing on a neighbour would ruin it. Inner cuts do not matter for packing. Each orientation is reduced to a per-column vertical extent and grown by half the gap on each side; every placed part records the interval it occupies in each x-column, so later parts can slide under an overhang or into a pocket. Placement starts at the selected Compact-block origin corner with tolerance-based tie-breaking, run with several scoring variants (the effort setting). Bottom-left layouts also receive a **compaction** pass that lets each part fall farther toward that corner, so nothing is left hanging where it first landed. When rotation is on, the quarter-turn-only subset is also tried, and minimum-area mode compares a zero-degree baseline so enabling rotation cannot produce a larger selected frame area.
 
 - The **gap is edge to edge** between outer shapes. Kerf is not added; account for it in your post.
 - After packing, an exact polygon check measures the real smallest gap and confirms nothing overlaps or leaves the frame. The result message reports it; a failed check is flagged as an error.

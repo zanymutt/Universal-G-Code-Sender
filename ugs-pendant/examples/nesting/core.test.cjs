@@ -145,6 +145,22 @@ test('minimum area finds a compact layout', () => {
   assert.ok(r.verify.ok);
 });
 
+test('minimum area applies the Y limit while searching for a usable width', () => {
+  const s = C.extract(sample);
+  const r = C.nest([s], { mode: 'minArea', counts: [5], sizeX: 45, sizeY: 135, gap: 3, rotate: true, rotStep: 15, effort: 5 });
+  assert.equal(r.count, 5);
+  assert.ok(r.frame.w <= 45 + 1e-6 && r.frame.h <= 135 + 1e-6, JSON.stringify(r.frame));
+  assert.ok(r.verify.ok, JSON.stringify(r.verify));
+});
+
+test('allowing rotation never makes the minimum-area result worse than zero rotation', () => {
+  const s = C.extract(sample);
+  const fixed = C.nest([s], { mode: 'minArea', counts: [5], sizeX: 150, sizeY: 150, gap: 5, rotate: false, effort: 3 });
+  const rotated = C.nest([s], { mode: 'minArea', counts: [5], sizeX: 150, sizeY: 150, gap: 5, rotate: true, rotStep: 15, effort: 3 });
+  assert.ok(rotated.frame.w * rotated.frame.h <= fixed.frame.w * fixed.frame.h + 1e-6, JSON.stringify({ fixed: fixed.frame, rotated: rotated.frame }));
+  assert.ok(rotated.verify.ok, JSON.stringify(rotated.verify));
+});
+
 test('maximum parts on a sheet respects the gap', () => {
   const s = C.extract(square(10));
   const r = C.nest(s, { mode: 'maxParts', sizeX: 100, sizeY: 100, gap: 2, rotate: false });
@@ -181,6 +197,28 @@ test('compaction pulls parts toward the origin instead of leaving them where the
     ys.forEach((y, i) => { if (i) assert.ok(y - ys[i - 1] < 50 + 5 + 1.5, 'gap between stacked parts ' + (y - ys[i - 1] - 50)); });
     assert.ok(ys[0] < 25 + 1.5, 'bottom part sits on the floor: ' + ys[0]);
   }
+});
+
+test('compact preference pushes a fixed-sheet nest toward the selected origin corner', () => {
+  const s = C.extract(tri);
+  const r = C.nest([s], { mode: 'maxParts', counts: [2], sizeX: 200, sizeY: 100, gap: 5, rotate: false, prefer: 'compact', origin: 'top-right' });
+  const b = r.placements.reduce((box, p) => {
+    const o = C.prepare([s]).orients[p.k];
+    box.minX = Math.min(box.minX, p.cx + o.minX); box.maxX = Math.max(box.maxX, p.cx + o.maxX);
+    box.minY = Math.min(box.minY, p.cy + o.minY); box.maxY = Math.max(box.maxY, p.cy + o.maxY);
+    return box;
+  }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+  assert.ok(Math.abs(b.maxX - r.frame.w) < 1e-6 && Math.abs(b.maxY - r.frame.h) < 1e-6, JSON.stringify({ b, frame: r.frame }));
+  assert.ok(r.verify.ok, JSON.stringify(r.verify));
+});
+
+test('compact preference builds a tight strip from a selected top origin', () => {
+  const s = C.extract(tri);
+  const bottom = C.nest([s], { mode: 'fixedX', counts: [4], sizeX: 80, gap: 4, rotate: false, prefer: 'compact', origin: 'bottom-left' });
+  const top = C.nest([s], { mode: 'fixedX', counts: [4], sizeX: 80, gap: 4, rotate: false, prefer: 'compact', origin: 'top-left' });
+  const positions = layout => layout.placements.map(p => `${p.cx.toFixed(3)},${p.cy.toFixed(3)}`);
+  assert.notDeepEqual(positions(top), positions(bottom));
+  assert.ok(top.verify.ok, JSON.stringify(top.verify));
 });
 
 test('the example built into the plugin matches sample.gcode (the sandboxed plugin cannot fetch files)', () => {
@@ -254,6 +292,19 @@ test('end to end: nested output re-parses to separated copies with one footer', 
   assert.ok(b.minX >= -1e-3 && b.maxY <= 1e-3, JSON.stringify(b));
   const a = C.analyze(g.text);
   assert.equal(a.pierces, 6); assert.equal(a.probes, 6);
+});
+
+test('multiple files honor each file copy count and keep one combined footer', () => {
+  const a = C.extract(tri);
+  const b = C.extract(square(12));
+  const r = C.nest([a, b], { mode: 'fixedX', counts: [2, 3], sizeX: 180, gap: 5, rotate: true, rotStep: 15 });
+  assert.equal(r.count, 5);
+  assert.deepEqual(r.placements.reduce((out, p) => { out[p.sourceIndex]++; return out; }, [0, 0]), [2, 3]);
+  assert.ok(r.verify.ok, JSON.stringify(r.verify));
+  const g = C.buildGcode([a, b], r, { names: ['triangle.gcode', 'square.gcode'], order: 'nearest', gap: 5 });
+  assert.equal(g.text.split('\n').filter(l => l === 'M4 S1000').length, 5);
+  assert.equal(g.text.split('\n').filter(l => l === 'M30').length, 1);
+  assert.ok(g.text.includes('triangle.gcode') && g.text.includes('square.gcode'));
 });
 
 test('origin anchors', () => {

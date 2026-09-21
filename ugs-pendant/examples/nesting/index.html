@@ -1,40 +1,44 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Nesting</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>Nesting <small>Preview · 0.2.2</small></h1><p>Pack copies of one G-code part onto a sheet by its outer shape. Nothing is sent to the machine.</p>
-<div class="importBar"><button id="useOpen" type="button">Use file open in Dashboard</button><label>G-code file<input id="file" type="file" accept=".gcode,.nc,.ngc,.tap,.cnc,.gc,.txt,text/plain"></label><button id="example" type="button">Load example part</button></div></header>
+<header><h1>Nesting <small>Preview · 0.3.1</small></h1><p>Pack copies of multiple G-code files onto a sheet by their outer shapes. Nothing is sent to the machine.</p></header>
 <main>
 <section class="settings">
-<div class="settingsTabs" role="tablist" aria-label="Settings"><button type="button" role="tab" id="tab-part" aria-controls="panel-part" aria-selected="true" tabindex="0">Part</button><button type="button" role="tab" id="tab-layout" aria-controls="panel-layout" aria-selected="false" tabindex="-1">Layout</button><button type="button" role="tab" id="tab-output" aria-controls="panel-output" aria-selected="false" tabindex="-1">Output</button><button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="false" tabindex="-1">Presets</button></div>
+<div class="settingsTabs" role="tablist" aria-label="Settings"><button type="button" role="tab" id="tab-files" aria-controls="panel-files" aria-selected="true" tabindex="0">Files</button><button type="button" role="tab" id="tab-part" aria-controls="panel-part" aria-selected="false" tabindex="-1">Part</button><button type="button" role="tab" id="tab-layout" aria-controls="panel-layout" aria-selected="false" tabindex="-1">Layout</button><button type="button" role="tab" id="tab-output" aria-controls="panel-output" aria-selected="false" tabindex="-1">Output</button><button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="false" tabindex="-1">Presets</button></div>
 
-<fieldset id="panel-part" role="tabpanel" aria-labelledby="tab-part"><legend>1 · Part</legend>
-<div id="partInfo" class="info">Load a G-code file above. The whole file is treated as one complete part.</div>
+<fieldset id="panel-files" role="tabpanel" aria-labelledby="tab-files"><legend>1 · Files</legend>
+<div class="actions"><button id="useOpen" type="button">Add file open in Dashboard</button><button id="example" type="button">Add example file</button></div>
+<label>G-code files<input id="file" type="file" multiple accept=".gcode,.nc,.ngc,.tap,.cnc,.gc,.txt,text/plain"></label>
+<div id="fileList" class="fileList" aria-live="polite"><p class="hint">Add one or more G-code files. Set the copy count for each file below.</p></div>
+<p id="fileWarnings" class="hint warn" hidden></p>
+</fieldset>
+
+<fieldset id="panel-part" role="tabpanel" aria-labelledby="tab-part" hidden><legend>2 · Part</legend>
+<div id="partInfo" class="info">Add a G-code file in the Files tab. Each file is treated as one complete part.</div>
 <label class="check"><input id="rotate" type="checkbox" checked>Allow part rotation</label>
 <label>Rotation step (°)<input id="rotStep" type="number" value="15" min="1" max="180" step="1"></label>
 <p class="hint">Copies may be turned in steps of this angle (15° gives 24 orientations). A smaller step can pack tighter but takes longer. Parts are never mirrored.</p>
 <p class="hint">Packing follows the part's outer shape, so a triangle can sit inverted beside another. Inner cuts do not affect packing. The path from the file, including its lead-in, counts as part of the shape.</p>
-<div id="partWarnings" class="hint warn" hidden></div>
 </fieldset>
 
-<fieldset id="panel-layout" role="tabpanel" aria-labelledby="tab-layout" hidden><legend>2 · Layout</legend>
+<fieldset id="panel-layout" role="tabpanel" aria-labelledby="tab-layout" hidden><legend>3 · Layout</legend>
 <label>Layout mode<select id="mode">
-<option value="fixedX">Fixed width X · N parts → minimum Y</option>
-<option value="fixedY">Fixed height Y · N parts → minimum X</option>
-<option value="minArea">N parts → minimum area</option>
-<option value="maxParts">Sheet X × Y → maximum parts</option></select></label>
+<option value="fixedX">Fixed width X · requested copies → minimum Y</option>
+<option value="fixedY">Fixed height Y · requested copies → minimum X</option>
+<option value="minArea">Requested copies → minimum area</option>
+<option value="maxParts">Sheet X × Y · fit requested copies</option></select></label>
 <p class="hint" id="modeHint"></p>
-<label id="countWrap">Number of parts<input id="count" type="number" value="4" min="1" max="2000" step="1"></label>
 <div class="pair"><label id="sizeXWrap"><span id="sizeXLabel">Maximum X (mm)</span><input id="sizeX" type="number" value="600" min="0" step="1"></label><label id="sizeYWrap"><span id="sizeYLabel">Maximum Y (mm)</span><input id="sizeY" type="number" value="400" min="0" step="1"></label></div>
 <label>Minimum gap between parts (mm)<input id="gap" type="number" value="3" min="0" step="0.1"></label>
 <p class="hint">Edge to edge, between the parts' outer shapes. Kerf is not added; account for it in your post processor. The result reports the smallest gap actually achieved.</p>
 <label>Result preference<select id="prefer"><option value="compact" selected>Compact block — smallest frame area</option><option value="length">Shortest length — strictly</option></select></label>
-<p class="hint">Compact picks the tightest block among results within 3% of the shortest length. Shortest length may stagger parts to save a few mm, leaving gaps.</p>
+<p class="hint">Compact picks the tightest block among results within 3% of the shortest length, then builds it outward from the selected origin corner. Shortest length may stagger parts to save a few mm, leaving gaps. Changing the origin corner requires Nest &amp; generate again.</p>
 <label>Search effort<select id="effort"><option value="1">Fast — one pass</option><option value="3" selected>Normal — best of 3 passes</option><option value="5">Thorough — best of 5 passes</option></select></label>
 <div class="actions"><button id="nest" type="button" disabled>Nest &amp; generate</button><button id="stop" type="button" hidden>Stop</button></div>
 <output id="progress"></output>
 </fieldset>
 
-<fieldset id="panel-output" role="tabpanel" aria-labelledby="tab-output" hidden><legend>3 · Output</legend>
+<fieldset id="panel-output" role="tabpanel" aria-labelledby="tab-output" hidden><legend>4 · Output</legend>
 <label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Nest center</option><option value="custom">Custom</option></select></label>
 <div class="pair"><label>Custom X (mm)<input id="originX" type="number" value="0" step="0.1"></label><label>Custom Y (mm)<input id="originY" type="number" value="0" step="0.1"></label></div>
 <button id="pickOrigin" type="button" disabled>Pick origin in preview</button>
@@ -47,7 +51,7 @@
 <p class="hint">Estimate = cutting at each move's F word, rapids at this rate, plus G4 dwells. Z moves, probing and acceleration are not included, so treat it as a lower bound.</p>
 </fieldset>
 
-<fieldset id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" hidden><legend>Presets</legend>
+<fieldset id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" hidden><legend>5 · Presets</legend>
 <label>Saved settings<select id="presets"><option value="">Choose a preset</option></select></label>
 <div class="pair"><button id="loadPreset" type="button">Load preset</button><button id="deletePreset" type="button">Delete preset</button></div>
 <label>Preset name<input id="presetName" maxlength="100" placeholder="e.g. 1 mm steel, 600 wide"></label>

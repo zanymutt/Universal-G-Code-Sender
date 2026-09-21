@@ -4,10 +4,10 @@
   const NS = 'http://www.w3.org/2000/svg';
   const Core = window.NestCore;
 
-  const numbers = ['count', 'sizeX', 'sizeY', 'gap', 'rotStep', 'originX', 'originY', 'rapid'];
+  const numbers = ['sizeX', 'sizeY', 'gap', 'rotStep', 'originX', 'originY', 'rapid'];
   const choices = ['mode', 'effort', 'prefer', 'origin', 'order', 'cutOrder'];
   const checks = ['rotate', 'tags'];
-  const solverFields = ['mode', 'count', 'sizeX', 'sizeY', 'gap', 'rotate', 'rotStep', 'effort', 'prefer'];
+  const solverFields = ['mode', 'sizeX', 'sizeY', 'gap', 'rotate', 'rotStep', 'effort', 'prefer'];
   const outputFields = ['origin', 'originX', 'originY', 'order', 'cutOrder', 'tags', 'rapid'];
   const allFields = [...numbers, ...choices, ...checks];
   const MAX_INPUT_CHARS = 3000000;
@@ -17,10 +17,10 @@
   const SAMPLE = ["(Sample plasma part for the Nesting plugin: 40 x 30 mm triangle with a lead-in)","(Structure mirrors a typical GRBL plasma post: setup, torch height probe, pierce, cut, retract, end)","G90 G94 G17","G21","G54","","G0 X10 Y-6 F2500","G0 X10 Y-6 Z25","","G53 G38.2 Z0 F200","(Read float switch input immediately after probe stop)","M66 P0 L0","#100 = -3 ; default assume float switch trigger","o100 if [#5399 EQ 0]","  #100 = -0.2 ; float inactive, assume ohmic trigger","o100 endif","G10 L20 Z[#100]","G0 X10 Y-6  ; force position after probe","Z3","M4 S1000","G4 P0.4","G1 Z2.5 F2500","M8","G1 X10 Y0","X40 Y0","X20 Y30","X0 Y0","X10 Y0","X10 Y-6","M5","G4 p0.5","M9","G0 Z30","G0 Z40","","M5","G0 X0 Y0","M30"].join('\n') + '\n';
 
   const MODES = {
-    fixedX: { count: true, x: 'Maximum X (mm)', y: null, hint: 'Fills rows within the maximum X and grows in Y. The frame reported is what is actually used, so it can be narrower than the maximum.' },
-    fixedY: { count: true, x: null, y: 'Maximum Y (mm)', hint: 'Fills columns within the maximum Y and grows in X. The frame reported is what is actually used, so it can be shorter than the maximum.' },
-    minArea: { count: true, x: 'X limit (mm, optional)', y: 'Y limit (mm, optional)', hint: 'Tries many widths and keeps the smallest bounding rectangle. Without limits this is often a long narrow strip; set an X or Y limit to keep it practical.' },
-    maxParts: { count: false, x: 'Sheet X (mm)', y: 'Sheet Y (mm)', hint: 'Places as many copies as fit on the sheet. Tries both directions and keeps the better result.' },
+    fixedX: { x: 'Maximum X (mm)', y: null, hint: 'Places the requested copies in rows within the maximum X and grows in Y. The frame reported is what is actually used.' },
+    fixedY: { x: null, y: 'Maximum Y (mm)', hint: 'Places the requested copies in columns within the maximum Y and grows in X. The frame reported is what is actually used.' },
+    minArea: { x: 'X limit (mm, optional)', y: 'Y limit (mm, optional)', hint: 'Tries many widths and keeps the smallest bounding rectangle for all requested copies. Set an X or Y limit to keep it practical.' },
+    maxParts: { x: 'Sheet X (mm)', y: 'Sheet Y (mm)', hint: 'Fits every requested copy on the sheet. Tries both directions and keeps the better result.' },
   };
 
   // ---------------------------------------------------------------- tabs
@@ -50,7 +50,8 @@
   });
 
   // ---------------------------------------------------------------- state
-  let src = null, srcName = '', layout = null, built = null, geo = null, code = '', codeTruncated = false;
+  let entries = [], layout = null, built = null, geo = null, code = '', codeTruncated = false;
+  let nextEntryId = 1;
   let running = false, ctl = null, picking = false, savePending = false, revision = 0;
 
   function settings() {
@@ -85,7 +86,6 @@
   }
   function updateModeFields() {
     const ui = MODES[$('mode').value];
-    $('countWrap').hidden = !ui.count;
     $('sizeXWrap').hidden = !ui.x;
     $('sizeYWrap').hidden = !ui.y;
     if (ui.x) $('sizeXLabel').textContent = ui.x;
@@ -98,57 +98,57 @@
     window.Dropdowns?.refresh();
   }
 
-  // ---------------------------------------------------------------- loading a part
-  function partInfoText() {
-    const s = src, mm = s.mmPerUnit;
+  // ---------------------------------------------------------------- loading files
+  function entryInfo(entry) {
+    const s = entry.src, mm = s.mmPerUnit;
     const a = Core.analyze(s.lines.join('\n'), { rapid: settings().rapid });
     const w = (s.bbox.maxX - s.bbox.minX) * mm, h = (s.bbox.maxY - s.bbox.minY) * mm;
     const tops = s.contours.filter(c => c.top).length;
-    return [
-      srcName || 'G-code part',
-      `${s.lines.length} lines: ${s.bodyStart} header · ${s.bodyEnd - s.bodyStart} repeated per part · ${s.lines.length - s.bodyEnd} footer`,
-      `Outline ${fmt(w, 2)} × ${fmt(h, 2)} mm (${s.unit === 'in' ? 'file is in inches' : 'file is in mm'})`,
-      `${s.contours.length} cut path${s.contours.length === 1 ? '' : 's'}: ${tops} outer, ${s.contours.length - tops} inner`,
-      `${s.blocks.length} cut cycle${s.blocks.length === 1 ? '' : 's'}: ${s.blocks.filter(b => b.internal).length} inner, ${s.blocks.filter(b => !b.internal).length} outer${s.blocks.length > 1 ? ' (can be reordered)' : ''}`,
-      `One part: cut ${fmt(a.cutMM / 1000, 2)} m${a.pierces ? ` · ${a.pierces} pierce${a.pierces === 1 ? '' : 's'}` : ''} · ≈ ${duration(a.seconds)}`,
-    ].join('\n');
+    return `${fmt(w, 2)} × ${fmt(h, 2)} mm · ${s.blocks.length} cut cycle${s.blocks.length === 1 ? '' : 's'} · ${tops} outer · ${entry.copies} copie${entry.copies === 1 ? '' : 's'} · ≈ ${duration(a.seconds * entry.copies)}`;
   }
-  function loadText(text, name) {
-    invalidate();
-    if (text.length > MAX_INPUT_CHARS) {
-      src = null;
-      message(`That file is ${fmt(text.length / 1e6, 1)} MB; this plugin repeats it once per part, so it is limited to ${MAX_INPUT_CHARS / 1e6} MB.`, true);
-      afterLoad();
-      return;
-    }
-    try {
-      src = Core.extract(text);
-      srcName = name || '';
-    } catch (e) {
-      src = null;
-      $('partInfo').textContent = 'Could not read this file.';
-      message(e.message, true);
-      afterLoad();
-      return;
-    }
-    $('partInfo').textContent = partInfoText();
-    const warn = $('partWarnings');
-    warn.hidden = !src.warnings.length;
-    warn.textContent = src.warnings.join('\n');
-    viewBox = null;
-    afterLoad();
-    message(`Loaded ${srcName || 'part'}. Pick a layout, then click Nest & generate. Nothing is sent to the machine.`);
+  function refreshFileList() {
+    const list = $('fileList');
+    list.replaceChildren();
+    if (!entries.length) {
+      list.innerHTML = '<p class="hint">Add one or more G-code files. Set the copy count for each file below.</p>';
+    } else entries.forEach(entry => {
+      const row = document.createElement('div'); row.className = 'fileItem'; row.dataset.id = entry.id;
+      const head = document.createElement('div'); head.className = 'fileItemHeader';
+      const name = document.createElement('div'); name.className = 'fileItemName'; name.textContent = entry.name || 'G-code file';
+      const remove = document.createElement('button'); remove.type = 'button'; remove.className = 'fileItemRemove'; remove.setAttribute('aria-label', `Remove ${entry.name || 'file'}`); remove.textContent = '×';
+      remove.onclick = () => { entries = entries.filter(item => item.id !== entry.id); invalidate(); refreshFiles(); message(entries.length ? 'File removed. Nest & generate to update the output.' : 'Add a G-code file to begin.'); };
+      head.append(name, remove); row.append(head);
+      const meta = document.createElement('div'); meta.className = 'fileItemMeta'; meta.textContent = entryInfo(entry); row.append(meta);
+      const copies = document.createElement('label'); copies.className = 'fileItemCopies'; copies.textContent = 'Copies';
+      const input = document.createElement('input'); input.type = 'number'; input.min = '1'; input.max = '2000'; input.step = '1'; input.value = String(entry.copies); input.setAttribute('aria-label', `Copies of ${entry.name || 'file'}`);
+      input.oninput = () => { entry.copies = Math.max(1, Math.min(2000, Math.floor(Number(input.value) || 1))); input.value = String(entry.copies); meta.textContent = entryInfo(entry); updateFileSummary(); saveLastSoon(); };
+      copies.append(input); row.append(copies); list.append(row);
+    });
+    updateFileSummary();
   }
-  function afterLoad() {
-    $('nest').disabled = !src || running;
-    if (!src) { $('partWarnings').hidden = true; }
+  function updateFileSummary() {
+    const total = entries.reduce((sum, entry) => sum + entry.copies, 0);
+    $('partInfo').textContent = entries.length ? `${entries.length} file${entries.length === 1 ? '' : 's'} · ${total} requested cop${total === 1 ? 'y' : 'ies'}\n${entries.map(entry => `${entry.name || 'G-code file'} · ${entry.copies} cop${entry.copies === 1 ? 'y' : 'ies'}`).join('\n')}` : 'Add a G-code file in the Files tab. Each file is treated as one complete part.';
+    const warnings = entries.flatMap(entry => entry.src.warnings.map(w => `${entry.name}: ${w}`));
+    $('fileWarnings').hidden = !warnings.length;
+    $('fileWarnings').textContent = warnings.join('\n');
+  }
+  function refreshFiles() {
+    $('nest').disabled = !entries.length || running;
+    refreshFileList();
     viewBox = null;
     draw();
+  }
+  function addText(text, name) {
+    if (text.length > MAX_INPUT_CHARS) throw Error(`${name || 'That file'} is ${fmt(text.length / 1e6, 1)} MB; the limit is ${MAX_INPUT_CHARS / 1e6} MB.`);
+    const src = Core.extract(text);
+    entries.push({ id: nextEntryId++, name: name || 'G-code file', text, src, copies: 1 });
   }
 
   // ---------------------------------------------------------------- nesting
   async function runNest() {
-    if (!src || running) return;
+    if (!entries.length || running) return;
+    if (new Set(entries.map(entry => entry.src.unit)).size > 1) { message('All files must use the same G-code units (all mm or all inches).', true); return; }
     const o = settings();
     running = true;
     ctl = { cancelled: false };
@@ -160,8 +160,8 @@
     draw();
     const started = Date.now();
     try {
-      const gen = Core.nestGen(src, {
-        mode: o.mode, count: o.count, sizeX: o.sizeX, sizeY: o.sizeY, gap: o.gap,
+      const gen = Core.nestGen(entries.map(entry => entry.src), {
+        mode: o.mode, counts: entries.map(entry => entry.copies), sizeX: o.sizeX, sizeY: o.sizeY, gap: o.gap, origin: o.origin,
         rotate: o.rotate, rotStep: o.rotStep, effort: o.effort, prefer: o.prefer,
       }, ctl);
       let step;
@@ -173,11 +173,10 @@
       viewBox = null;
       regenerate();
       const v = layout.verify;
-      let text = `Placed ${layout.count} part${layout.count === 1 ? '' : 's'} in ${fmt(layout.frame.w, 1)} × ${fmt(layout.frame.h, 1)} mm, ${fmt(layout.utilization * 100, 0)}% of the frame used. `
+      let text = `Placed ${layout.count} part${layout.count === 1 ? '' : 's'} from ${entries.length} file${entries.length === 1 ? '' : 's'} in ${fmt(layout.frame.w, 1)} × ${fmt(layout.frame.h, 1)} mm, ${fmt(layout.utilization * 100, 0)}% of the frame used. `
         + (layout.count > 1 ? `Smallest gap ${Number.isFinite(v.minGap) ? fmt(v.minGap, 2) : '> ' + fmt(o.gap + 2, 1)} mm (asked ≥ ${fmt(o.gap, 2)}). ` : '')
         + `(${((Date.now() - started) / 1000).toFixed(1)} s)`;
       if (!v.ok) text += '\nWARNING: the exact check found parts closer than the gap or outside the frame. Do not run this; report it.';
-      if (o.mode !== 'maxParts' && layout.count < o.count) text += `\nOnly ${layout.count} of ${o.count} parts fit.`;
       message(text + '\nInspect the preview and the machine Z reference before running. Nothing has been sent.', !v.ok);
     } catch (e) {
       invalidate();
@@ -186,21 +185,20 @@
     } finally {
       running = false;
       ctl = null;
-      $('nest').disabled = !src;
+      $('nest').disabled = !entries.length;
       $('stop').hidden = true;
       $('progress').textContent = '';
     }
   }
 
   function regenerate() {
-    if (!src || !layout) return;
+    if (!entries.length || !layout) return;
     const o = settings();
-    const opts = { origin: o.origin, custom: { x: o.originX, y: o.originY }, order: o.order, cutOrder: o.cutOrder, tags: o.tags, gap: o.gap, name: srcName };
-    let bodyChars = 0;
-    for (let i = src.bodyStart; i < src.bodyEnd; i++) bodyChars += src.lines[i].length + 8;
-    if (bodyChars * layout.count > MAX_OUTPUT_CHARS) throw Error(`The nested program would be over ${MAX_OUTPUT_CHARS / 1e6} MB (${layout.count} copies of a ${fmt(bodyChars / 1000, 0)} KB part). Reduce the part count.`);
-    built = Core.buildGcode(src, layout, opts);
-    geo = Core.previewGeometry(src, layout, opts);
+    const opts = { origin: o.origin, custom: { x: o.originX, y: o.originY }, order: o.order, cutOrder: o.cutOrder, tags: o.tags, gap: o.gap, names: entries.map(entry => entry.name) };
+    const bodyChars = entries.reduce((sum, entry) => sum + entry.copies * entry.src.lines.slice(entry.src.bodyStart, entry.src.bodyEnd).reduce((n, line) => n + line.length + 8, 0), 0);
+    if (bodyChars > MAX_OUTPUT_CHARS) throw Error(`The nested program would be over ${MAX_OUTPUT_CHARS / 1e6} MB. Reduce the file copy counts.`);
+    built = Core.buildGcode(entries.map(entry => entry.src), layout, opts);
+    geo = Core.previewGeometry(entries.map(entry => entry.src), layout, opts);
     code = built.text;
     codeTruncated = code.length > PREVIEW_CHARS;
     $('output').value = codeTruncated ? code.slice(0, PREVIEW_CHARS) + '\n… preview truncated; Save As uses the full program.' : code;
@@ -209,7 +207,7 @@
     $('pickOrigin').disabled = false;
     const est = Core.analyze(code, { rapid: o.rapid });
     const v = layout.verify;
-    $('summary').textContent = `${layout.count} parts · frame ${fmt(layout.frame.w, 1)} × ${fmt(layout.frame.h, 1)} mm · ${fmt(layout.utilization * 100, 0)}% used`
+    $('summary').textContent = `${layout.count} parts from ${entries.length} file${entries.length === 1 ? '' : 's'} · frame ${fmt(layout.frame.w, 1)} × ${fmt(layout.frame.h, 1)} mm · ${fmt(layout.utilization * 100, 0)}% used`
       + (layout.count > 1 && Number.isFinite(v.minGap) ? ` · min gap ${fmt(v.minGap, 2)} mm` : '')
       + ` · cut ${fmt(est.cutMM / 1000, 2)} m · travel ${fmt(est.rapidMM / 1000, 2)} m · ≈ ${duration(est.seconds)}`
       + (est.unknownFeed ? ` · ${est.unknownFeed} cut move(s) without a feed rate` : '');
@@ -245,9 +243,9 @@
     window.Dropdowns?.refresh();
     const svg = $('preview');
     svg.replaceChildren();
-    if (!src) {
-      $('summary').textContent = 'Load a part to begin.';
-      el('text', { x: 50, y: 50, 'text-anchor': 'middle', 'font-size': 5 }, svg).textContent = 'Load a part to preview';
+    if (!entries.length) {
+      $('summary').textContent = 'Add files to begin.';
+      el('text', { x: 50, y: 50, 'text-anchor': 'middle', 'font-size': 5 }, svg).textContent = 'Add files to preview';
       return;
     }
     if (!layout || !geo || !built) { drawPart(svg); return; }
@@ -259,7 +257,7 @@
     const frame = [{ x: 0, y: 0 }, { x: f.w, y: f.h }];
     const outputPoint = p => ({ x: p.x + a.x, y: p.y + a.y });
     const size = fit([...frame, a]);
-    const partSize = Math.max(src.bbox.maxX - src.bbox.minX, src.bbox.maxY - src.bbox.minY) * src.mmPerUnit;
+    const partSize = Math.max(...entries.map(entry => Math.max(entry.src.bbox.maxX - entry.src.bbox.minX, entry.src.bbox.maxY - entry.src.bbox.minY) * entry.src.mmPerUnit));
     const font = Math.max(partSize * 0.09, size * 0.012);
     el('rect', { x: 0, y: -f.h, width: f.w, height: f.h, fill: 'none', stroke: '#718196', 'stroke-width': 1, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, svg);
     // Travel: work zero -> first cut -> ... -> last cut -> work zero (the program's park move).
@@ -286,24 +284,34 @@
       const t = el('text', { x: start.x + font * 0.35, y: -start.y - font * 0.5, 'font-size': font, 'pointer-events': 'none' }, g);
       t.textContent = String(item.seq);
       const part = geo.parts[item.part];
-      el('title', {}, g).textContent = `Cut ${item.seq} · part ${item.part + 1} · ${src.blocks.length > 1 ? (item.internal ? 'inner' : 'outer') + ' cut · ' : ''}rotated ${fmt(part.angle, 2)}°`;
+      const file = entries[item.sourceIndex];
+      el('title', {}, g).textContent = `Cut ${item.seq} · ${file?.name || 'file'} · ${item.internal ? 'inner' : 'outer'} cut · rotated ${fmt(part.angle, 2)}°`;
     }
     el('path', { d: `M ${a.x - size * 0.02} ${-a.y} H ${a.x + size * 0.02} M ${a.x} ${-a.y - size * 0.02} V ${-a.y + size * 0.02}`, stroke: '#ff7272', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, svg);
   }
   function drawPart(svg) {
-    const s = src.mmPerUnit;
-    const map = p => ({ x: (p.x - src.center.x) * s, y: (p.y - src.center.y) * s });
-    const all = src.contours.flatMap(c => c.pts.map(map));
+    const gap = Math.max(...entries.map(entry => Math.max(entry.src.bbox.maxX - entry.src.bbox.minX, entry.src.bbox.maxY - entry.src.bbox.minY) * entry.src.mmPerUnit)) * 0.35;
+    let offsetX = 0;
+    const all = [];
+    const shapes = entries.map(entry => {
+      const src = entry.src, s = src.mmPerUnit;
+      const w = (src.bbox.maxX - src.bbox.minX) * s;
+      const map = p => ({ x: (p.x - src.center.x) * s + offsetX + w / 2, y: (p.y - src.center.y) * s });
+      const contours = src.contours.map(c => ({ ...c, pts: c.pts.map(map) }));
+      contours.forEach(c => all.push(...c.pts));
+      const first = map(src.firstPoint);
+      offsetX += w + gap;
+      return { entry, contours, first };
+    });
     const size = fit(all);
-    for (const c of src.contours) {
-      const pts = c.pts.map(map);
-      if (c.top) el('polygon', { points: pointList(pts), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
-      else el('polyline', { points: pointList(pts), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, svg);
-    }
-    const first = map(src.firstPoint);
-    el('circle', { cx: first.x, cy: -first.y, r: size * 0.008, fill: '#ffbf69' }, svg);
-    const w = (src.bbox.maxX - src.bbox.minX) * s, h = (src.bbox.maxY - src.bbox.minY) * s;
-    $('summary').textContent = `Part: ${fmt(w, 2)} × ${fmt(h, 2)} mm · ${src.contours.length} cut path${src.contours.length === 1 ? '' : 's'} · not nested yet`;
+    shapes.forEach(({ entry, contours, first }) => {
+      contours.forEach(c => {
+        if (c.top) el('polygon', { points: pointList(c.pts), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
+        else el('polyline', { points: pointList(c.pts), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, svg);
+      });
+      el('circle', { cx: first.x, cy: -first.y, r: size * 0.008, fill: '#ffbf69' }, svg);
+    });
+    $('summary').textContent = `${entries.length} file${entries.length === 1 ? '' : 's'} loaded · nest to generate the combined layout`;
   }
 
   // ---------------------------------------------------------------- zoom / pan / picking
@@ -320,7 +328,7 @@
   $('zoomFit').onclick = () => { if (fitBox) { viewBox = { ...fitBox }; applyView(); } };
   $('preview').setAttribute('tabindex', '-1');
   $('preview').addEventListener('wheel', event => {
-    if (!src) return;
+    if (!entries.length) return;
     event.preventDefault();
     const m = $('preview').getScreenCTM();
     if (!m) return;
@@ -332,7 +340,7 @@
   function pointerPair() { return [...pointers.values()].slice(0, 2); }
   $('preview').addEventListener('pointerdown', event => {
     suppressClick = false;
-    if (!src || picking || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    if (!entries.length || picking || (event.pointerType === 'mouse' && event.button !== 0)) return;
     const m = $('preview').getScreenCTM();
     if (!m) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -427,7 +435,15 @@
   }));
   outputFields.forEach(id => $(id).addEventListener('input', () => {
     updateModeFields();
-    if (id === 'rapid' && src) $('partInfo').textContent = partInfoText();
+    if (id === 'rapid' && entries.length) { refreshFileList(); updateFileSummary(); }
+    if (layout && id === 'origin' && $('prefer').value === 'compact' && ['bottom-left', 'bottom-right', 'top-left', 'top-right', 'center'].includes($('origin').value)) {
+      invalidate();
+      viewBox = null;
+      draw();
+      message('Origin changed. Click Nest & generate to repack the compact block toward the new origin.');
+      saveLastSoon();
+      return;
+    }
     if (layout) {
       try { regenerate(); } catch (e) { message(e.message, true); }
     }
@@ -437,18 +453,22 @@
   $('stop').onclick = () => { if (ctl) ctl.cancelled = true; };
 
   $('file').addEventListener('change', async () => {
-    const file = $('file').files[0];
-    if (!file) return;
+    const files = [...$('file').files];
+    if (!files.length) return;
     try {
-      if (file.size > MAX_INPUT_CHARS) throw Error(`That file is ${fmt(file.size / 1e6, 1)} MB; the limit is ${MAX_INPUT_CHARS / 1e6} MB.`);
-      loadText(await file.text(), file.name);
+      for (const file of files) addText(await file.text(), file.name);
+      refreshFiles();
+      message(`Added ${files.length} file${files.length === 1 ? '' : 's'}. Set copies, then click Nest & generate.`);
     } catch (e) {
       message(e.message, true);
-    }
+    } finally { $('file').value = ''; }
   });
   $('example').onclick = () => {
-    $('file').value = '';
-    loadText(SAMPLE, 'Example: 40 x 30 mm triangle');
+    try {
+      addText(SAMPLE, 'Example: 40 x 30 mm triangle');
+      refreshFiles();
+      message('Added the example file. Set its copy count, then click Nest & generate.');
+    } catch (e) { message(e.message, true); }
   };
 
   // ---------------------------------------------------------------- Dashboard bridge
@@ -480,8 +500,14 @@
         const status = await host('getFileStatus');
         if (status?.fileName) name = status.fileName.split(/[\\/]/).pop();
       } catch { /* the name is cosmetic */ }
-      $('file').value = '';
-      loadText(String(text), name);
+      if (entries.some(entry => entry.text === String(text))) {
+        refreshFiles();
+        if (announce) message(`${name} is already in the Files tab.`);
+        return;
+      }
+      addText(String(text), name);
+      refreshFiles();
+      message(`Added ${name}. Set copies, then click Nest & generate.`);
     } catch (e) {
       if (announce) message('Could not read the open file: ' + e.message, true);
     }

@@ -522,14 +522,19 @@
 
   // Where each placed part ends up in output coordinates (file units) and where each of its cut
   // blocks starts and ends.
+  const sourceList = src => Array.isArray(src) ? src : [src];
+
   function resolvePlacements(src, layout, opts = {}) {
+    const sources = sourceList(src);
     const anchor = anchorPoint(layout.frame, opts.origin || 'bottom-left', opts.custom);
-    const s = src.mmPerUnit;
     const parts = layout.placements.map((p, index) => {
+      const sourceIndex = p.sourceIndex ?? 0;
+      const source = sources[sourceIndex];
+      const s = source.mmPerUnit;
       const place = { angle: p.angle, tx: (p.cx - anchor.x) / s, ty: (p.cy - anchor.y) / s };
-      const map = makeMap(src, place);
-      const blocks = src.blocks.map(b => ({ start: map.point(b.firstPoint), end: map.point(b.lastPoint) }));
-      return { index, angle: p.angle, place, map, blocks, start: blocks[0].start, end: blocks[blocks.length - 1].end };
+      const map = makeMap(source, place);
+      const blocks = source.blocks.map(b => ({ start: map.point(b.firstPoint), end: map.point(b.lastPoint) }));
+      return { index, sourceIndex, source, name: opts.names?.[sourceIndex] || '', angle: p.angle, place, map, blocks, start: blocks[0].start, end: blocks[blocks.length - 1].end };
     });
     return { anchor, parts };
   }
@@ -555,12 +560,13 @@
   //   'part': one complete part at a time, cuts in file order.
   // `order` picks the walk inside a phase (or across parts): 'nearest' reduces travel, 'nest' follows part numbers.
   function planSequence(src, parts, opts = {}) {
+    const sources = sourceList(src);
     const order = opts.order || 'nearest';
     const items = [];
-    parts.forEach(p => src.blocks.forEach((b, bi) => items.push({
+    parts.forEach(p => sources[p.sourceIndex].blocks.forEach((b, bi) => items.push({
       part: p, block: bi, internal: b.internal, start: p.blocks[bi].start, end: p.blocks[bi].end,
     })));
-    const phased = (opts.cutOrder || 'phases') === 'phases' && src.blocks.some(b => b.internal);
+    const phased = (opts.cutOrder || 'phases') === 'phases' && sources.some(source => source.blocks.some(b => b.internal));
     if (!phased) {
       const walk = orderParts(parts, order);
       return walk.flatMap(p => items.filter(it => it.part === p));
@@ -594,47 +600,59 @@
   }
 
   function buildGcode(src, layout, opts = {}) {
-    const { anchor, parts } = resolvePlacements(src, layout, opts);
-    const sequence = planSequence(src, parts, opts);
-    const digits = src.unit === 'in' ? 5 : 4;
+    const sources = sourceList(src);
+    if (new Set(sources.map(source => source.unit)).size > 1) throw Error('All files must use the same G-code units (all mm or all inches).');
+    const { anchor, parts } = resolvePlacements(sources, layout, opts);
+    const sequence = planSequence(sources, parts, opts);
+    const first = sources[0];
     const out = [];
-    for (let i = 0; i < src.bodyStart; i++) out.push(src.lines[i]);
-    const multi = src.blocks.length > 1;
+    for (let i = 0; i < first.bodyStart; i++) out.push(first.lines[i]);
+    const multi = sources.length > 1 || sources.some(source => source.blocks.length > 1);
     if (opts.tags !== false) {
-      out.push(`(Nested ${parts.length} copies of one part${opts.name ? ' - ' + String(opts.name).replace(/[()]/g, '') : ''})`);
+      const label = sources.length > 1 ? `${sources.length} files` : opts.name ? String(opts.name).replace(/[()]/g, '') : 'one part';
+      out.push(`(Nested ${parts.length} copies from ${label})`);
       out.push(`(Min gap ${fmt(opts.gap ?? 0, 2)} mm - frame ${fmt(layout.frame.w, 2)} x ${fmt(layout.frame.h, 2)} mm - origin ${opts.origin || 'bottom-left'})`);
     }
-    let prev = src.startState;
-    if (sequence.length && sequence[0].block !== 0 && src.safeZ !== undefined) {
-      if (opts.tags !== false) out.push('(Raise to the start height used by the original file before the first move)');
-      out.push('G0 Z' + fmt(src.safeZ, digits));
-      prev = { ...prev, motion: 0 };
-    }
+    let prev = first.startState;
+    const started = new Set();
     sequence.forEach((item, n) => {
-      if (opts.tags !== false) {
-        const what = multi ? `${item.internal ? 'inner' : 'outer'} cut ${item.block + 1} of part` : 'part';
-        out.push(`(Cut ${n + 1} of ${sequence.length}: ${what} ${item.part.index + 1}, rotated ${fmt(item.part.angle, 2)} deg)`);
+      const source = sources[item.part.sourceIndex];
+      const firstForSource = !started.has(item.part.sourceIndex);
+      if (firstForSource) {
+        started.add(item.part.sourceIndex);
+        if (item.part.sourceIndex > 0) for (let i = 0; i < source.bodyStart; i++) out.push(source.lines[i]);
+        prev = source.startState;
       }
-      prev = emitBlock(src, src.blocks[item.block], item.part.map, digits, prev, out);
+      const digits = source.unit === 'in' ? 5 : 4;
+      if (firstForSource && item.block !== 0 && source.safeZ !== undefined) {
+        if (opts.tags !== false) out.push('(Raise to the start height used by the original file before the first move)');
+        out.push('G0 Z' + fmt(source.safeZ, digits));
+        prev = { ...prev, motion: 0 };
+      }
+      if (opts.tags !== false) {
+        const what = multi ? `${item.internal ? 'inner' : 'outer'} cut ${item.block + 1} of file` : 'part';
+        const fileLabel = sources.length > 1 ? ` ${item.part.sourceIndex + 1}${item.part.name ? ' - ' + String(item.part.name).replace(/[()]/g, '') : ''}` : '';
+        out.push(`(Cut ${n + 1} of ${sequence.length}: ${what}${fileLabel}, copy ${item.part.index + 1}, rotated ${fmt(item.part.angle, 2)} deg)`);
+      }
+      prev = emitBlock(source, source.blocks[item.block], item.part.map, digits, prev, out);
     });
-    for (let i = src.bodyEnd; i < src.lines.length; i++) out.push(src.lines[i]);
+    for (let i = first.bodyEnd; i < first.lines.length; i++) out.push(first.lines[i]);
     const seenParts = [...new Set(sequence.map(it => it.part))];
-    return { text: out.join(src.eol) + src.eol, anchor, parts, sequence, ordered: seenParts };
+    return { text: out.join(first.eol) + first.eol, anchor, parts, sequence, ordered: seenParts };
   }
 
   // Transformed contour polylines and cut numbering for the preview, in output mm.
   function previewGeometry(src, layout, opts = {}) {
-    const { anchor, parts } = resolvePlacements(src, layout, opts);
-    const sequence = planSequence(src, parts, opts);
-    const s = src.mmPerUnit;
-    const mm = p => ({ x: p.x * s, y: p.y * s });
+    const sources = sourceList(src);
+    const { anchor, parts } = resolvePlacements(sources, layout, opts);
+    const sequence = planSequence(sources, parts, opts);
     return {
       anchor,
       parts: parts.map(p => ({
-        index: p.index, angle: p.angle,
-        contours: src.contours.map(c => ({ top: c.top, closed: c.closed, block: c.block, pts: c.pts.map(q => mm(p.map.point(q))) })),
+        index: p.index, sourceIndex: p.sourceIndex, name: p.name, angle: p.angle,
+        contours: sources[p.sourceIndex].contours.map(c => ({ top: c.top, closed: c.closed, block: c.block, pts: c.pts.map(q => { const p0 = p.map.point(q), s = sources[p.sourceIndex].mmPerUnit; return { x: p0.x * s, y: p0.y * s }; }) })),
       })),
-      sequence: sequence.map((it, n) => ({ seq: n + 1, part: it.part.index, block: it.block, internal: it.internal, start: mm(it.start), end: mm(it.end) })),
+      sequence: sequence.map((it, n) => { const s = sources[it.part.sourceIndex].mmPerUnit; return { seq: n + 1, part: it.part.index, sourceIndex: it.part.sourceIndex, block: it.block, internal: it.internal, start: { x: it.start.x * s, y: it.start.y * s }, end: { x: it.end.x * s, y: it.end.y * s } }; }),
     };
   }
 
@@ -676,22 +694,31 @@
 
   // ---------------------------------------------------------------- packing
 
-  function prepare(src, opts) {
-    const s = src.mmPerUnit;
-    const base = src.outline.map(poly => poly.map(p => ({ x: (p.x - src.center.x) * s, y: (p.y - src.center.y) * s })));
+  function prepare(src, opts = {}) {
+    const sources = Array.isArray(src) ? src : [src];
     const angles = [0];
     if (opts.rotate) {
       const step = Number(opts.rotStep);
       if (!(step > 0 && step <= 180)) throw Error('Rotation step must be between 0 and 180 degrees.');
       for (let a = step; a < 360 - 1e-9; a += step) angles.push(Math.round(a * 1e6) / 1e6);
     }
-    const orients = angles.map(angle => {
-      const rad = (angle * Math.PI) / 180, cos = Math.cos(rad), sin = Math.sin(rad);
-      const polys = base.map(poly => poly.map(p => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos })));
-      const b = bboxOf(polys.flat());
-      return { angle, polys, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY, w: b.maxX - b.minX, h: b.maxY - b.minY };
+    const orients = [];
+    const oneAreas = [];
+    sources.forEach((source, sourceIndex) => {
+      const s = source.mmPerUnit;
+      const base = source.outline.map(poly => poly.map(p => ({ x: (p.x - source.center.x) * s, y: (p.y - source.center.y) * s })));
+      oneAreas[sourceIndex] = base.reduce((sum, p) => sum + polyArea(p), 0);
+      angles.forEach(angle => {
+        const rad = (angle * Math.PI) / 180, cos = Math.cos(rad), sin = Math.sin(rad);
+        const polys = base.map(poly => poly.map(p => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos })));
+        const b = bboxOf(polys.flat());
+        orients.push({ sourceIndex, angle, polys, minX: b.minX, minY: b.minY, maxX: b.maxX, maxY: b.maxY, w: b.maxX - b.minX, h: b.maxY - b.minY });
+      });
     });
-    return { orients, area: base.reduce((sum, p) => sum + polyArea(p), 0) };
+    const counts = Array.isArray(opts.counts) ? opts.counts.map(v => Math.floor(Number(v))) : null;
+    const totalCount = counts?.reduce((sum, v) => sum + v, 0);
+    const area = counts ? oneAreas.reduce((sum, v, i) => sum + v * counts[i], 0) : oneAreas.reduce((sum, v) => sum + v, 0);
+    return { sources, orients, counts, totalCount, oneAreas, area };
   }
 
   // Vertical extent (lowest/highest boundary point) of the shape in each x-column, then that profile
@@ -756,7 +783,7 @@
     return Math.max(c, maxDim / 1200);
   }
 
-  // Packs one strip of width W that grows along +Y. Every placed part records, per x-column, the
+  // Packs one strip of width W. It can grow from any origin corner; every placed part records, per x-column, the
   // (gap-padded) y-interval it occupies, so a later part may slide under an overhang or into a pocket
   // as long as no column interval overlaps. Yields progress; returns the placements.
   function* strip(prep, o, ctl) {
@@ -766,10 +793,16 @@
     const nc = Math.max(1, Math.ceil(W / c - 1e-9));
     let cols = Array.from({ length: nc }, () => []);
     const limit = o.hLimit ?? Infinity;
-    const maxParts = o.count ?? 5000;
+    const targetCounts = o.counts || prep.counts;
+    const maxParts = targetCounts ? targetCounts.reduce((sum, v) => sum + v, 0) : (o.count ?? 5000);
+    // When transposed, the strip's horizontal axis is the layout Y axis and its vertical axis is X.
+    const reverseX = o.transposed ? !!o.reverseY : !!o.reverseX;
+    const reverseY = o.transposed ? !!o.reverseX : !!o.reverseY;
+    const ceiling = reverseY ? (Number.isFinite(limit) ? limit : Math.max(...feet.map(f => f.top)) * (maxParts + 1) + (gap + 1) * maxParts) : Infinity;
     const positions = o.positions || 160;
     const placed = [];
-    let H = 0, last = Date.now();
+    const placedCounts = targetCounts ? targetCounts.map(() => 0) : null;
+    let H = 0, minY = reverseY ? Infinity : 0, last = Date.now();
 
     const addIntervals = (target, f, i0, y) => {
       const base = i0 - f.rd;
@@ -804,25 +837,49 @@
       }
       return y;
     }
+    // Highest y whose outline remains below the ceiling and whose padded profile avoids all prior parts.
+    function highest(f, i0) {
+      const { loD, hiD, N, rd } = f;
+      const base = i0 - rd;
+      let y = ceiling - f.top;
+      for (let pass = 0; pass < 1000; pass++) {
+        let moved = false;
+        for (let k = 0; k < N; k++) {
+          const col = base + k;
+          if (col < 0 || col >= nc || loD[k] === Infinity) continue;
+          const list = cols[col];
+          for (let q = 0; q < list.length; q += 2) {
+            if (y + loD[k] < list[q + 1] - 1e-9 && y + hiD[k] > list[q] + 1e-9) { y = list[q] - hiD[k]; moved = true; }
+          }
+        }
+        if (!moved) break;
+      }
+      return y;
+    }
     function measure(f, i0) {
-      const y = lowest(f, i0);
+      const y = reverseY ? highest(f, i0) : lowest(f, i0);
       const ytop = y + f.top;
-      if (ytop > limit + 1e-9) return null;
-      return { i0, y, ytop, cost1: Math.max(H, ytop), waste: undefined, f };
+      if ((!reverseY && ytop > limit + 1e-9) || (reverseY && y < -1e-9)) return null;
+      return { i0, y, ytop, cost1: Math.max(H, ytop) - Math.min(minY, y), waste: undefined, f };
     }
     // Free height directly under the part, summed over its columns: how much dead space it leaves.
     function waste(r) {
-      const { loD, N, rd } = r.f;
+      const { loD, hiD, N, rd } = r.f;
       const base = r.i0 - rd;
       let sum = 0;
       for (let k = 0; k < N; k++) {
         const col = base + k;
         if (col < 0 || col >= nc || loD[k] === Infinity) continue;
-        const bottom = r.y + loD[k];
-        let below = -R;
+        const bottom = r.y + loD[k], top = r.y + hiD[k];
+        let nearest = reverseY ? ceiling + R : -R;
         const list = cols[col];
-        for (let q = 1; q < list.length; q += 2) if (list[q] <= bottom + 1e-9 && list[q] > below) below = list[q];
-        sum += bottom - below;
+        if (reverseY) {
+          for (let q = 0; q < list.length; q += 2) if (list[q] >= top - 1e-9 && list[q] < nearest) nearest = list[q];
+          sum += nearest - top;
+        } else {
+          for (let q = 1; q < list.length; q += 2) if (list[q] <= bottom + 1e-9 && list[q] > nearest) nearest = list[q];
+          sum += bottom - nearest;
+        }
       }
       r.waste = sum * c;
     }
@@ -834,20 +891,22 @@
       if (scoreMode === 'waste') {
         if (Math.abs(a.cost1 - b.cost1) > 1e-6) return a.cost1 < b.cost1;
         if (Math.abs(a.waste - b.waste) > 1e-6) return a.waste < b.waste;
-        if (Math.abs(a.y - b.y) > 1e-6) return a.y < b.y;
-        return a.i0 < b.i0;
+        if (Math.abs(a.y - b.y) > 1e-6) return reverseY ? a.y > b.y : a.y < b.y;
+        return reverseX ? a.i0 > b.i0 : a.i0 < b.i0;
       }
       if (Math.abs(a.cost1 - b.cost1) > tol) return a.cost1 < b.cost1;
-      if (Math.abs(a.y - b.y) > tol) return a.y < b.y;
-      if (a.i0 !== b.i0) return a.i0 < b.i0;
+      if (Math.abs(a.y - b.y) > tol) return reverseY ? a.y > b.y : a.y < b.y;
+      if (a.i0 !== b.i0) return reverseX ? a.i0 > b.i0 : a.i0 < b.i0;
       return a.waste < b.waste;
     };
 
     while (placed.length < maxParts) {
       let best = null;
-      for (let k = 0; k < feet.length; k++) {
-        if (o.only && !o.only.has(k)) continue;
-        const f = feet[k];
+        for (let k = 0; k < feet.length; k++) {
+          if (o.only && !o.only.has(k)) continue;
+          const sourceIndex = prep.orients[k].sourceIndex;
+          if (targetCounts && placedCounts[sourceIndex] >= targetCounts[sourceIndex]) continue;
+          const f = feet[k];
         const maxI0 = Math.floor((W - f.width) / c + 1e-9);
         if (maxI0 < 0) continue;
         const stride = Math.max(1, Math.ceil((maxI0 + 1) / positions));
@@ -891,14 +950,16 @@
         cols[col].push(best.y + f.loD[k], best.y + f.hiD[k]);
       }
       if (best.ytop > H) H = best.ytop;
-      placed.push({ k: best.k, i0: best.i0, y: best.y, right: best.i0 * c + f.width });
+      if (best.y < minY) minY = best.y;
+      const sourceIndex = prep.orients[best.k].sourceIndex;
+      placed.push({ k: best.k, sourceIndex, i0: best.i0, y: best.y, right: best.i0 * c + f.width });
+      if (placedCounts) placedCounts[sourceIndex]++;
       yield { placed: placed.length };
       if (ctl && ctl.cancelled) throw Error('Nesting stopped.');
     }
-    // Compaction: greedy placement can leave a part hanging where it was first put. Take each part out,
-    // let it fall toward the origin corner (lower y, then lower x) as far as the others allow, put it
-    // back, and repeat until nothing moves. Only ever moves parts toward the origin, so the limits hold.
-    if (placed.length > 1 && placed.length <= 400) {
+    // Compaction: greedy placement can leave a part hanging where it was first put. The normal
+    // lower-left pass improves it further; directional passes are already placed from their origin.
+    if (!reverseX && !reverseY && placed.length > 1 && placed.length <= 400) {
       for (let round = 0; round < 8; round++) {
         let moved = false;
         const order = placed.map((_, i) => i).sort((a, b) => placed[a].y - placed[b].y || placed[a].i0 - placed[b].i0);
@@ -924,7 +985,13 @@
       }
       H = placed.reduce((m, p) => Math.max(m, p.y + feet[p.k].top), 0);
     }
-    return { placed, H, usedW: placed.reduce((m, p) => Math.max(m, p.right), 0), c, transposed: !!o.transposed };
+    const bounds = placed.reduce((b, p) => {
+      const f = feet[p.k];
+      b.minX = Math.min(b.minX, p.i0 * c); b.maxX = Math.max(b.maxX, p.right);
+      b.minY = Math.min(b.minY, p.y); b.maxY = Math.max(b.maxY, p.y + f.top);
+      return b;
+    }, { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity });
+    return { placed, H: bounds.maxY - bounds.minY, usedW: bounds.maxX - bounds.minX, c, transposed: !!o.transposed };
   }
 
   // Scoring variants tried per solve; the best result wins. Greedy packing is chaotic, so a few
@@ -964,7 +1031,7 @@
       const or = prep.orients[p.k];
       const bx = r.transposed ? p.y : p.i0 * r.c;
       const by = r.transposed ? p.i0 * r.c : p.y;
-      return { k: p.k, angle: or.angle, cx: bx - or.minX, cy: by - or.minY };
+      return { k: p.k, sourceIndex: or.sourceIndex, angle: or.angle, cx: bx - or.minX, cy: by - or.minY };
     });
   }
 
@@ -1003,70 +1070,86 @@
   }
 
   function* nestGen(src, opts, ctl) {
+    const sources = Array.isArray(src) ? src : [src];
+    if (!sources.length || sources.some(s => !s)) throw Error('Add at least one G-code file.');
     const gap = Number(opts.gap);
     if (!(gap >= 0)) throw Error('Minimum gap must be 0 or more.');
     const mode = opts.mode;
-    const prep = prepare(src, opts);
-    if (!(prep.area > 0)) throw Error('The part outline has no area to pack.');
-    const c = chooseCell(prep, gap);
-    const base = { c, gap };
+    const legacyUnlimited = mode === 'maxParts' && !Array.isArray(opts.counts) && !Array.isArray(src);
+    let counts = Array.isArray(opts.counts) ? opts.counts.map(v => Math.floor(Number(v))) : null;
+    if (!counts && !legacyUnlimited) counts = [Math.floor(Number(opts.count))];
+    if (counts && (counts.length !== sources.length || counts.some(v => !(v >= 1 && v <= 2000)))) throw Error('Each file must have between 1 and 2000 copies.');
+    const totalCount = counts ? counts.reduce((sum, v) => sum + v, 0) : Math.floor(Number(opts.count));
+    if (counts && totalCount > 2000) throw Error('The total requested copies must not exceed 2000.');
+    if (sources.length > 1 && !counts) throw Error('Each file needs a copy count.');
+    const prep = prepare(sources, { ...opts, counts });
+    if (!(prep.area > 0)) throw Error('A file outline has no area to pack.');
     const prefer = opts.prefer === 'length' ? 'length' : 'compact';
+    const origin = opts.origin || 'bottom-left';
+    const c = chooseCell(prep, gap);
+    const base = { c, gap, counts, reverseX: prefer === 'compact' && origin.endsWith('right'), reverseY: prefer === 'compact' && origin.startsWith('top') };
     const effort = Number(opts.effort) >= 1 ? Math.min(VARIANTS.length, Math.floor(Number(opts.effort))) : 3;
-    const count = Math.floor(Number(opts.count));
-    if (mode !== 'maxParts' && !(count >= 1 && count <= 2000)) throw Error('Number of parts must be from 1 to 2000.');
+    const countLimit = Number.isFinite(totalCount) ? totalCount : undefined;
     const need = (v, label) => { if (!(v > 0)) throw Error(label + ' must be greater than 0.'); return v; };
     const fits = (dim, transposed) => prep.orients.some(o => (transposed ? o.h : o.w) <= dim + 1e-9);
     let placements, frame;
 
     if (mode === 'fixedX') {
       const W = need(Number(opts.sizeX), 'Maximum X');
-      if (!fits(W, false)) throw Error('The part is wider than the maximum X in every allowed orientation.');
-      const r = yield* portfolio(prep, { ...base, W, count }, ctl, effort, false, prefer);
+      if (!fits(W, false)) throw Error('A file is wider than the maximum X in every allowed orientation.');
+      const r = yield* portfolio(prep, { ...base, W, count: countLimit }, ctl, effort, false, prefer);
       ({ placements, frame } = tighten(prep, toLayout(prep, r)));
     } else if (mode === 'fixedY') {
       const W = need(Number(opts.sizeY), 'Maximum Y');
-      if (!fits(W, true)) throw Error('The part is taller than the maximum Y in every allowed orientation.');
-      const r = yield* portfolio(prep, { ...base, W, count, transposed: true }, ctl, effort, false, prefer);
+      if (!fits(W, true)) throw Error('A file is taller than the maximum Y in every allowed orientation.');
+      const r = yield* portfolio(prep, { ...base, W, count: countLimit, transposed: true }, ctl, effort, false, prefer);
       ({ placements, frame } = tighten(prep, toLayout(prep, r)));
     } else if (mode === 'maxParts') {
       const sw = need(Number(opts.sizeX), 'Sheet X'), sh = need(Number(opts.sizeY), 'Sheet Y');
-      if (!fits(sw, false) && !fits(sh, true)) throw Error('The part does not fit on that sheet in any allowed orientation.');
+      if (!fits(sw, false) && !fits(sh, true)) throw Error('At least one requested file does not fit on that sheet in any allowed orientation.');
       let a = null, b = null;
-      if (fits(sw, false)) a = yield* portfolio(prep, { ...base, W: sw, hLimit: sh }, ctl, effort, false, prefer);
-      if (fits(sh, true)) b = yield* portfolio(prep, { ...base, W: sh, hLimit: sw, transposed: true }, ctl, effort, false, prefer);
+      if (fits(sw, false)) a = yield* portfolio(prep, { ...base, W: sw, hLimit: sh, count: countLimit }, ctl, effort, false, prefer);
+      if (fits(sh, true)) b = yield* portfolio(prep, { ...base, W: sh, hLimit: sw, count: countLimit, transposed: true }, ctl, effort, false, prefer);
       const pick = !b || (a && a.placed.length >= b.placed.length) ? a : b;
-      if (!pick.placed.length) throw Error('No copy of the part fits on that sheet.');
+      if (!pick || !pick.placed.length) throw Error('None of the requested files fit on that sheet.');
       placements = toLayout(prep, pick); frame = { w: sw, h: sh };
     } else if (mode === 'minArea') {
       const limX = Number(opts.sizeX) > 0 ? Number(opts.sizeX) : Infinity;
       const limY = Number(opts.sizeY) > 0 ? Number(opts.sizeY) : Infinity;
       const widths = prep.orients.map(o => o.w);
       const wLo = Math.min(...widths), wMax = Math.max(...widths);
-      if (wLo > limX + 1e-9) throw Error('The part is wider than the X limit in every allowed orientation.');
-      const wHi = Math.min(limX, Math.max(wLo, count * (wMax + gap)));
-      const meanArea = prep.orients[0].w * prep.orients[0].h;
-      const guess = Math.min(wHi, Math.max(wLo, Math.sqrt(count * meanArea * 1.3)));
+      if (wLo > limX + 1e-9) throw Error('A file is wider than the X limit in every allowed orientation.');
+      const wHi = Math.min(limX, Math.max(wLo, totalCount * (wMax + gap)));
+      const meanArea = prep.area / Math.max(1, totalCount);
+      const guess = Math.min(wHi, Math.max(wLo, Math.sqrt(totalCount * meanArea * 1.3)));
       const cand = new Set([guess]);
       for (let k = 0; k <= 12; k++) cand.add(wLo * Math.pow(Math.max(wHi, wLo * 1.0001) / wLo, k / 12));
       const started = Date.now();
       const budget = opts.budgetMs ?? 12000;
       const tried = new Map();
       let best = null;
+      const consider = (W, r) => {
+        const area = r.usedW * r.H;
+        // A smaller partial result is never preferable to a complete result when copy counts are fixed.
+        if (r.H <= limY + 1e-9 && (!best || r.placed.length > best.r.placed.length || (r.placed.length === best.r.placed.length && area < best.area - 1e-9))) best = { W, area, r };
+      };
       const run = function* (W, coarse) {
         const key = Math.round(W * 100);
         if (tried.has(key)) return;
-        const r = yield* strip(prep, { ...base, W, count, positions: coarse ? 40 : 160 }, ctl);
+        // A constrained height can make a feasible pocket quite narrow in X. Use the full
+        // position search in that case; a coarse pass can otherwise miss the only arrangement
+        // that satisfies the user's Y limit.
+        const positions = coarse && !Number.isFinite(limY) ? 40 : 160;
+        const r = yield* strip(prep, { ...base, W, hLimit: Number.isFinite(limY) ? limY : undefined, count: countLimit, positions }, ctl);
         tried.set(key, r);
-        const area = r.usedW * r.H;
-        if (r.H <= limY + 1e-9 && (!best || area < best.area - 1e-9)) best = { W, area, r };
+        consider(W, r);
       };
       const order = [...cand].sort((x, y) => Math.abs(x - guess) - Math.abs(y - guess));
       for (const W of order) {
         if (best && Date.now() - started > budget) break;
         yield* run(W, true);
       }
-      if (!best) throw Error('No layout fits within the Y limit. Raise the limits or reduce the number of parts.');
-      for (let round = 0; round < 2 && Date.now() - started < budget * 1.5; round++) {
+      for (let round = 0; best && round < 2 && Date.now() - started < budget * 1.5; round++) {
         const W0 = best.W, span = round === 0 ? 0.12 : 0.04;
         for (const f of [-2, -1, 1, 2]) {
           const W = Math.min(wHi, Math.max(wLo, W0 * (1 + f * span)));
@@ -1074,20 +1157,52 @@
           yield* run(W, true);
         }
       }
-      const final = yield* portfolio(prep, { ...base, W: best.W, count }, ctl, effort, true, prefer);
+      // Retry the entered rectangle edges directly if width samples missed a narrow feasible
+      // pocket. The transposed pass covers a layout that uses the Y limit as its packing width.
+      if (counts && (!best || best.r.placed.length < totalCount)) {
+        if (Number.isFinite(limX)) {
+          const direct = yield* portfolio(prep, { ...base, W: limX, hLimit: Number.isFinite(limY) ? limY : undefined, count: countLimit, positions: 160 }, ctl, effort, true, prefer);
+          consider(limX, direct);
+        }
+        if (Number.isFinite(limY)) {
+          const direct = yield* portfolio(prep, { ...base, W: limY, hLimit: Number.isFinite(limX) ? limX : undefined, count: countLimit, transposed: true, positions: 160 }, ctl, effort, true, prefer);
+          consider(limY, direct);
+        }
+      }
+      // Rotation expands the search space, but it must not make a compact result worse than
+      // the same files with rotation disabled. Compare a zero-degree-only baseline at the
+      // promising widths before choosing the final result.
+      if (opts.rotate) {
+        const zeroOnly = new Set(prep.orients.map((or, k) => Math.abs(or.angle) < 1e-9 ? k : -1).filter(k => k >= 0));
+        const widthsToCheck = [...new Set([best?.W, Number.isFinite(limX) ? limX : null].filter(v => Number.isFinite(v) && v >= wLo))];
+        for (const W of widthsToCheck) {
+          const noRot = yield* portfolio(prep, { ...base, W, hLimit: Number.isFinite(limY) ? limY : undefined, count: countLimit, positions: 160, only: zeroOnly }, ctl, effort, true, prefer);
+          consider(W, noRot);
+        }
+        if (Number.isFinite(limY)) {
+          const noRot = yield* portfolio(prep, { ...base, W: limY, hLimit: Number.isFinite(limX) ? limX : undefined, count: countLimit, transposed: true, positions: 160, only: zeroOnly }, ctl, effort, true, prefer);
+          consider(limY, noRot);
+        }
+      }
+      if (!best) {
+        const limits = Number.isFinite(limX) && Number.isFinite(limY) ? 'the X/Y limits' : Number.isFinite(limY) ? 'the Y limit' : 'the X limit';
+        throw Error(`No layout fits within ${limits}. Raise the limits or reduce the requested copies.`);
+      }
+      const final = yield* portfolio(prep, { ...base, W: best.W, hLimit: Number.isFinite(limY) ? limY : undefined, count: countLimit }, ctl, effort, true, prefer);
       const finalArea = final.usedW * final.H;
-      const chosen = final.H <= limY + 1e-9 && finalArea <= best.area + 1e-9 ? final : best.r;
+      const chosen = final.H <= limY + 1e-9 && (final.placed.length > best.r.placed.length || (final.placed.length === best.r.placed.length && finalArea <= best.area + 1e-9)) ? final : best.r;
       ({ placements, frame } = tighten(prep, toLayout(prep, chosen)));
     } else {
       throw Error('Unknown layout mode.');
     }
 
+    if (counts && placements.length !== totalCount) throw Error(`Only ${placements.length} of the ${totalCount} requested copies fit. Increase the limits or reduce the file copy counts.`);
     const check = verify(prep, placements, gap, frame);
-    const partArea = prep.area;
+    const partArea = placements.reduce((sum, p) => sum + prep.oneAreas[prep.orients[p.k].sourceIndex], 0);
     return {
-      placements, frame, count: placements.length, gap, verify: check,
-      utilization: (placements.length * partArea) / (frame.w * frame.h || 1),
-      partArea,
+      placements, frame, count: placements.length, counts, gap, verify: check,
+      utilization: partArea / (frame.w * frame.h || 1),
+      partArea, sourceCount: sources.length,
     };
   }
 
