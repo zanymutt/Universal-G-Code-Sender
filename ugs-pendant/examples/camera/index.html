@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Camera</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      display: flex;
+      flex-direction: column;
+      min-width: 280px;
+      font: 14px/1.35 system-ui, sans-serif;
+      background: #111315;
+      color: #e8eaed;
+    }
+    form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      padding: 10px;
+      border-bottom: 1px solid #34383d;
+      background: #202327;
+    }
+    input, select {
+      height: 38px;
+      min-width: 0;
+      padding: 7px 10px;
+      border: 1px solid #4a5058;
+      border-radius: 4px;
+      background: #111315;
+      color: inherit;
+      font: inherit;
+    }
+    select { grid-column: 1; }
+    button {
+      grid-column: 2;
+      grid-row: 1 / span 2;
+      min-height: 38px;
+      padding: 7px 12px;
+      border: 0;
+      border-radius: 4px;
+      background: #454ce5;
+      color: white;
+      font: inherit;
+      cursor: pointer;
+    }
+    #message {
+      min-height: 44px;
+      padding: 8px 10px;
+      color: #aeb6c0;
+      overflow-wrap: anywhere;
+    }
+    #message.error { color: #ff9b9b; }
+    #stage {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #050607;
+    }
+    #video, #mjpeg {
+      display: none;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      background: #050607;
+    }
+    #video.visible, #mjpeg.visible { display: block; }
+    #hint { max-width: 560px; padding: 20px; color: #aeb6c0; text-align: center; }
+    code { color: #d7dcff; }
+  </style>
+</head>
+<body>
+  <form id="streamForm">
+    <input id="streamUrl" type="text" inputmode="url" autocomplete="url"
+      placeholder="https://camera.local/stream.mjpg" aria-label="Camera stream URL">
+    <select id="streamType" aria-label="Stream type">
+      <option value="auto">Auto detect</option>
+      <option value="video">Video (MP4/WebM or browser-compatible HLS)</option>
+      <option value="mjpeg">MJPEG image stream</option>
+    </select>
+    <button type="submit">Connect</button>
+  </form>
+  <div id="message" role="status">Enter a camera URL.</div>
+  <main id="stage">
+    <div id="hint">The browser must be able to reach the stream URL from the UGS computer.</div>
+    <video id="video" controls autoplay muted playsinline></video>
+    <img id="mjpeg" alt="Live camera stream">
+  </main>
+
+  <script>
+    let nextId = 0;
+    const pending = new Map();
+    const streamUrl = document.getElementById("streamUrl");
+    const streamType = document.getElementById("streamType");
+    const video = document.getElementById("video");
+    const mjpeg = document.getElementById("mjpeg");
+    const hint = document.getElementById("hint");
+    const message = document.getElementById("message");
+
+    function call(method, params = {}, timeoutMs = 15000) {
+      return new Promise((resolve, reject) => {
+        if (window.parent === window) {
+          reject(new Error("Open this plugin from UGS Dashboard."));
+          return;
+        }
+        const id = ++nextId;
+        const timer = timeoutMs > 0 ? setTimeout(() => {
+          pending.delete(id);
+          reject(new Error(`No reply to ${method}; check Dashboard.`));
+        }, timeoutMs) : null;
+        pending.set(id, { resolve, reject, timer });
+        try {
+          window.parent.postMessage({ type: "fluid-request", id, method, params }, "*");
+        } catch (error) {
+          clearTimeout(timer);
+          pending.delete(id);
+          reject(error);
+        }
+      });
+    }
+
+    function show(text, isError = false) {
+      message.textContent = text;
+      message.classList.toggle("error", isError);
+    }
+
+    function stopMedia() {
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+      mjpeg.removeAttribute("src");
+      video.classList.remove("visible");
+      mjpeg.classList.remove("visible");
+      hint.style.display = "block";
+    }
+
+    function normalize(raw) {
+      const value = raw.trim();
+      if (!value) throw new Error("Enter a camera URL first.");
+      if (/^rtsp:\/\//i.test(value)) return value;
+      let url;
+      try { url = new URL(value, window.location.href); }
+      catch { throw new Error("That is not a valid URL."); }
+      if (url.protocol !== "http:" && url.protocol !== "https:") {
+        throw new Error("Only http://, https://, and rtsp:// URLs are supported here.");
+      }
+      return url.href;
+    }
+
+    async function saveSettings(url, type) {
+      try {
+        const settings = await call("getSettings");
+        await call("saveSettings", { data: { ...settings, url, type } });
+      } catch (error) {
+        show(`Connected, but could not save camera settings: ${error.message}`, true);
+      }
+    }
+
+    function connect(raw, requestedType) {
+      let url;
+      try { url = normalize(raw); }
+      catch (error) { show(error.message, true); return; }
+      stopMedia();
+      streamUrl.value = url;
+      if (/^rtsp:\/\//i.test(url)) {
+        show("RTSP is not decoded by Chromium/Firefox video elements. Use a camera WebRTC/HLS/MJPEG endpoint or an RTSP relay.", true);
+        hint.innerHTML = "For RTSP, run a relay such as <code>go2rtc</code> or <code>MediaMTX</code> and enter its browser-facing WebRTC, HLS, or MJPEG URL here.";
+        void saveSettings(url, requestedType);
+        return;
+      }
+
+      const type = requestedType === "auto"
+        ? (/\.m?jpg(?:$|\?)/i.test(url) ? "mjpeg" : "video")
+        : requestedType;
+      streamType.value = requestedType;
+      hint.style.display = "none";
+      if (type === "mjpeg") {
+        mjpeg.src = url;
+        mjpeg.classList.add("visible");
+        show("Connecting to MJPEG stream…");
+      } else {
+        video.src = url;
+        video.classList.add("visible");
+        show("Connecting to video stream…");
+        void video.play().catch(() => {});
+      }
+      void saveSettings(url, requestedType);
+    }
+
+    window.addEventListener("message", (event) => {
+      if (event.source !== window.parent) return;
+      const data = event.data;
+      if (!data || typeof data !== "object") return;
+      if (data.type === "fluid-response") {
+        const request = pending.get(data.id);
+        if (!request) return;
+        pending.delete(data.id);
+        clearTimeout(request.timer);
+        if (data.error !== undefined) request.reject(new Error(data.error));
+        else request.resolve(data.result);
+      }
+    });
+
+    document.getElementById("streamForm").addEventListener("submit", (event) => {
+      event.preventDefault();
+      connect(streamUrl.value, streamType.value);
+    });
+    video.addEventListener("playing", () => show("Playing video stream."));
+    video.addEventListener("error", () => show("The browser could not play this video URL. Check the format and CORS/network access.", true));
+    mjpeg.addEventListener("load", () => show("Receiving MJPEG stream."));
+    mjpeg.addEventListener("error", () => show("The browser could not load this MJPEG URL. Check the URL and CORS/network access.", true));
+
+    (async () => {
+      try {
+        const settings = await call("getSettings");
+        if (settings && settings.url) {
+          streamType.value = settings.type || "auto";
+          connect(settings.url, streamType.value);
+        }
+      } catch (error) {
+        show(error.message, true);
+      }
+    })();
+  </script>
+</body>
+</html>
