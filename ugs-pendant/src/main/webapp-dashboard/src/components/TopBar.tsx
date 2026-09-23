@@ -16,6 +16,7 @@ import AccessoryState from "./AccessoryState";
 import ConnectionWidget from "./ConnectionWidget";
 import ConnectionHealth from "./ConnectionHealth";
 import DashboardSizing from "./DashboardSizing";
+import PaneLayoutPresets from "./PaneLayoutPresets";
 import "./TopBar.scss";
 
 const TopBar = () => {
@@ -36,6 +37,7 @@ const TopBar = () => {
 
       <div className="topBarSection">
         <DashboardSizing zoom={zoom} resetZoom={resetZoom} applyZoom={applyZoom} />
+        <PaneLayoutPresets />
         <Button variant="secondary" disabled={!canZoomOut} onClick={zoomOut} title="Zoom out">
           <FontAwesomeIcon icon={faMagnifyingGlassMinus} />
         </Button>

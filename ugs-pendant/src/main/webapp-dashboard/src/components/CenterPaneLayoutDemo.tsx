@@ -4,16 +4,17 @@ import GcodeEditor from "./GcodeEditor";
 import ConsolePanel from "./ConsolePanel";
 import MacroEditor from "./MacroEditor";
 import ProbePanel from "./ProbePanel";
+import { persistCurrentPaneLayout, PANE_LAYOUT_APPLY_EVENT } from "../hooks/usePaneLayoutPresets";
 import "./CenterPaneLayoutDemo.scss";
 
-type PaneContent = "visualize" | "edit" | "macros" | "probe" | "console";
-type Orientation = "horizontal" | "vertical";
-type Coordinate = 0 | 1 | 2;
-type Rect = { x0: Coordinate; x1: Coordinate; y0: Coordinate; y1: Coordinate };
-type SegmentSizes = { xFull: number; xTop: number; xBottom: number; yFull: number; yLeft: number; yRight: number };
-type RestoreRecord = { panes: Pane[]; originId: number; spine: Orientation | null };
-type Pane = { id: number; content: PaneContent; rect: Rect; restore?: Partial<Record<Orientation, RestoreRecord>> };
-type LayoutState = { panes: Pane[]; spine: Orientation | null; sizes: SegmentSizes };
+export type PaneContent = "visualize" | "edit" | "macros" | "probe" | "console";
+export type Orientation = "horizontal" | "vertical";
+export type Coordinate = 0 | 1 | 2;
+export type Rect = { x0: Coordinate; x1: Coordinate; y0: Coordinate; y1: Coordinate };
+export type SegmentSizes = { xFull: number; xTop: number; xBottom: number; yFull: number; yLeft: number; yRight: number };
+export type RestoreRecord = { panes: Pane[]; originId: number; spine: Orientation | null };
+export type Pane = { id: number; content: PaneContent; rect: Rect; restore?: Partial<Record<Orientation, RestoreRecord>> };
+export type LayoutState = { panes: Pane[]; spine: Orientation | null; sizes: SegmentSizes };
 
 const CONTENT: { value: PaneContent; label: string }[] = [
   { value: "visualize", label: "Visualize" },
@@ -120,6 +121,23 @@ const CenterPaneLayoutDemo = () => {
   const nextId = useRef(3);
   const consoleRestore = useRef<{ id: number; content: PaneContent } | null>(null);
   const { panes } = layout;
+
+  useEffect(() => {
+    persistCurrentPaneLayout(layout);
+  }, [layout]);
+
+  useEffect(() => {
+    const onApply = (event: Event) => {
+      const nextLayout = (event as CustomEvent<{ layout?: LayoutState }>).detail?.layout;
+      if (!nextLayout?.panes?.length) return;
+      const restored = clone(nextLayout);
+      nextId.current = Math.max(2, ...restored.panes.map(pane => pane.id)) + 1;
+      consoleRestore.current = null;
+      setLayout(restored);
+    };
+    window.addEventListener(PANE_LAYOUT_APPLY_EVENT, onApply);
+    return () => window.removeEventListener(PANE_LAYOUT_APPLY_EVENT, onApply);
+  }, []);
 
   const toggleSplit = (id: number, orientation: Orientation) => setLayout(current => {
     const next = clone(current);

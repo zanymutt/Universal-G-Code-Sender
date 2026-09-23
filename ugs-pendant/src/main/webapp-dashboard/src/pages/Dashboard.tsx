@@ -23,9 +23,9 @@ const Dashboard = () => {
   const [panel, setPanel] = useState("program");
   const [consoleOpen, setConsoleOpen] = useState(false);
   const dispatch = useDispatch();
-  const layoutDemo = new URLSearchParams(window.location.search).get("layoutDemo") === "1";
+  const legacyLayout = new URLSearchParams(window.location.search).get("legacyLayout") === "1";
   const toggleConsole = () => {
-    if (layoutDemo) {
+    if (!legacyLayout) {
       const nextOpen = !consoleOpen;
       setPanel("program");
       setConsoleOpen(nextOpen);
