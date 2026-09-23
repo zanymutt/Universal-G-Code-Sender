@@ -1,6 +1,7 @@
 export type PluginWindowSize = { width: number; height: number };
 
-const keyFor = (pluginId: string) => `ugs.dashboard.pluginWindowSize.${pluginId}`;
+export const PLUGIN_WINDOW_SIZE_PREFIX = "ugs.dashboard.pluginWindowSize.";
+const keyFor = (pluginId: string) => `${PLUGIN_WINDOW_SIZE_PREFIX}${pluginId}`;
 
 // Deliberately generous: this only guards against a corrupt or absurd stored
 // value (the CSS max-width/max-height clamp the window to the viewport anyway).

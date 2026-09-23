@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
-const KEY = "ugs-dashboard-sizing";
+export const SIZING_KEY = "ugs-dashboard-sizing";
+const KEY = SIZING_KEY;
 export type DashboardSizing = { compact: boolean; leftWidth: number; rightWidth: number; layoutMode?: "auto" | "desktop" | "tablet" | "tabbed" };
 export const DEFAULT_SIZING: DashboardSizing = { compact: false, leftWidth: 360, rightWidth: 360 };
 const width = (value: unknown, fallback: number) =>

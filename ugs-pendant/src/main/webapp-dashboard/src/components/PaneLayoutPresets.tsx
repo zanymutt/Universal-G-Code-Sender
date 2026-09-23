@@ -4,6 +4,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBookmark, faCheck, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { applyPaneLayout, usePaneLayoutPresets } from "../hooks/usePaneLayoutPresets";
 import type { LayoutState, PaneContent } from "./CenterPaneLayoutDemo";
+import LayoutBackupControls from "./LayoutBackupControls";
 
 const LABELS: Record<PaneContent, string> = {
   visualize: "Visualize",
@@ -42,7 +43,7 @@ const PaneLayoutPresets = () => {
     <Button variant="secondary" onClick={() => setShow(true)} title="Saved pane layouts">
       <FontAwesomeIcon icon={faBookmark} /> <span className="topBarPaneLayoutsLabel">Panes</span>
     </Button>
-    <Modal show={show} onHide={() => setShow(false)} centered>
+    <Modal show={show} onHide={() => setShow(false)} centered scrollable>
       <Modal.Header closeButton><Modal.Title>Saved pane layouts</Modal.Title></Modal.Header>
       <Modal.Body>
         <p>Save and restore pane contents, split topology, and divider positions.</p>
@@ -78,6 +79,7 @@ const PaneLayoutPresets = () => {
           }
         }}>Save current pane layout</Button>
         <div role="status" className="small mt-3">{error || notice}</div>
+        <LayoutBackupControls />
       </Modal.Body>
       <Modal.Footer><Button variant="secondary" onClick={() => setShow(false)}>Done</Button></Modal.Footer>
     </Modal>

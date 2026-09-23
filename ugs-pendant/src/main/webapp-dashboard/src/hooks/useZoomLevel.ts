@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-const STORAGE_KEY = "ugs-dashboard-zoom";
-const MIN_ZOOM = 70;
-const MAX_ZOOM = 150;
+export const ZOOM_STORAGE_KEY = "ugs-dashboard-zoom";
+const STORAGE_KEY = ZOOM_STORAGE_KEY;
+export const MIN_ZOOM = 70;
+export const MAX_ZOOM = 150;
 const STEP = 5;
 const DEFAULT_ZOOM = 100;
 

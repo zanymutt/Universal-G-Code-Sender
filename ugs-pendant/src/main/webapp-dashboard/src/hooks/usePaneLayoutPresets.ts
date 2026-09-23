@@ -8,7 +8,7 @@ export const PANE_LAYOUT_APPLY_EVENT = "ugs-pane-layout-apply";
 
 export type PaneLayoutPreset = { name: string; layout: LayoutState };
 
-const isLayout = (value: unknown): value is LayoutState => {
+export const isPaneLayout = (value: unknown): value is LayoutState => {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<LayoutState>;
   return Array.isArray(candidate.panes) && candidate.panes.length > 0 &&
@@ -19,12 +19,16 @@ const isLayout = (value: unknown): value is LayoutState => {
     !!candidate.sizes && Object.values(candidate.sizes).every(size => typeof size === "number" && Number.isFinite(size));
 };
 
+// Shared with the layout backup import, so a file is held to the same rules as saved presets.
+export const parsePaneLayoutPresets = (data: unknown): PaneLayoutPreset[] => {
+  if (!Array.isArray(data)) return [];
+  return data.filter(item => item && typeof item.name === "string" && item.name.trim() && isPaneLayout(item.layout))
+    .map(item => ({ name: item.name.trim(), layout: item.layout }));
+};
+
 const readPresets = (): PaneLayoutPreset[] => {
   try {
-    const data: unknown = JSON.parse(localStorage.getItem(PANE_LAYOUT_PRESETS_KEY) ?? "[]");
-    if (!Array.isArray(data)) return [];
-    return data.filter(item => item && typeof item.name === "string" && item.name.trim() && isLayout(item.layout))
-      .map(item => ({ name: item.name.trim(), layout: item.layout }));
+    return parsePaneLayoutPresets(JSON.parse(localStorage.getItem(PANE_LAYOUT_PRESETS_KEY) ?? "[]"));
   } catch {
     return [];
   }
@@ -33,7 +37,7 @@ const readPresets = (): PaneLayoutPreset[] => {
 export const readCurrentPaneLayout = (): LayoutState | null => {
   try {
     const value = JSON.parse(localStorage.getItem(PANE_LAYOUT_CURRENT_KEY) ?? "null");
-    return isLayout(value) ? value : null;
+    return isPaneLayout(value) ? value : null;
   } catch {
     return null;
   }

@@ -3,6 +3,7 @@ import { Button, Form, Modal } from "react-bootstrap";
 import { DEFAULT_SIZING, useDashboardSizing } from "../hooks/useDashboardSizing";
 import "./DashboardSizing.scss";
 import { useLayoutPresets } from "../hooks/useLayoutPresets";
+import LayoutBackupControls from "./LayoutBackupControls";
 
 type Props = { zoom: number; resetZoom: () => void; applyZoom: (value: number) => void };
 export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
@@ -93,6 +94,7 @@ export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
         <div>Page zoom: {zoom}% <Button size="sm" variant="outline-secondary" disabled={zoom === 100}
           onClick={resetZoom}>Reset to 100%</Button></div>
         <p className="small mt-2 mb-0">Use 100% to compare sharpness. The header zoom buttons remain available.</p>
+        <LayoutBackupControls />
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={() => setSizing(DEFAULT_SIZING)}>Reset layout</Button>

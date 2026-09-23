@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 
-const STORAGE_KEY = "ugs-dashboard-editor-font-size";
+export const EDITOR_FONT_STORAGE_KEY = "ugs-dashboard-editor-font-size";
+const STORAGE_KEY = EDITOR_FONT_STORAGE_KEY;
 // Same-page sync only - the native "storage" event exists for this already,
 // but only fires in *other* tabs/windows, never the one that made the
 // change (see this hook's own multi-instance comment below).
 const CHANGE_EVENT = "ugs-dashboard-editor-font-size-changed";
-const MIN_FONT_SIZE = 12;
-const MAX_FONT_SIZE = 28;
+export const MIN_FONT_SIZE = 12;
+export const MAX_FONT_SIZE = 28;
 const STEP = 2;
 // Matches the editor's previous fixed size (0.9rem, i.e. 14.4px off a 16px
 // root) closely enough that upgrading doesn't visibly jump the very first

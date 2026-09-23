@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
-const STORAGE_KEY = "ugs-dashboard-console-font-size";
-const MIN_FONT_SIZE = 10;
-const MAX_FONT_SIZE = 24;
+export const CONSOLE_FONT_STORAGE_KEY = "ugs-dashboard-console-font-size";
+const STORAGE_KEY = CONSOLE_FONT_STORAGE_KEY;
+export const MIN_FONT_SIZE = 10;
+export const MAX_FONT_SIZE = 24;
 const STEP = 2;
 // Matches the console's previous fixed size (0.85rem, i.e. 13.6px off a
 // 16px root) closely enough that upgrading doesn't visibly jump the first
