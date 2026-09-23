@@ -54,7 +54,7 @@ const PaneLayoutPresets = () => {
         {preset && <p className="small mt-2 mb-0">{summary(preset.layout)}</p>}
         <div className="d-flex gap-2 mt-3">
           <Button size="sm" disabled={!preset} onClick={applySelected}><FontAwesomeIcon icon={faCheck} /> Apply</Button>
-          <Button size="sm" variant="outline-secondary" disabled={!preset || !current} onClick={() => {
+          <Button size="sm" variant="outline-primary" disabled={!preset || !current} onClick={() => {
             if (preset && current && save(presets.map(item => item.name === selected ? { ...item, layout: current } : item)))
               setNotice(`Updated “${selected}”.`);
           }}>Update current</Button>
