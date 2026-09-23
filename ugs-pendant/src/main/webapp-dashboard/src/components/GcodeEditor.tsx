@@ -213,7 +213,7 @@ const GcodeEditor = () => {
   // Same Compartment pattern, for the font-size control below - independent
   // of the whole-page Zoom (see useEditorFontSize's own comment).
   const fontSizeCompartmentRef = useRef(new Compartment());
-  const { fontSize, increase: increaseFontSize, decrease: decreaseFontSize, canIncrease, canDecrease } =
+  const { fontSize, increase: increaseFontSize, decrease: decreaseFontSize, setExact: setFontSize, canIncrease, canDecrease } =
     useEditorFontSize();
   // dimThroughField/currentRunLineField both start empty (Decoration.none)
   // and rely on a dispatched effect to populate them - normally the one
@@ -532,13 +532,17 @@ const GcodeEditor = () => {
         </Button>
 
         <div className="gcodeEditorFontSize" title="Gcode text size - independent of the page Zoom, always rendered at its actual size">
-          <Button variant="secondary" size="sm" disabled={!canDecrease} onClick={decreaseFontSize} title="Smaller text">
-            <FontAwesomeIcon icon={faMinus} />
-          </Button>
-          <span className="gcodeEditorFontSizeValue">{fontSize}px</span>
-          <Button variant="secondary" size="sm" disabled={!canIncrease} onClick={increaseFontSize} title="Larger text">
-            <FontAwesomeIcon icon={faPlus} />
-          </Button>
+          <div className="gcodeEditorFontSizeButtons">
+            <Button variant="secondary" size="sm" disabled={!canDecrease} onClick={decreaseFontSize} title="Smaller text">
+              <FontAwesomeIcon icon={faMinus} />
+            </Button>
+            <span className="gcodeEditorFontSizeValue">{fontSize}px</span>
+            <Button variant="secondary" size="sm" disabled={!canIncrease} onClick={increaseFontSize} title="Larger text">
+              <FontAwesomeIcon icon={faPlus} />
+            </Button>
+          </div>
+          <input className="gcodeEditorFontSizeSlider" type="range" min="12" max="28" step="2" value={fontSize}
+            aria-label="Gcode text size" onChange={event => setFontSize(Number(event.target.value))} />
         </div>
       </div>
     </div>

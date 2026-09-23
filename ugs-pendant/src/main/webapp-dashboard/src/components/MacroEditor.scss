@@ -2,8 +2,18 @@
 
 .macroEditor {
   display: flex;
+  flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.macroEditorWorkspace {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .macroEditorList {
@@ -237,4 +247,43 @@
   right: 12px;
   color: #6b7280;
   font-size: 0.8rem;
+}
+
+.macroEditorActions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 8px 10px;
+  border-top: 1px solid #3a3d3e;
+  background: #151819;
+
+  button {
+    white-space: nowrap;
+  }
+}
+
+.macroEditorActionsRight {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+@container (max-width: 560px) {
+  .macroEditorActionLabel {
+    display: none;
+  }
+
+  .macroEditorActions {
+    padding: 6px 8px;
+
+    button {
+      width: 36px;
+      min-width: 36px;
+      padding-left: 4px;
+      padding-right: 4px;
+    }
+  }
 }

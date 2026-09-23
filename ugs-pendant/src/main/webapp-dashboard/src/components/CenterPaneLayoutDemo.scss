@@ -1,0 +1,230 @@
+.centerPaneLayoutDemo {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  background: #343a3f;
+  overflow: hidden;
+}
+
+.centerPaneLayoutLeaf {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  background: #101213;
+  overflow: hidden;
+}
+
+.centerPaneLayoutLeafHeader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 0 0 auto;
+  min-width: 0;
+  min-height: 30px;
+  padding: 2px;
+  background: #1b1f21;
+  border-bottom: 1px solid #30363a;
+}
+
+.centerPaneLayoutTabsMeasure {
+  position: absolute;
+  display: flex;
+  gap: 2px;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+
+  span { padding: 2px 10px; }
+}
+
+.centerPaneLayoutTabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar { display: none; }
+
+  button {
+    flex: 0 0 auto;
+    min-height: 26px;
+    padding: 2px 10px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #3690ff;
+    font: inherit;
+
+    &:hover,
+    &:focus-visible { background: #17283c; }
+
+    &.active {
+      background: #193b66;
+      color: #73b3ff;
+      box-shadow: inset 0 0 0 1px #315c90;
+    }
+  }
+}
+
+.centerPaneLayoutContentSelect {
+  min-width: 0;
+  width: auto;
+  max-width: calc(100% - 66px);
+  min-height: 26px;
+  padding: 2px 26px 2px 10px;
+  border: 1px solid #315c90;
+  border-radius: 4px;
+  background-color: #193b66;
+  color: #73b3ff;
+  font: inherit;
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible { border-color: #4f9fff; }
+}
+
+.centerPaneLayoutSplitControls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  padding-left: 4px;
+}
+
+.centerPaneLayoutSplitButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 26px;
+  padding: 2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: #4f9fff;
+
+  &:hover:not(:disabled),
+  &:focus-visible { background: #17283c; }
+
+  &.active {
+    background: #193b66;
+    color: #8ac3ff;
+    box-shadow: inset 0 0 0 1px #315c90;
+  }
+
+  &:disabled {
+    color: #555f67;
+    opacity: .48;
+    cursor: default;
+  }
+}
+
+// One outer rectangle and one divider line, matching the reference icons.
+.centerPaneLayoutSplitIcon {
+  position: relative;
+  display: block;
+  width: 19px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  overflow: hidden;
+
+  &::before,
+  &::after {
+    content: "";
+    position: absolute;
+  }
+}
+
+.centerPaneLayoutSplitButton.vertical .centerPaneLayoutSplitIcon {
+  &::before {
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    border-left: 2px solid currentColor;
+    transform: translateX(-1px);
+  }
+
+  &::after { inset: 0 50% 0 0; background: currentColor; opacity: 0; }
+}
+
+.centerPaneLayoutSplitButton.horizontal .centerPaneLayoutSplitIcon {
+  &::before {
+    left: 0;
+    right: 0;
+    top: 50%;
+    border-top: 2px solid currentColor;
+    transform: translateY(-1px);
+  }
+
+  &::after { inset: 0 0 50% 0; background: currentColor; opacity: 0; }
+}
+
+.centerPaneLayoutSplitButton.active .centerPaneLayoutSplitIcon::after { opacity: .3; }
+
+.centerPaneLayoutLeafBody {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+
+  > * {
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+  }
+
+  .visualizerZoomControl { display: none; }
+}
+
+.centerPaneLayoutResizer {
+  position: absolute;
+  z-index: 20;
+  touch-action: none;
+
+  &::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    border-radius: 3px;
+    background: #4ade80;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 1px #18251e;
+  }
+
+  &.vertical {
+    width: 14px;
+    margin-left: -7px;
+    cursor: ew-resize;
+
+    &::after { width: 4px; height: 48px; }
+  }
+
+  &.horizontal {
+    height: 14px;
+    margin-top: -7px;
+    cursor: ns-resize;
+
+    &::after { width: 48px; height: 4px; }
+  }
+
+  &:hover::after,
+  &:active::after { background: #86efac; }
+}
+
+@media (pointer: coarse) {
+  .centerPaneLayoutTabs button,
+  .centerPaneLayoutContentSelect,
+  .centerPaneLayoutSplitButton {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

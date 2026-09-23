@@ -23,7 +23,15 @@ const Dashboard = () => {
   const [panel, setPanel] = useState("program");
   const [consoleOpen, setConsoleOpen] = useState(false);
   const dispatch = useDispatch();
+  const layoutDemo = new URLSearchParams(window.location.search).get("layoutDemo") === "1";
   const toggleConsole = () => {
+    if (layoutDemo) {
+      const nextOpen = !consoleOpen;
+      setPanel("program");
+      setConsoleOpen(nextOpen);
+      window.dispatchEvent(new CustomEvent("ugs-layout-demo-console", { detail: { show: nextOpen } }));
+      return;
+    }
     if (!consoleOpen || panel !== "program") {
       setPanel("program");
       dispatch(uiActions.setBottomView("console"));

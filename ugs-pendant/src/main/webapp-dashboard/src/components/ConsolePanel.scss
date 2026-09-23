@@ -48,12 +48,16 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  container-type: inline-size;
 
   // Grows to fill the row; Verbose/text-size sit after it at their natural
   // width, both right of Send - see the comment in ConsolePanel.tsx.
   .input-group {
     flex: 1 1 auto;
-    min-width: 0;
+    // Preserve a usable command field even when the pane is split narrowly;
+    // the Verbose/font controls compact before this input is allowed to give
+    // up its minimum width.
+    min-width: 120px;
   }
 }
 
@@ -65,6 +69,10 @@
     color: #c3c8cb;
     font-size: 0.85rem;
   }
+}
+
+.consoleVerboseLabelShort {
+  display: none;
 }
 
 // Bootstrap's switch defaults to its own blue when checked - swap it for the
@@ -82,10 +90,36 @@
   gap: 6px;
   flex: 0 0 auto;
 
+  .consoleFontSizeButtons {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .consoleFontSizeSlider {
+    display: none;
+    width: 88px;
+    accent-color: #4ade80;
+  }
+
   .consoleFontSizeValue {
     color: #9aa0a4;
     font-size: 0.8rem;
     min-width: 3.2em;
     text-align: center;
   }
+}
+
+@container (max-width: 560px) {
+  .consoleVerboseLabelFull { display: none; }
+  .consoleVerboseLabelShort { display: inline; }
+
+  .consoleVerboseToggle .form-check-label {
+    font-size: 0.85rem;
+    min-width: 1.1em;
+    text-align: center;
+  }
+
+  .consoleFontSizeButtons { display: none !important; }
+  .consoleFontSize .consoleFontSizeSlider { display: block; }
 }

@@ -94,6 +94,18 @@
     gap: 6px;
     flex: 0 0 auto;
 
+    .gcodeEditorFontSizeButtons {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .gcodeEditorFontSizeSlider {
+      display: none;
+      width: 88px;
+      accent-color: #4ade80;
+    }
+
     .gcodeEditorFontSizeValue {
       color: #9aa0a4;
       font-size: 0.8rem;
@@ -110,6 +122,14 @@
   @container (max-width: 640px) {
     .gcodeEditorButtonLabel {
       display: none;
+    }
+
+    .gcodeEditorFontSize .gcodeEditorFontSizeButtons {
+      display: none;
+    }
+
+    .gcodeEditorFontSize .gcodeEditorFontSizeSlider {
+      display: block;
     }
   }
 }

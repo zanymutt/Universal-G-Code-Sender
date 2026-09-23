@@ -8,6 +8,7 @@ import GcodeEditor from "./GcodeEditor";
 import ConsolePanel from "./ConsolePanel";
 import MacroEditor from "./MacroEditor";
 import ProbePanel from "./ProbePanel";
+import CenterPaneLayoutDemo from "./CenterPaneLayoutDemo";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { uiActions, CenterView, PaneContent, BottomView } from "../store/uiSlice";
@@ -29,6 +30,10 @@ const PANE_LABELS: { content: PaneContent; label: string }[] = [
 ];
 
 const CenterPanel = () => {
+  if (new URLSearchParams(window.location.search).get("layoutDemo") === "1") {
+    return <CenterPaneLayoutDemo />;
+  }
+
   const dispatch = useAppDispatch();
   // Lifted to Redux (rather than local state) so the RightRail's macro edit
   // button can jump here to the Macros tab without CenterPanel and RightRail

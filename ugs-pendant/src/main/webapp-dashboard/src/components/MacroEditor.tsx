@@ -4,16 +4,18 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faArrowDown,
   faArrowUp,
+  faFloppyDisk,
   faFileExport,
   faFileImport,
   faPlus,
   faTrash,
+  faXmark,
 } from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { fetchMacros, macrosActions } from "../store/macrosSlice";
 import { saveMacroList } from "../services/macros";
-import { downloadMacroList, parseMacroListFile } from "../services/download";
+import { downloadMacroList, downloadSingleMacro, parseMacroListFile } from "../services/download";
 import { Macro } from "../model/Macro";
 import { MACRO_ICONS } from "../utils/macroIcons";
 import { macroColorStyle } from "../utils/macroColors";
@@ -209,8 +211,9 @@ const MacroEditor = ({ compact = false }: Props) => {
   };
 
   return (
-    <div className="macroEditor">
-      <div className={"macroEditorList" + (compact ? " compact" : "")}>
+    <div className={"macroEditor" + (compact ? " compact" : "")}>
+      <div className="macroEditorWorkspace">
+        <div className={"macroEditorList" + (compact ? " compact" : "")}>
         <div className="macroEditorListHeader">
           <Button size="sm" variant="outline-secondary" onClick={startNewMacro} title="New macro">
             <FontAwesomeIcon icon={faPlus} /> New
@@ -308,33 +311,49 @@ const MacroEditor = ({ compact = false }: Props) => {
             </div>
           )}
         </div>
+        </div>
+
+        <div className="macroEditorFormPane">
+          {error && (
+            <Alert variant="danger" dismissible onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+          {draft ? (
+            <MacroForm
+              // Remount when the selected macro changes - MacroForm keeps its
+              // own local text-area state for the gcode field (derived from
+              // macro.gcode only on mount), so without a key tied to identity
+              // it would keep showing the previously selected macro's gcode.
+              key={`${draft.uuid}-${formResetToken}`}
+              macro={draft}
+              compact={compact}
+              onChange={setDraft}
+            />
+          ) : (
+            <div className="macroEditorNoSelection">Select a macro to edit, or click New.</div>
+          )}
+          {isSaving && <div className="macroEditorSaving">Saving...</div>}
+        </div>
       </div>
 
-      <div className="macroEditorFormPane">
-        {error && (
-          <Alert variant="danger" dismissible onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-        {draft ? (
-          <MacroForm
-            // Remount when the selected macro changes - MacroForm keeps its
-            // own local text-area state for the gcode field (derived from
-            // macro.gcode only on mount), so without a key tied to identity
-            // it would keep showing the previously selected macro's gcode.
-            key={`${draft.uuid}-${formResetToken}`}
-            macro={draft}
-            isDirty={isDirty}
-            isNew={isNewDraft}
-            compact={compact}
-            onChange={setDraft}
-            onSave={saveDraft}
-            onDiscard={discardDraft}
-          />
-        ) : (
-          <div className="macroEditorNoSelection">Select a macro to edit, or click New.</div>
-        )}
-        {isSaving && <div className="macroEditorSaving">Saving...</div>}
+      <div className="macroEditorActions" role="toolbar" aria-label="Macro actions">
+        <Button
+          variant="outline-secondary"
+          disabled={!draft}
+          onClick={() => draft && downloadSingleMacro(draft)}
+          title="Export this macro"
+        >
+          <FontAwesomeIcon icon={faFileExport} /> <span className="macroEditorActionLabel">Export</span>
+        </Button>
+        <div className="macroEditorActionsRight">
+          <Button variant="secondary" disabled={!isDirty} onClick={discardDraft} title={isNewDraft ? "Cancel new macro" : "Discard changes"}>
+            <FontAwesomeIcon icon={faXmark} /> <span className="macroEditorActionLabel">{isNewDraft ? "Cancel" : "Discard"}</span>
+          </Button>
+          <Button variant="primary" disabled={!isDirty || isSaving} onClick={saveDraft} title="Save macro">
+            <FontAwesomeIcon icon={faFloppyDisk} /> <span className="macroEditorActionLabel">Save</span>
+          </Button>
+        </div>
       </div>
 
       {pendingConfirm && (

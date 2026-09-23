@@ -6,6 +6,7 @@ import { useLayoutPresets } from "../hooks/useLayoutPresets";
 
 type Props = { zoom: number; resetZoom: () => void; applyZoom: (value: number) => void };
 export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
+  const layoutDemo = new URLSearchParams(window.location.search).get("layoutDemo") === "1";
   const [show, setShow] = useState(false);
   const { sizing, setSizing } = useDashboardSizing();
   const { presets, save, error } = useLayoutPresets();
@@ -32,6 +33,9 @@ export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
           <option value="tabbed">Tabbed — one panel at a time</option>
         </Form.Select>
         <p className="small">Tablet moves macros and overrides to the Machine tab. On narrow screens it switches to tabs. Rotate without losing the editor or preview state.</p>
+        <Button variant="outline-primary" className="mb-3" onClick={() => window.location.assign(layoutDemo ? window.location.pathname : `${window.location.pathname}?layoutDemo=1`)}>
+          {layoutDemo ? "Exit center pane layout demo" : "Try center pane layout demo"}
+        </Button>
         <div className="dashboardSizingPresets">
           <Button variant="outline-secondary" onClick={() => {
             setSizing(s => ({ ...s, compact: true, leftWidth: 280, rightWidth: 290 })); resetZoom();

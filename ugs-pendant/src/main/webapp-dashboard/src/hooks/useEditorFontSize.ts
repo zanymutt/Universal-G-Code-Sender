@@ -55,11 +55,18 @@ export function useEditorFontSize() {
 
   const increase = useCallback(() => step(STEP), [step]);
   const decrease = useCallback(() => step(-STEP), [step]);
+  const setExact = useCallback((value: number) => {
+    const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, value));
+    setFontSize(next);
+    localStorage.setItem(STORAGE_KEY, String(next));
+    window.dispatchEvent(new Event(CHANGE_EVENT));
+  }, []);
 
   return {
     fontSize,
     increase,
     decrease,
+    setExact,
     canIncrease: fontSize < MAX_FONT_SIZE,
     canDecrease: fontSize > MIN_FONT_SIZE,
   };

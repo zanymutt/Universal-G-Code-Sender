@@ -36,6 +36,7 @@ export function useConsoleFontSize() {
 
   return {
     fontSize,
+    setExact: (size: number) => setFontSize(Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, size))),
     increase,
     decrease,
     canIncrease: fontSize < MAX_FONT_SIZE,

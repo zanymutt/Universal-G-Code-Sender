@@ -1,12 +1,10 @@
 import { useRef } from "react";
 import { Button, Form } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFloppyDisk, faXmark, faFileExport } from "@fortawesome/free-solid-svg-icons";
 import { Macro } from "../model/Macro";
 import { macroGcodeToEditorText, editorTextToMacroGcode } from "../utils/macroGcode";
 import { MACRO_COLOR_PRESETS, macroColorStyle } from "../utils/macroColors";
 import { MACRO_ICON_KEYS, MACRO_ICONS } from "../utils/macroIcons";
-import { downloadSingleMacro } from "../services/download";
 import MacroGcodeEditor, { MacroGcodeEditorHandle } from "./MacroGcodeEditor";
 import "./MacroForm.scss";
 
@@ -23,15 +21,11 @@ const PLACEHOLDERS: { label: string; token: string }[] = [
 
 type Props = {
   macro: Macro;
-  isDirty: boolean;
-  isNew: boolean;
   compact?: boolean;
   onChange: (macro: Macro) => void;
-  onSave: () => void;
-  onDiscard: () => void;
 };
 
-const MacroForm = ({ macro, isDirty, isNew, compact = false, onChange, onSave, onDiscard }: Props) => {
+const MacroForm = ({ macro, compact = false, onChange }: Props) => {
   const groupClass = compact ? " compact" : "";
   const gcodeEditorRef = useRef<MacroGcodeEditorHandle | null>(null);
 
@@ -148,20 +142,6 @@ const MacroForm = ({ macro, isDirty, isNew, compact = false, onChange, onSave, o
           ))}
         </div>
       </Form.Group>
-
-      <div className="macroFormActions">
-        <Button variant="outline-secondary" onClick={() => downloadSingleMacro(macro)}>
-          <FontAwesomeIcon icon={faFileExport} /> Export this macro
-        </Button>
-        <div className="macroFormActionsRight">
-          <Button variant="secondary" disabled={!isDirty} onClick={onDiscard}>
-            <FontAwesomeIcon icon={faXmark} /> {isNew ? "Cancel" : "Discard"}
-          </Button>
-          <Button variant="primary" disabled={!isDirty} onClick={onSave}>
-            <FontAwesomeIcon icon={faFloppyDisk} /> Save
-          </Button>
-        </div>
-      </div>
     </div>
   );
 };

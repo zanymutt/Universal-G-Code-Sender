@@ -19,6 +19,7 @@ const ConsolePanel = () => {
   // separate hook instances drifting apart on the shared localStorage key.
   const {
     fontSize,
+    setExact: setFontSize,
     increase: increaseFontSize,
     decrease: decreaseFontSize,
     canIncrease: canIncreaseFontSize,
@@ -113,7 +114,7 @@ const ConsolePanel = () => {
         <Form.Check
           type="switch"
           id="verbose-toggle"
-          label="Verbose"
+          label={<><span className="consoleVerboseLabelFull">Verbose</span><span className="consoleVerboseLabelShort" aria-hidden="true">V</span></>}
           checked={verboseEnabled}
           // Gated server-side too (EventsSocket.java only forwards
           // MessageType.VERBOSE traffic to sessions that asked for it) -
@@ -124,13 +125,17 @@ const ConsolePanel = () => {
         />
 
         <div className="consoleFontSize" title="Console text size">
-          <Button variant="secondary" size="sm" disabled={!canDecreaseFontSize} onClick={decreaseFontSize} title="Smaller text">
-            <FontAwesomeIcon icon={faMinus} />
-          </Button>
-          <span className="consoleFontSizeValue">{fontSize}px</span>
-          <Button variant="secondary" size="sm" disabled={!canIncreaseFontSize} onClick={increaseFontSize} title="Larger text">
-            <FontAwesomeIcon icon={faPlus} />
-          </Button>
+          <div className="consoleFontSizeButtons">
+            <Button variant="secondary" size="sm" disabled={!canDecreaseFontSize} onClick={decreaseFontSize} title="Smaller text">
+              <FontAwesomeIcon icon={faMinus} />
+            </Button>
+            <span className="consoleFontSizeValue">{fontSize}px</span>
+            <Button variant="secondary" size="sm" disabled={!canIncreaseFontSize} onClick={increaseFontSize} title="Larger text">
+              <FontAwesomeIcon icon={faPlus} />
+            </Button>
+          </div>
+          <input className="consoleFontSizeSlider" type="range" min="10" max="24" step="2" value={fontSize}
+            aria-label="Console text size" onChange={event => setFontSize(Number(event.target.value))} />
         </div>
       </div>
     </div>
