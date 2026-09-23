@@ -1,6 +1,0 @@
-{
-  "name": "Camera",
-  "description": "View an MJPEG or browser-compatible camera stream in Dashboard.",
-  "version": "1.0.0",
-  "entry": "index.html"
-}

@@ -1,7 +1,0 @@
-{
-  "name": "Web Page",
-  "description": "Show an internal or external web page inside a Dashboard window.",
-  "version": "1.0.0",
-  "entry": "index.html",
-  "allowMultipleInstances": true
-}
