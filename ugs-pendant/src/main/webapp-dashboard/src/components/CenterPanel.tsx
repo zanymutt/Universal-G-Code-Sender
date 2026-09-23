@@ -30,7 +30,10 @@ const PANE_LABELS: { content: PaneContent; label: string }[] = [
 ];
 
 const CenterPanel = () => {
-  if (new URLSearchParams(window.location.search).get("layoutDemo") === "1") {
+  // The pane layout is now the normal Dashboard layout. Keep the previous
+  // implementation available as a deliberate escape hatch while this UI is
+  // being exercised: append ?legacyLayout=1 to compare or temporarily regress.
+  if (new URLSearchParams(window.location.search).get("legacyLayout") !== "1") {
     return <CenterPaneLayoutDemo />;
   }
 
