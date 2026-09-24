@@ -1,0 +1,173 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Rotate G-code</title>
+  <style>
+    /* Dashboard doesn't push theme CSS variables into plugins yet, so this
+       just hardcodes the same dark palette used everywhere else in
+       Dashboard's own stylesheets - matching it by eye now, and one of the
+       first things to properly fix once/if theme-var injection gets built. */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #1c1e1f;
+      color: #e5e7eb;
+      font: 14px/1.4 system-ui, sans-serif;
+    }
+    .panel { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: #9ca3af; }
+    input, select {
+      background: #26282a;
+      border: 1px solid #3a3d3e;
+      border-radius: 4px;
+      color: #e5e7eb;
+      padding: 6px 8px;
+      font-size: 14px;
+    }
+    .row { display: flex; gap: 8px; }
+    .row > * { flex: 1; }
+    button {
+      background: #26282a;
+      border: 1px solid #3a3d3e;
+      border-radius: 4px;
+      color: #e5e7eb;
+      padding: 7px 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: #2d5a3f; color: #4ade80; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    button.primary { border-color: #2d5a3f; color: #4ade80; }
+    .log {
+      flex: 1;
+      min-height: 80px;
+      background: #0c0e0f;
+      border: 1px solid #3a3d3e;
+      border-radius: 4px;
+      padding: 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+      overflow-y: auto;
+    }
+    .hint { color: #6b7280; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="row">
+      <label>
+        Angle (degrees, CCW)
+        <input id="angle" type="number" step="any" value="90" />
+      </label>
+      <label>
+        Pivot
+        <select id="pivot">
+          <option value="origin">Origin (0, 0)</option>
+          <option value="center">Toolpath center</option>
+        </select>
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="reload">Reload current file</button>
+      <button id="rotate" class="primary" disabled>Rotate</button>
+    </div>
+
+    <div class="row">
+      <button id="save" disabled>Save (overwrite)</button>
+      <button id="saveAs" disabled>Save as...</button>
+    </div>
+    <p class="hint">
+      Lines containing FluidNC expressions or variables ({...}, #, ?) are never modified.
+    </p>
+
+    <div id="log" class="log">Loading current file...</div>
+  </div>
+
+  <script src="sdk.js"></script>
+  <script src="rotate.js"></script>
+  <script>
+    const logEl = document.getElementById("log");
+    const angleEl = document.getElementById("angle");
+    const pivotEl = document.getElementById("pivot");
+    const rotateBtn = document.getElementById("rotate");
+    const saveBtn = document.getElementById("save");
+    const saveAsBtn = document.getElementById("saveAs");
+    const reloadBtn = document.getElementById("reload");
+
+    let originalText = null;
+    let rotatedText = null;
+
+    function log(message) {
+      logEl.textContent = message;
+    }
+
+    function loadCurrentFile() {
+      rotatedText = null;
+      saveBtn.disabled = true;
+      saveAsBtn.disabled = true;
+      rotateBtn.disabled = true;
+      log("Loading current file...");
+      window.Fluid.getGcode()
+        .then((text) => {
+          originalText = text;
+          const lineCount = text.split(/\r?\n/).length;
+          rotateBtn.disabled = false;
+          log("Loaded " + lineCount + " lines. Set an angle and press Rotate.");
+        })
+        .catch((err) => {
+          originalText = null;
+          log("Couldn't load the current file: " + err.message);
+        });
+    }
+
+    rotateBtn.addEventListener("click", () => {
+      if (originalText === null) return;
+      const angle = parseFloat(angleEl.value);
+      if (!Number.isFinite(angle)) {
+        log("Enter a valid angle.");
+        return;
+      }
+      const result = window.rotateGcode(originalText, angle, pivotEl.value);
+      rotatedText = result.text;
+      saveBtn.disabled = false;
+      saveAsBtn.disabled = false;
+      const direction = angle < 0 ? "CW" : "CCW";
+      log(
+        "Rotated " + Math.abs(angle) + "\u00b0 " + direction + " around " +
+        (pivotEl.value === "center" ? "toolpath center (" + result.pivot.x + ", " + result.pivot.y + ")" : "the origin") +
+        ".\n" + result.rotatedLineCount + " motion lines changed. Nothing else was touched.\n\n" +
+        "Press Save to overwrite the loaded file, or Save as... to write a new one."
+      );
+    });
+
+    saveBtn.addEventListener("click", () => {
+      if (rotatedText === null) return;
+      log("Saving...");
+      window.Fluid.setGcode(rotatedText)
+        .then(() => {
+          log("Saved. Dashboard has reloaded the rotated file.");
+          originalText = rotatedText;
+        })
+        .catch((err) => log("Save failed: " + err.message));
+    });
+
+    saveAsBtn.addEventListener("click", () => {
+      if (rotatedText === null) return;
+      log("Saving...");
+      window.Fluid.saveGcodeAs(rotatedText)
+        .then((result) => log("Saved as \"" + result.path + "\" and opened it."))
+        .catch((err) => log("Save cancelled: " + err.message));
+    });
+
+    reloadBtn.addEventListener("click", loadCurrentFile);
+
+    loadCurrentFile();
+  </script>
+</body>
+</html>

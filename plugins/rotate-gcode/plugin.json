@@ -1,0 +1,6 @@
+{
+  "name": "Rotate G-code",
+  "description": "Rotate the loaded toolpath by an angle around the origin or its center. Lines containing FluidNC expressions/variables ({...}, #, ?) are left completely untouched.",
+  "version": "1.0.0",
+  "entry": "index.html"
+}
