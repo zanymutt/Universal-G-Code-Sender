@@ -36,6 +36,10 @@ const DEFAULT_GRID_SIZE = 200;
 const GRID_CELL_SIZE = 10;
 // How far past the toolpath's own bounds the grid should extend, per side.
 const GRID_PADDING = 100;
+// The grid, then the axis lines over it, are drawn before everything else (which
+// has the default render order of 0) so the toolpath lands on top of them.
+const GRID_RENDER_ORDER = -2;
+const GRID_AXIS_RENDER_ORDER = -1;
 const X_AXIS_COLOR = "#ff8a8a";
 const Y_AXIS_COLOR = "#8affa0";
 
@@ -705,6 +709,17 @@ const Visualizer3D = () => {
       new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]),
       new THREE.LineBasicMaterial({ color: Y_AXIS_COLOR })
     );
+    // The grid and axes are a backdrop: drawn first and never written to the depth
+    // buffer, so the toolpath always draws over them. Left as ordinary depth-tested
+    // lines at Z=0, they hid any cut below the surface (Z<0) wherever a grid line
+    // lay exactly over it - a straight edge on a 10mm grid line vanished in the
+    // 2D views, where the two line up pixel for pixel.
+    const makeBackdrop = (line: THREE.Line | THREE.LineSegments, order: number) => {
+      (line.material as THREE.Material).depthWrite = false;
+      line.renderOrder = order;
+    };
+    makeBackdrop(xAxisLine, GRID_AXIS_RENDER_ORDER);
+    makeBackdrop(yAxisLine, GRID_AXIS_RENDER_ORDER);
     scene.add(xAxisLine);
     scene.add(yAxisLine);
 
@@ -735,6 +750,7 @@ const Visualizer3D = () => {
       const grid = new THREE.GridHelper(snappedSize, divisions, 0x2f3132, 0x2f3132);
       grid.rotation.x = Math.PI / 2;
       grid.position.set(snappedCenterX, snappedCenterY, 0);
+      makeBackdrop(grid, GRID_RENDER_ORDER);
       scene.add(grid);
       gridRef.current = grid;
       // These mark true work-coordinate zero (X0/Y0), not wherever the grid itself
