@@ -14,7 +14,9 @@ in memory and a reload starts over.
 - What's simulated: connection, jogging, console/macros, work-zero and homing,
   spindle/coolant/overrides, and running the loaded file (start/pause/stop, run
   from line) with the tool moving along the toolpath at the programmed feeds.
-  Plugins aren't part of the demo.
+- Plugins: Nesting and Rotate G-code are offered, copied from
+  `ugs-pendant/examples/<id>` at build time (`DEMO_PLUGINS` in
+  `vite.demo.config.ts`) - so they always match the repo. svg-to-gcode is left out.
 - The demo code is compiled out of the normal build (`VITE_DEMO` is `"false"` in
   `vite.config.ts`).
 

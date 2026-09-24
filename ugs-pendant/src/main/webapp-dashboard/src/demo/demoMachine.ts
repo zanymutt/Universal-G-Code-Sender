@@ -94,6 +94,9 @@ const fileTimes: Record<string, number> = {};
 const extraFolders = new Set<string>();
 Object.keys(files).forEach((path, i) => (fileTimes[path] = Date.now() - i * 17 * 60 * 1000));
 
+// Plugin settings live here for the page's lifetime, like everything else.
+const pluginSettings: Record<string, unknown> = {};
+
 let activeFile = "";
 let program: Program = { commands: [], segments: [] };
 let armedLine = 0;
@@ -680,6 +683,15 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
     }
   };
 
+  // Plugins: the list comes from the build (their files are static, beside the
+  // page); a plugin's settings are kept in memory.
+  const pluginSettingsMatch = path.match(/^\/api\/v1\/plugins\/([^/]+)\/settings$/);
+  if (pluginSettingsMatch) {
+    const id = decodeURIComponent(pluginSettingsMatch[1]);
+    if (method === "POST") pluginSettings[id] = parseBody();
+    return json(pluginSettings[id] ?? {});
+  }
+
   switch (path) {
     // status / settings
     case "/api/v1/status/getStatus":
@@ -866,8 +878,7 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       return json(toolpathFrom(program, armedLine));
 
     case "/api/v1/plugins/list":
-      // The example plugins need their host-side SDK, which isn't part of the demo.
-      return json([]);
+      return json(__DEMO_PLUGINS__);
   }
 
   // Anything else is an endpoint the demo doesn't simulate. An empty success

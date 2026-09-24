@@ -14,6 +14,8 @@ on:
     branches: [feature/pendant-dashboard-ui]
     paths:
       - "ugs-pendant/src/main/webapp-dashboard/**"
+      - "ugs-pendant/examples/nesting/**"
+      - "ugs-pendant/examples/rotate-gcode/**"
       - ".github/workflows/dashboard-demo.yml"
   workflow_dispatch:
 

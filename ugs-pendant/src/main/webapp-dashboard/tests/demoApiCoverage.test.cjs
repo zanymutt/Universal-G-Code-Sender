@@ -8,8 +8,8 @@ const path = require("node:path");
 // - once as a blank screen - so this keeps the two in step: add the new path to
 // demoMachine.ts, or to NOT_SIMULATED below with a reason.
 const NOT_SIMULATED = {
-  // Plugins aren't part of the demo; the list endpoint is handled (always empty),
-  // and nothing calls a plugin's own files/settings without a listed plugin.
+  // The plugin list and each plugin's settings are handled (by pattern, since the
+  // id is part of the path); plugin files are static files beside the demo page.
   "/api/v1/plugins/": "plugin routes are built from a listed plugin's id",
 };
 

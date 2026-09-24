@@ -28,19 +28,12 @@ G21
 (Operation 1 of 1 : 2D Profile1)
 G54
 (Plasma cutting with GRBL.)
-(Using torch height probe and pierce delay.)
+(Using pierce delay.)
 G0 X14.536 Y-39.159 F2500
 G0 X14.536 Y-39.159 Z25
 
-G53 G38.2 Z0 F200
-(Read float switch input immediately after probe stop)
-M66 P0 L0
-#100 = -3 ; default assume float switch trigger
-o100 if [#5399 EQ 0]
-  #100 = -0.2 ; float inactive, assume ohmic trigger
-o100 endif
-G10 L20 Z[#100]
-G0 X14.536 Y-39.159  ; force position after probe
+(Torch height probe removed for the online demo)
+G0 X14.536 Y-39.159  ; move over the start point
 Z3
 M4 S1000
 G4 P0.4
@@ -135,7 +128,6 @@ M5
 G4 p0.5
 M9
 G0 Z30
-G4 p13.
 G0 Z40
 
 M5

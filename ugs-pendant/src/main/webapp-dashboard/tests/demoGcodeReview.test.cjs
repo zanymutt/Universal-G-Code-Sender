@@ -43,13 +43,10 @@ test("grbl system lines are ignored and an empty file has one (blank) line", () 
   assert.equal(reviewGcode("j", "").lineCount, 1);
 });
 
-test("the bundled samples only draw findings on their O-word/M66 macro lines", () => {
-  // heart.gcode carries a FluidNC-style probe macro (o100 if ... endif, M66) that
-  // the real review service flags too - see GcodeReviewService's word rules.
+test("the bundled sample programs review completely clean", () => {
   const dir = path.join(__dirname, "../src/demo/samples");
   for (const name of fs.readdirSync(dir)) {
     const result = reviewGcode(name, fs.readFileSync(path.join(dir, name), "utf8"));
-    const unexpected = result.diagnostics.filter((d) => !/^(o\d+|M66)\b/i.test(d.source));
-    assert.deepEqual(plain(unexpected), [], name);
+    assert.deepEqual(plain(result.diagnostics), [], name);
   }
 });
