@@ -19,6 +19,7 @@ All `@Path`-relative to `/api/v1`.
 - `MacrosResource.java` `@Path("/macros")` — `GET getMacroList()`→`List<Macro>`, `POST runMacro(Macro)`, `POST saveMacroList(List<Macro>)`→`List<Macro>`.
 - `ProbeResource.java` `@Path("/probe")` — `GET getSettings()`→`ProbeSettings`, `POST saveSettings(ProbeSettings)`, `POST run(ProbeRunRequest)`→`ProbeResult`.
 - `VisualizerResource.java` `@Path("/visualizer")` — `GET getToolpath()`→`List<ToolpathSegment>`.
+- `GcodeReviewResource.java` `@Path("/review")` — `GET` reviews the loaded file; `POST` reviews dashboard editor text→`GcodeReviewResult`.
 - `SettingsResource.java` `@Path("/settings")` — `GET getSettings()`→`Settings`, `POST setSettings(Settings)`.
 - `PluginsResource.java` `@Path("/plugins")` — `GET list()`→`List<PluginInfo>`; `GET {id}/files/{filename}`→`Response` (static file); `GET/POST {id}/settings` (JSON blob passthrough).
 - `TextResource.java` `@Path("/text")` — `GET getTexts()`→`Map<String,String>` (i18n strings).

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { PointerEvent as ReactPointerEvent } from "react";
 import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
@@ -18,6 +19,7 @@ import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
 import SaveAsModal from "./SaveAsModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { getFileName } from "../utils/getFileName";
+import { GcodeReviewDiagnostic, GcodeReviewResult, reviewGcode } from "../services/gcodeReview";
 import "./GcodeEditor.scss";
 
 // Font-size is deliberately not set here - it's owned entirely by the
@@ -245,6 +247,17 @@ const GcodeEditor = () => {
   // the button always has a sensible target even before anyone taps a line.
   const [cursorLine, setCursorLine] = useState(1);
   const [showRunFromConfirm, setShowRunFromConfirm] = useState(false);
+  const [showReview, setShowReview] = useState(false);
+  const [review, setReview] = useState<GcodeReviewResult | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+  const [reviewOffset, setReviewOffset] = useState({ x: 0, y: 0 });
+  const reviewDragRef = useRef<{
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
 
   // Mirrors isDirty into uiSlice too (see its own comment) - every place that
   // would otherwise call setIsDirty directly goes through this instead, so
@@ -458,6 +471,58 @@ const GcodeEditor = () => {
 
   const cursorLineText = viewRef.current?.state.doc.line(cursorLine).text ?? "";
 
+  const handleReview = () => {
+    const content = viewRef.current?.state.doc.toString();
+    if (content === undefined) return;
+    setShowReview(true);
+    setReviewOffset({ x: 0, y: 0 });
+    setReview(null);
+    setReviewError(null);
+    setIsReviewing(true);
+    reviewGcode(content)
+      .then(setReview)
+      .catch((exception) => setReviewError(exception instanceof Error ? exception.message : "Couldn't review G-code."))
+      .finally(() => setIsReviewing(false));
+  };
+
+  const jumpToReviewLine = (diagnostic: GcodeReviewDiagnostic) => {
+    const view = viewRef.current;
+    if (!view) return;
+    const lineNumber = Math.max(1, Math.min(diagnostic.lineNumber, view.state.doc.lines));
+    const line = view.state.doc.line(lineNumber);
+    view.dispatch({
+      selection: { anchor: line.from },
+      effects: EditorView.scrollIntoView(line.from, { y: "center", yMargin: 80 }),
+    });
+    view.focus();
+    setCursorLine(lineNumber);
+    dispatch(uiActions.setEditorCursorLine(lineNumber));
+  };
+
+  const startReviewDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    reviewDragRef.current = {
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: reviewOffset.x,
+      originY: reviewOffset.y,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  };
+
+  const moveReviewDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const drag = reviewDragRef.current;
+    if (!drag) return;
+    setReviewOffset({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY,
+    });
+  };
+
+  const endReviewDrag = () => {
+    reviewDragRef.current = null;
+  };
+
   if (!fileName) {
     return <div className="gcodeEditorEmpty">No file loaded. Open a file from the Run tab first.</div>;
   }
@@ -486,6 +551,67 @@ const GcodeEditor = () => {
         onCancel={() => setShowRunFromConfirm(false)}
       />
 
+      {showReview && (
+        <div className="gcodeReviewOverlay" role="presentation">
+          <div
+            className="gcodeReviewWindow"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gcode-review-title"
+            style={{ transform: `translate(${reviewOffset.x}px, ${reviewOffset.y}px)` }}
+          >
+            <div
+              className="gcodeReviewHeader"
+              onPointerDown={startReviewDrag}
+              onPointerMove={moveReviewDrag}
+              onPointerUp={endReviewDrag}
+              onPointerCancel={endReviewDrag}
+            >
+              <h2 id="gcode-review-title">G-code review</h2>
+              <button
+                type="button"
+                className="gcodeReviewClose"
+                onClick={() => setShowReview(false)}
+                aria-label="Close G-code review"
+              >
+                ×
+              </button>
+            </div>
+            <div className="gcodeReviewBody">
+              {isReviewing && <div className="gcodeReviewStatus"><Spinner size="sm" /> Reviewing the current editor buffer...</div>}
+              {reviewError && <div className="gcodeReviewError">{reviewError}</div>}
+              {review && (
+                review.diagnostics.length === 0 ? (
+                  <div className="gcodeReviewSuccess">No parser errors or unknown G/M-codes found in {review.lineCount} lines.</div>
+                ) : (
+                  <div className="gcodeReviewList">
+                    <div className="gcodeReviewSummary">
+                      {review.diagnostics.filter((item) => item.severity === "ERROR").length} error(s), {" "}
+                      {review.diagnostics.filter((item) => item.severity === "WARNING").length} warning(s)
+                    </div>
+                    {review.diagnostics.map((diagnostic, index) => (
+                      <button
+                        type="button"
+                        className={`gcodeReviewFinding ${diagnostic.severity === "ERROR" ? "error" : "warning"}`}
+                        key={`${diagnostic.lineNumber}-${index}`}
+                        onClick={() => jumpToReviewLine(diagnostic)}
+                      >
+                        <span className="gcodeReviewFindingLine">Line {diagnostic.lineNumber}</span>
+                        <span className="gcodeReviewFindingMessage">{diagnostic.message}</span>
+                        <code>{diagnostic.source}</code>
+                      </button>
+                    ))}
+                  </div>
+                )
+              )}
+            </div>
+            <div className="gcodeReviewFooter">
+              <Button variant="secondary" onClick={() => setShowReview(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="gcodeEditorContent">
         {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
         <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
@@ -495,6 +621,14 @@ const GcodeEditor = () => {
         <span className="gcodeEditorFileName">{fileName}</span>
         {!isEditable && <span className="gcodeEditorLocked">Read-only while a job is running</span>}
         {error && <span className="gcodeEditorError">{error}</span>}
+        <Button
+          className="gcodeEditorReview"
+          variant="outline-secondary"
+          onClick={handleReview}
+          title="Review the current editor contents for parser findings"
+        >
+          Review
+        </Button>
         <Button
           className="gcodeEditorRunFrom"
           variant="outline-secondary"

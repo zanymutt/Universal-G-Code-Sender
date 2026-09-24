@@ -42,6 +42,10 @@
     font-size: 0.8rem;
   }
 
+  .gcodeEditorReview {
+    white-space: nowrap;
+  }
+
   // Only Run from gets margin-left: auto - it claims all the toolbar's
   // leftover space at once, pushing this whole group (Run from/Reset/Save
   // as/Save) right-aligned together as one cluster. .gcodeEditorSave is the
@@ -131,6 +135,139 @@
     .gcodeEditorFontSize .gcodeEditorFontSizeSlider {
       display: block;
     }
+  }
+}
+
+.gcodeReviewOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.gcodeReviewWindow {
+  display: flex;
+  flex-direction: column;
+  width: min(900px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+  border: 1px solid #3a3d3e;
+  border-radius: 10px;
+  background: #1b1d1e;
+  color: #e8eaeb;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+.gcodeReviewHeader {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 22px;
+  border-bottom: 1px solid #343738;
+  cursor: move;
+  user-select: none;
+
+  h2 {
+    margin: 0;
+    font-size: 1.35rem;
+  }
+}
+
+.gcodeReviewClose {
+  border: 0;
+  background: transparent;
+  color: #aeb4b8;
+  font-size: 2rem;
+  line-height: 1;
+  cursor: pointer;
+
+  &:hover {
+    color: #fff;
+  }
+}
+
+.gcodeReviewBody {
+  min-height: 0;
+  overflow: auto;
+  padding: 22px;
+}
+
+.gcodeReviewFooter {
+  display: flex;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  padding: 14px 22px;
+  border-top: 1px solid #343738;
+}
+
+.gcodeReviewStatus,
+.gcodeReviewSuccess,
+.gcodeReviewError {
+  padding: 8px 0;
+}
+
+.gcodeReviewSuccess {
+  color: #76e3a1;
+}
+
+.gcodeReviewError {
+  color: #ff6b6b;
+}
+
+.gcodeReviewSummary {
+  color: #c3c8cb;
+  margin-bottom: 8px;
+}
+
+.gcodeReviewList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.gcodeReviewFinding {
+  display: grid;
+  grid-template-columns: 82px 1fr;
+  gap: 2px 10px;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid #3a3d3e;
+  border-radius: 4px;
+  background: #191b1c;
+  color: #e8eaeb;
+  cursor: pointer;
+
+  &:hover {
+    background: #242728;
+  }
+
+  &.error {
+    border-left: 3px solid #ff6b6b;
+  }
+
+  &.warning {
+    border-left: 3px solid #f0ad4e;
+  }
+
+  .gcodeReviewFindingLine {
+    color: #aeb4b8;
+    font-size: 0.85rem;
+  }
+
+  .gcodeReviewFindingMessage {
+    font-weight: 500;
+  }
+
+  code {
+    grid-column: 1 / -1;
+    color: #8f989d;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 }
 
