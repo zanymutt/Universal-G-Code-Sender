@@ -37,7 +37,7 @@ Everything else is upstream UGS. This fork merges the upstream project into its 
 ## Download
 
 > [!WARNING]
-> **Experimental, and only Windows has been tested.** The `nightly` release is rebuilt automatically whenever `master` changes, so it always holds the latest work and is not a stable release. The Linux and macOS builds are produced automatically but have **not been tested at all**. This software can jog, run and stop a real CNC machine, so try it away from a machine that can cause harm and keep an emergency stop within reach.
+> **Experimental, and only Windows has been tested.** The `nightly` release is rebuilt automatically whenever `master` changes, so it always holds the latest work and is not a stable release. The Linux and macOS builds are produced automatically but have **not been tested at all**.
 
 **[Get the latest build from the nightly release](https://github.com/zanymutt/Universal-G-Code-Sender/releases/tag/nightly)**, and pick the file for your system from the **Assets** list. Java is included.
 
