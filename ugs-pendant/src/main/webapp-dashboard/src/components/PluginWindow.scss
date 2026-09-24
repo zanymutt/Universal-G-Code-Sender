@@ -18,11 +18,9 @@
   border: 1px solid #3a3d3e;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: 40;
-  // Native browser resize handle (bottom-right corner) - deliberately not a
-  // hand-rolled resize handler, see PluginWindow.tsx's comment above the
-  // drag-handling section. `resize` only has an effect when overflow isn't
-  // `visible`, so this window is clipped to its own box regardless.
-  resize: both;
+  // The explicit grip below works on both desktop browsers and iPad Home
+  // Screen web apps. Keep overflow clipped so the iframe cannot cover it.
+  resize: none;
   overflow: hidden;
   // Deliberately square, not rounded: when the dashboard's own zoom
   // (useZoomLevel) is away from 100%, .app renders through a fractional
@@ -122,11 +120,27 @@
   background: #0c0e0f;
 }
 
+.pluginWindowResizeGrip {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  height: 24px;
+  z-index: 2;
+  cursor: nwse-resize;
+  touch-action: none;
+  // A small diagonal grip remains visible against both the dark window and
+  // the plugin frame, while leaving most of the corner easy to grab.
+  background: linear-gradient(135deg, transparent 52%, #687078 53%, #687078 60%, transparent 61%);
+  opacity: 0.8;
+
+  &:hover { opacity: 1; }
+}
+
 // Fills the dashboard's main area - PluginWindow.tsx sets left/top/width/height
 // inline from that area's measured box, so the top and bottom bars stay clear.
 // No grip to reserve room for, and no dragging.
 .pluginWindowMaximized {
-  resize: none;
   max-width: none;
   max-height: none;
   padding-bottom: 0;

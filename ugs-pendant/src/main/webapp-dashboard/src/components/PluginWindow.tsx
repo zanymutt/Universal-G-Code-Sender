@@ -198,6 +198,55 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
   // exactly like clicking-and-holding any normal element.
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
 
+  // CSS `resize: both` supplies this affordance on desktop browsers, but the
+  // native corner is not reliably hit-testable in an iPad Home Screen web app.
+  // Keep the same behavior with an explicit pointer-driven grip so touch and
+  // mouse resizing use one path everywhere.
+  const resizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
+
+  const handleResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (maximizedRef.current) return;
+    const element = windowRef.current;
+    if (!element) return;
+    e.preventDefault();
+    e.stopPropagation();
+    resizeRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      width: element.getBoundingClientRect().width,
+      height: element.getBoundingClientRect().height,
+    };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const handleResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const resize = resizeRef.current;
+    const element = windowRef.current;
+    if (!resize || !element) return;
+    const maxWidth = window.innerWidth * 0.96;
+    const maxHeight = window.innerHeight * 0.9;
+    const width = Math.min(maxWidth, Math.max(220, resize.width + e.clientX - resize.startX));
+    const height = Math.min(maxHeight, Math.max(160, resize.height + e.clientY - resize.startY));
+    // Keep React's next render from restoring the pre-drag inline size while
+    // the pointer is still moving. The final size is persisted on release.
+    sizeRef.current = { width, height };
+    element.style.width = `${width}px`;
+    element.style.height = `${height}px`;
+  };
+
+  const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const element = windowRef.current;
+    if (element && resizeRef.current) {
+      const size = { width: element.offsetWidth, height: element.offsetHeight };
+      sizeRef.current = size;
+      savePluginWindowSize(plugin.id, size);
+    }
+    resizeRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
+  };
+
   const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Not the close button - that has its own onClick and shouldn't also
     // start a drag underneath it.
@@ -523,6 +572,15 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         // an incidental detail to relax later.
         sandbox="allow-scripts"
       />
+      {!maximized && <div
+        className="pluginWindowResizeGrip"
+        role="separator"
+        aria-label="Resize plugin window"
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={endResize}
+        onPointerCancel={endResize}
+      />}
     </div>
     </>
   );
