@@ -31,6 +31,34 @@
     return line.replace(/\(.*?\)/g, "").replace(/;.*/g, "");
   }
 
+  // The compass points (0/90/180/270 degrees) an arc actually passes through,
+  // as [x, y]. A rotation pivot taken from move end points alone misses how far
+  // an arc bulges past them, so "toolpath center" wouldn't be the middle of
+  // what's really cut. Start = end is a full circle, as G-code defines it.
+  function arcExtremes(sx, sy, ex, ey, cx, cy, clockwise) {
+    const radius = Math.hypot(sx - cx, sy - cy);
+    if (!(radius > 0)) return [];
+    const TWO_PI = 2 * Math.PI;
+    const start = Math.atan2(sy - cy, sx - cx);
+    let sweep = Math.atan2(ey - cy, ex - cx) - start;
+    if (clockwise) {
+      while (sweep >= 0) sweep -= TWO_PI;
+    } else {
+      while (sweep <= 0) sweep += TWO_PI;
+    }
+    const points = [];
+    for (let quarter = 0; quarter < 4; quarter++) {
+      const angle = (quarter * Math.PI) / 2;
+      let offset = clockwise ? start - angle : angle - start;
+      while (offset < 0) offset += TWO_PI;
+      // A hair of tolerance so a compass point exactly at the start or end counts.
+      if (offset <= Math.abs(sweep) + 1e-9) {
+        points.push([cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)]);
+      }
+    }
+    return points;
+  }
+
   function rotateVector(x, y, cos, sin) {
     return [x * cos - y * sin, x * sin + y * cos];
   }
@@ -50,6 +78,9 @@
   function readMotionLine(code, state) {
     if (/\bG91\b/i.test(code)) state.absolute = false;
     if (/\bG90\b/i.test(code)) state.absolute = true;
+    if (/\bG17\b/i.test(code)) state.plane = 17;
+    if (/\bG18\b/i.test(code)) state.plane = 18;
+    if (/\bG19\b/i.test(code)) state.plane = 19;
 
     const motionMatch = code.match(MOTION_WORD);
     if (motionMatch) state.motion = motionMatch[1];
@@ -106,20 +137,31 @@
     // box, so "rotate around toolpath center" has a center to use. Lines
     // with an expression marker are skipped for this too (their X/Y, if
     // any, isn't a plain coordinate to begin with).
-    const boundsState = { x: 0, y: 0, absolute: true, motion: null };
+    const boundsState = { x: 0, y: 0, absolute: true, motion: null, plane: 17 };
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, sawPoint = false;
 
     for (const rawLine of lines) {
       const code = stripComment(rawLine);
       if (!code.trim() || EXPRESSION_MARKERS.test(code)) continue;
       const before = { x: boundsState.x, y: boundsState.y };
-      readMotionLine(code, boundsState);
-      if (boundsState.x !== before.x || boundsState.y !== before.y) {
+      const { rotatable, iMatch, jMatch } = readMotionLine(code, boundsState);
+      const include = (x, y) => {
         sawPoint = true;
-        minX = Math.min(minX, boundsState.x);
-        maxX = Math.max(maxX, boundsState.x);
-        minY = Math.min(minY, boundsState.y);
-        maxY = Math.max(maxY, boundsState.y);
+        minX = Math.min(minX, x);
+        maxX = Math.max(maxX, x);
+        minY = Math.min(minY, y);
+        maxY = Math.max(maxY, y);
+      };
+      if (boundsState.x !== before.x || boundsState.y !== before.y) include(boundsState.x, boundsState.y);
+      // I/J arcs in the XY plane (G17) reach past their end points. A full circle
+      // doesn't move at all, so this can't hang off the position check above.
+      const isArc = boundsState.motion === "2" || boundsState.motion === "3";
+      if (rotatable && isArc && boundsState.plane === 17 && (iMatch || jMatch)) {
+        const cx = before.x + (iMatch ? parseFloat(iMatch[1]) : 0);
+        const cy = before.y + (jMatch ? parseFloat(jMatch[1]) : 0);
+        arcExtremes(before.x, before.y, boundsState.x, boundsState.y, cx, cy, boundsState.motion === "2").forEach(
+          ([x, y]) => include(x, y)
+        );
       }
     }
 
@@ -130,7 +172,7 @@
     // qualifying line's X/Y/I/J tokens in place. Runs from a fresh
     // starting position rather than continuing from pass 1's end state -
     // both passes read the same original, unrotated coordinates.
-    const state = { x: 0, y: 0, absolute: true, motion: null };
+    const state = { x: 0, y: 0, absolute: true, motion: null, plane: 17 };
     let rotatedCount = 0;
 
     const outputLines = lines.map((rawLine) => {
@@ -160,8 +202,21 @@
             })()
           : rotateVector(rawX, rawY, cos, sin);
 
-        if (xMatch) newLine = newLine.replace(xMatch[0], "X" + trimNumber(rx));
-        if (yMatch) newLine = newLine.replace(yMatch[0], "Y" + trimNumber(ry));
+        // Both axes are always written. A move that names only one axis
+        // ("G1 X70", or a bare "Y20") leaves the other at wherever the tool
+        // already was - but once rotated, the target's other coordinate
+        // changes too, so rewriting just the axis that was there would drop
+        // it and skew the shape (a horizontal edge would stop being a line).
+        // The missing word goes right beside the one that's present.
+        const xWord = "X" + trimNumber(rx);
+        const yWord = "Y" + trimNumber(ry);
+        if (xMatch && yMatch) {
+          newLine = newLine.replace(xMatch[0], xWord).replace(yMatch[0], yWord);
+        } else if (xMatch) {
+          newLine = newLine.replace(xMatch[0], xWord + " " + yWord);
+        } else {
+          newLine = newLine.replace(yMatch[0], xWord + " " + yWord);
+        }
       }
 
       // Arc center offsets are always incremental vectors regardless of
