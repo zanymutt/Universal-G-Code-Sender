@@ -9,6 +9,7 @@
 // along the toolpath at the programmed feed rates.
 
 import { Command, Effect, Program, Vec, parseGcode, toolpathFrom } from "./gcodeProgram";
+import { reviewGcode } from "./gcodeReview";
 import { DEFAULT_FILE, SAMPLE_FILES } from "./samples";
 
 type Listener = (message: unknown) => void;
@@ -856,6 +857,11 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       stopMotion();
       return ok();
 
+    // Review the editor's current text (POST, includes unsaved edits) or the loaded file (GET).
+    case "/api/v1/review":
+      if (!activeFile) return json({ error: "No file is currently loaded" }, 404);
+      return json(reviewGcode(activeFile, method === "POST" ? bodyText : files[activeFile] ?? ""));
+
     case "/api/v1/visualizer/getToolpath":
       return json(toolpathFrom(program, armedLine));
 
@@ -864,8 +870,12 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       return json([]);
   }
 
-  if (method === "GET" || method === "POST") return ok();
-  return json({ error: "not found" }, 404);
+  // Anything else is an endpoint the demo doesn't simulate. An empty success
+  // here used to let the dashboard carry on with a response of the wrong shape
+  // (a blank screen when the Review dialog got `{}`), so fail like a missing
+  // route would - the dashboard's own error handling then applies.
+  console.warn(`Demo: no simulation for ${method} ${path}`);
+  return json({ error: "not simulated in the online demo" }, 404);
 };
 
 // Called once at startup by installDemo.
