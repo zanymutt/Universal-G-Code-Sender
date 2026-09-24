@@ -57,7 +57,7 @@ export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
               setSizing({ compact: preset.compact, leftWidth: preset.leftWidth, rightWidth: preset.rightWidth, layoutMode: preset.layoutMode ?? "auto" });
               applyZoom(preset.zoom); setNotice(`Applied “${preset.name}”.`);
             }}>Apply saved layout</Button>
-            <Button size="sm" variant="outline-secondary" disabled={!preset || !!matches} onClick={() => {
+            <Button size="sm" variant="outline-primary" disabled={!preset || !!matches} onClick={() => {
               if (preset && save(presets.map(p => p.name === selected ? { ...sizing, zoom, name: selected } : p)))
                 setNotice(`Updated “${selected}” with current settings.`);
             }}>Update with current</Button>

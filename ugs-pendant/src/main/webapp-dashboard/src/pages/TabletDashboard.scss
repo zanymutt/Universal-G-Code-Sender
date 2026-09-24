@@ -32,7 +32,10 @@
   // Let the inner flex item shrink too, rather than overflowing its parent.
   .topBarDisconnected {
     .topBarSection { min-width: 0; max-width: 100%; }
-    .topBarSection:first-child { flex: 1 0 100%; }
+    // Share the row when the connection controls and Layout/Panes controls
+    // fit; the narrow-phone media rule below restores a dedicated connection
+    // row where it is actually needed.
+    .topBarSection:first-child { flex: 1 1 auto; }
     .topBarSection:last-child { margin-left: auto; }
     .connectionWidget {
       flex: 1 1 0;
@@ -93,5 +96,13 @@ html[data-dashboard-layout="tabbed"] { @include tablet-tabbed; }
   html[data-dashboard-layout="auto"] { @include tablet-landscape; }
 }
 @media (max-width: 900px) {
-  html[data-dashboard-layout="auto"], html[data-dashboard-layout="tablet"] { @include tablet-tabbed; }
+  // Auto chooses the simpler tabbed shell on phones. An explicit Tablet
+  // choice remains honored so landscape phones can use the two-column tablet
+  // arrangement when the user prefers it.
+  html[data-dashboard-layout="auto"] { @include tablet-tabbed; }
+}
+@media (max-width: 600px) {
+  html[data-dashboard-layout="auto"], html[data-dashboard-layout="tabbed"] {
+    .topBarDisconnected .topBarSection:first-child { flex: 1 0 100%; }
+  }
 }
