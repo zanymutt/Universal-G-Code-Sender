@@ -1,173 +1,128 @@
 <!doctype html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Rotate G-code</title>
-  <style>
-    /* Dashboard doesn't push theme CSS variables into plugins yet, so this
-       just hardcodes the same dark palette used everywhere else in
-       Dashboard's own stylesheets - matching it by eye now, and one of the
-       first things to properly fix once/if theme-var injection gets built. */
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      background: #1c1e1f;
-      color: #e5e7eb;
-      font: 14px/1.4 system-ui, sans-serif;
-    }
-    .panel { padding: 12px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; }
-    label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: #9ca3af; }
-    input, select {
-      background: #26282a;
-      border: 1px solid #3a3d3e;
-      border-radius: 4px;
-      color: #e5e7eb;
-      padding: 6px 8px;
-      font-size: 14px;
-    }
-    .row { display: flex; gap: 8px; }
-    .row > * { flex: 1; }
-    button {
-      background: #26282a;
-      border: 1px solid #3a3d3e;
-      border-radius: 4px;
-      color: #e5e7eb;
-      padding: 7px 10px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    button:hover:not(:disabled) { border-color: #2d5a3f; color: #4ade80; }
-    button:disabled { opacity: 0.5; cursor: default; }
-    button.primary { border-color: #2d5a3f; color: #4ade80; }
-    .log {
-      flex: 1;
-      min-height: 80px;
-      background: #0c0e0f;
-      border: 1px solid #3a3d3e;
-      border-radius: 4px;
-      padding: 8px;
-      font-family: ui-monospace, monospace;
-      font-size: 14px;
-      white-space: pre-wrap;
-      overflow-y: auto;
-    }
-    .hint { color: #6b7280; font-size: 13px; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="panel">
-    <div class="row">
-      <label>
-        Angle (degrees, CCW)
-        <input id="angle" type="number" step="any" value="90" />
-      </label>
-      <label>
-        Pivot
-        <select id="pivot">
-          <option value="origin">Origin (0, 0)</option>
-          <option value="center">Toolpath center</option>
-        </select>
-      </label>
-    </div>
+  <main class="app">
+    <section class="settings" aria-label="Rotate G-code settings">
+      <nav class="tabs" role="tablist" aria-label="Settings">
+        <button type="button" role="tab" id="tab-file" aria-controls="panel-file" aria-selected="true">File</button>
+        <button type="button" role="tab" id="tab-transform" aria-controls="panel-transform" aria-selected="false">Transform</button>
+        <button type="button" role="tab" id="tab-origin" aria-controls="panel-origin" aria-selected="false">Origin</button>
+        <button type="button" role="tab" id="tab-presets" aria-controls="panel-presets" aria-selected="false">Presets</button>
+      </nav>
+      <div class="settingsBody">
+        <fieldset id="panel-file" role="tabpanel" aria-labelledby="tab-file">
+          <legend>Loaded file</legend>
+          <div id="fileInfo" class="fileInfo">Loading current file…</div>
+          <div class="row" style="margin-top:10px">
+            <button id="reload" type="button">Reload current file</button>
+            <button id="fitFile" type="button">Fit preview</button>
+          </div>
+          <p class="hint">The original file stays unchanged until you explicitly overwrite it or use Save As.</p>
+        </fieldset>
 
-    <div class="row">
-      <button id="reload">Reload current file</button>
-      <button id="rotate" class="primary" disabled>Rotate</button>
-    </div>
+        <fieldset id="panel-transform" role="tabpanel" aria-labelledby="tab-transform" hidden>
+          <legend>Rotate, scale, and flip</legend>
+          <div class="stack">
+            <label>Angle: <output id="angleValue">0°</output>
+              <input id="angleSlider" type="range" min="-180" max="180" step="1" value="0">
+            </label>
+            <div class="row" id="anglePresets" aria-label="Angle presets"></div>
+            <div class="row">
+              <label>Manual angle (°)<input id="angle" type="number" min="-180" max="180" step="1" value="0"></label>
+              <label>Uniform scale (%)<input id="scale" type="number" min="1" max="1000" step="0.1" value="100"></label>
+            </div>
+            <div class="row">
+              <label>Scale slider: <output id="scaleValue">100%</output>
+                <input id="scaleSlider" type="range" min="1" max="300" step="1" value="100">
+              </label>
+            </div>
+            <div class="checks">
+              <label class="check"><input id="flipHorizontal" type="checkbox"> Flip horizontal</label>
+              <label class="check"><input id="flipVertical" type="checkbox"> Flip vertical</label>
+            </div>
+            <label>Transform around
+              <select id="pivotMode">
+                <option value="center">Object center</option>
+                <option value="origin">Work origin (0, 0)</option>
+              </select>
+            </label>
+            <p class="hint">The preview updates while controls move. Scale preserves the toolpath aspect ratio.</p>
+          </div>
+        </fieldset>
 
-    <div class="row">
-      <button id="save" disabled>Save (overwrite)</button>
-      <button id="saveAs" disabled>Save as...</button>
-    </div>
-    <p class="hint">
-      Lines containing FluidNC expressions or variables ({...}, #, ?) are never modified.
-    </p>
+        <fieldset id="panel-origin" role="tabpanel" aria-labelledby="tab-origin" hidden>
+          <legend>Output origin</legend>
+          <div class="stack">
+            <label>Place transformed toolpath origin at
+              <select id="origin">
+                <option value="keep">Keep existing coordinates</option>
+                <option value="bottom-left">Bottom-left corner</option>
+                <option value="bottom-right">Bottom-right corner</option>
+                <option value="top-left">Top-left corner</option>
+                <option value="top-right">Top-right corner</option>
+                <option value="center">Object center</option>
+                <option value="custom">Picked point</option>
+              </select>
+            </label>
+            <div class="row">
+              <label>Picked X<input id="customX" type="number" step="0.001" value="0"></label>
+              <label>Picked Y<input id="customY" type="number" step="0.001" value="0"></label>
+            </div>
+            <button id="pickOrigin" type="button">Pick origin in preview</button>
+            <p id="originHint" class="hint">Corner and center origins translate the transformed geometry; they do not add G92.</p>
+          </div>
+        </fieldset>
 
-    <div id="log" class="log">Loading current file...</div>
-  </div>
+        <fieldset id="panel-presets" role="tabpanel" aria-labelledby="tab-presets" hidden>
+          <legend>Transform presets</legend>
+          <div class="row">
+            <input id="presetName" type="text" placeholder="Preset name" aria-label="Preset name">
+            <button id="savePreset" type="button">Save</button>
+          </div>
+          <p class="hint">Presets remember angle, scale, flips, pivot, and output origin.</p>
+          <ul id="presetList" class="presetList"></ul>
+        </fieldset>
+      </div>
+    </section>
 
+    <section class="work" aria-label="Preview and generated G-code">
+      <div class="previewCard">
+        <header class="cardHeader">
+          <h2>Live preview</h2>
+          <div class="toolbar" aria-label="Preview zoom">
+            <button id="zoomOut" type="button" aria-label="Zoom out">−</button>
+            <span id="zoomLevel">100%</span>
+            <button id="zoomIn" type="button" aria-label="Zoom in">+</button>
+            <button id="zoomFit" type="button">Fit</button>
+            <button id="pickMode" type="button">Pick origin</button>
+          </div>
+        </header>
+        <div id="summary" class="summary">Load a G-code file to begin.</div>
+        <svg id="preview" viewBox="0 0 100 100" role="img" aria-label="Transformed toolpath preview"></svg>
+        <p id="status" class="status" role="status">Nothing generated yet.</p>
+      </div>
+      <div id="divider" role="separator" tabindex="0" aria-label="Resize preview and generated G-code"></div>
+      <div class="codeCard">
+        <header class="cardHeader">
+          <h2>Generated G-code</h2>
+          <div class="toolbar">
+            <button id="copy" type="button" disabled>Copy</button>
+            <button id="save" type="button" disabled>Overwrite</button>
+            <button id="saveAs" class="primary" type="button" disabled>Save As…</button>
+          </div>
+        </header>
+        <textarea id="output" readonly spellcheck="false" aria-label="Generated G-code"></textarea>
+      </div>
+    </section>
+  </main>
   <script src="sdk.js"></script>
   <script src="rotate.js"></script>
-  <script>
-    const logEl = document.getElementById("log");
-    const angleEl = document.getElementById("angle");
-    const pivotEl = document.getElementById("pivot");
-    const rotateBtn = document.getElementById("rotate");
-    const saveBtn = document.getElementById("save");
-    const saveAsBtn = document.getElementById("saveAs");
-    const reloadBtn = document.getElementById("reload");
-
-    let originalText = null;
-    let rotatedText = null;
-
-    function log(message) {
-      logEl.textContent = message;
-    }
-
-    function loadCurrentFile() {
-      rotatedText = null;
-      saveBtn.disabled = true;
-      saveAsBtn.disabled = true;
-      rotateBtn.disabled = true;
-      log("Loading current file...");
-      window.Fluid.getGcode()
-        .then((text) => {
-          originalText = text;
-          const lineCount = text.split(/\r?\n/).length;
-          rotateBtn.disabled = false;
-          log("Loaded " + lineCount + " lines. Set an angle and press Rotate.");
-        })
-        .catch((err) => {
-          originalText = null;
-          log("Couldn't load the current file: " + err.message);
-        });
-    }
-
-    rotateBtn.addEventListener("click", () => {
-      if (originalText === null) return;
-      const angle = parseFloat(angleEl.value);
-      if (!Number.isFinite(angle)) {
-        log("Enter a valid angle.");
-        return;
-      }
-      const result = window.rotateGcode(originalText, angle, pivotEl.value);
-      rotatedText = result.text;
-      saveBtn.disabled = false;
-      saveAsBtn.disabled = false;
-      const direction = angle < 0 ? "CW" : "CCW";
-      log(
-        "Rotated " + Math.abs(angle) + "\u00b0 " + direction + " around " +
-        (pivotEl.value === "center" ? "toolpath center (" + result.pivot.x + ", " + result.pivot.y + ")" : "the origin") +
-        ".\n" + result.rotatedLineCount + " motion lines changed. Nothing else was touched.\n\n" +
-        "Press Save to overwrite the loaded file, or Save as... to write a new one."
-      );
-    });
-
-    saveBtn.addEventListener("click", () => {
-      if (rotatedText === null) return;
-      log("Saving...");
-      window.Fluid.setGcode(rotatedText)
-        .then(() => {
-          log("Saved. Dashboard has reloaded the rotated file.");
-          originalText = rotatedText;
-        })
-        .catch((err) => log("Save failed: " + err.message));
-    });
-
-    saveAsBtn.addEventListener("click", () => {
-      if (rotatedText === null) return;
-      log("Saving...");
-      window.Fluid.saveGcodeAs(rotatedText)
-        .then((result) => log("Saved as \"" + result.path + "\" and opened it."))
-        .catch((err) => log("Save cancelled: " + err.message));
-    });
-
-    reloadBtn.addEventListener("click", loadCurrentFile);
-
-    loadCurrentFile();
-  </script>
+  <script src="app.js"></script>
 </body>
 </html>

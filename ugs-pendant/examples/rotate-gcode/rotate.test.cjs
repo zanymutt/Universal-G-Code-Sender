@@ -6,6 +6,7 @@ const vm = require("node:vm");
 const sandbox = { window: {} };
 vm.runInNewContext(fs.readFileSync(path.join(__dirname, "rotate.js"), "utf8"), sandbox);
 const rotateGcode = sandbox.window.rotateGcode;
+const transformGcode = sandbox.window.transformGcode;
 
 const NUM = "(-?\\d*\\.?\\d+)";
 const word = (code, letter) => {
@@ -118,4 +119,45 @@ test("arc extents follow the arc's direction and only what it sweeps", () => {
   assert.ok(close(ccw.x, 5) && close(ccw.y, 5), JSON.stringify(ccw));
   const cw = rotateGcode("G90 G17\nG0 X10 Y0\nG2 X0 Y10 I-10 J0\n", 0, "center").pivot;
   assert.ok(close(cw.x, 0) && close(cw.y, 0), JSON.stringify(cw));
+});
+
+test("uniform scaling stays centered on the object", () => {
+  const program = "G90\nG0 X0 Y0\nG1 X10 Y0\nG1 X10 Y10\nG1 X0 Y10\n";
+  const result = transformGcode(program, { angle: 0, scale: 2, pivotMode: "center", origin: "keep" });
+  assert.deepEqual(follow(result.text).map(step => [step.x, step.y]), [
+    [-5, -5], [15, -5], [15, 15], [-5, 15],
+  ]);
+  assert.ok(close(result.outputBounds.minX, -5) && close(result.outputBounds.maxY, 15));
+});
+
+test("corner output origin translates the transformed bounds to zero", () => {
+  const result = transformGcode("G90\nG0 X10 Y20\nG1 X30 Y40\n", {
+    angle: 90, scale: 1, pivotMode: "center", origin: "bottom-left",
+  });
+  assert.ok(close(result.outputBounds.minX, 0) && close(result.outputBounds.minY, 0), JSON.stringify(result.outputBounds));
+});
+
+test("horizontal reflection changes arc direction and reflects I/J", () => {
+  const result = transformGcode("G90 G17\nG0 X10 Y0\nG2 X0 Y10 I-10 J0\n", {
+    angle: 0, scale: 1, flipHorizontal: true, pivotMode: "origin", origin: "keep",
+  });
+  assert.match(result.text, /G3/);
+  assert.match(result.text, /I10(?:\.0+)?\s+J0(?:\.0+)?/);
+});
+
+test("picked output origin is transformed along with the object", () => {
+  const result = transformGcode("G90\nG0 X0 Y0\nG1 X10 Y0\n", {
+    angle: 0, scale: 1, pivotMode: "center", origin: "custom", customOrigin: [10, 0],
+  });
+  assert.ok(close(result.outputBounds.maxX, 0), JSON.stringify(result.outputBounds));
+  assert.ok(close(follow(result.text)[1].x, 0), result.text);
+});
+
+test("rapid travel does not expand the object origin bounds", () => {
+  const result = transformGcode("G90\nG0 X-100 Y-100\nG0 X10 Y20\nG1 X30 Y40\nG0 X200 Y200\n", {
+    angle: 0, scale: 1, pivotMode: "center", origin: "bottom-left",
+  });
+  assert.ok(close(result.outputBounds.minX, 0) && close(result.outputBounds.minY, 0), JSON.stringify(result.outputBounds));
+  const steps = follow(result.text);
+  assert.deepEqual(steps.map(step => [step.x, step.y]), [[-110, -120], [0, 0], [20, 20], [190, 180]]);
 });
