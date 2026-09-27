@@ -32,14 +32,14 @@
 
 .portraitDashboardJog {
   padding-top: 10px;
-  border-top: 1px solid #2f3132;
+  border-top: 1px solid var(--dashboard-border);
 }
 
 .portraitTabBar {
   flex: 0 0 auto;
   display: flex;
-  border-top: 1px solid #2f3132;
-  background-color: #1c1e1f;
+  border-top: 1px solid var(--dashboard-border);
+  background-color: var(--dashboard-bg);
   // Clears the home-bar/gesture-nav area on a phone/tablet without a
   // physical bottom bezel (iPad included) - a no-op everywhere else.
   padding-bottom: env(safe-area-inset-bottom, 0);
@@ -56,7 +56,7 @@
   gap: 4px;
   background: none;
   border: none;
-  color: #8a8f92;
+  color: var(--dashboard-text-subtle);
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
@@ -66,6 +66,6 @@
   }
 
   &.active {
-    color: #4ade80;
+    color: var(--dashboard-accent);
   }
 }

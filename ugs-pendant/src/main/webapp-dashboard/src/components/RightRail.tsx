@@ -9,6 +9,7 @@ import OverrideControls from "./OverrideControls";
 import PluginListPanel from "./PluginListPanel";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { uiActions } from "../store/uiSlice";
+import { SHOW_PANE_CONTENT_EVENT } from "./CenterPaneLayoutDemo";
 import "./RightRail.scss";
 
 const RightRail = () => {
@@ -35,7 +36,13 @@ const RightRail = () => {
             variant="outline-secondary"
             className="rightRailEditButton"
             title="Edit macros"
-            onClick={() => dispatch(uiActions.setCenterView("macros"))}
+            onClick={() => {
+              // setCenterView still drives the old CenterPanel (only reachable
+              // via ?legacyLayout=1 - see CenterPanel.tsx); the window event
+              // is what the current pane-layout system actually listens for.
+              dispatch(uiActions.setCenterView("macros"));
+              window.dispatchEvent(new CustomEvent(SHOW_PANE_CONTENT_EVENT, { detail: { content: "macros" } }));
+            }}
           >
             <FontAwesomeIcon icon={faPen} />
           </Button>

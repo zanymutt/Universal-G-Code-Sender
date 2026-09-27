@@ -33,12 +33,12 @@
   }
 
   .gcodeEditorLocked {
-    color: #f0ad4e;
+    color: var(--dashboard-warning);
     font-size: 0.8rem;
   }
 
   .gcodeEditorError {
-    color: #ff6b6b;
+    color: var(--dashboard-danger-text);
     font-size: 0.8rem;
   }
 
@@ -74,10 +74,10 @@
   // second, competing override here of equal specificity.
   .gcodeEditorRunFrom,
   .gcodeEditorSave.btn-outline-secondary {
-    --bs-btn-color: #c3c8cb;
-    --bs-btn-border-color: #6b7075;
-    --bs-btn-disabled-color: #6b7075;
-    --bs-btn-disabled-border-color: #3a3d3e;
+    --bs-btn-color: var(--dashboard-text-muted);
+    --bs-btn-border-color: var(--dashboard-text-disabled);
+    --bs-btn-disabled-color: var(--dashboard-text-disabled);
+    --bs-btn-disabled-border-color: var(--dashboard-border-strong);
   }
 
   // Mirrors .jobRunFromReset in JobBar.scss - same reset, same styling,
@@ -85,7 +85,7 @@
   .gcodeEditorRunFromReset {
     border: none;
     background: none;
-    color: #f0ad4e;
+    color: var(--dashboard-warning);
     font-size: 0.85rem;
     text-decoration: underline;
     cursor: pointer;
@@ -107,11 +107,11 @@
     .gcodeEditorFontSizeSlider {
       display: none;
       width: 88px;
-      accent-color: #4ade80;
+      accent-color: var(--dashboard-accent);
     }
 
     .gcodeEditorFontSizeValue {
-      color: #9aa0a4;
+      color: var(--dashboard-text-subtle);
       font-size: 0.8rem;
       min-width: 3.2em;
       text-align: center;
@@ -155,10 +155,10 @@
   width: min(900px, calc(100vw - 48px));
   max-height: calc(100vh - 48px);
   overflow: hidden;
-  border: 1px solid #3a3d3e;
+  border: 1px solid var(--dashboard-border-strong);
   border-radius: 10px;
-  background: #1b1d1e;
-  color: #e8eaeb;
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
@@ -168,7 +168,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 22px;
-  border-bottom: 1px solid #343738;
+  border-bottom: 1px solid var(--dashboard-border);
   cursor: move;
   user-select: none;
 
@@ -181,13 +181,13 @@
 .gcodeReviewClose {
   border: 0;
   background: transparent;
-  color: #aeb4b8;
+  color: var(--dashboard-text-muted);
   font-size: 2rem;
   line-height: 1;
   cursor: pointer;
 
   &:hover {
-    color: #fff;
+    color: var(--dashboard-text);
   }
 }
 
@@ -202,7 +202,7 @@
   flex: 0 0 auto;
   justify-content: flex-end;
   padding: 14px 22px;
-  border-top: 1px solid #343738;
+  border-top: 1px solid var(--dashboard-border);
 }
 
 .gcodeReviewStatus,
@@ -212,15 +212,15 @@
 }
 
 .gcodeReviewSuccess {
-  color: #76e3a1;
+  color: var(--dashboard-accent);
 }
 
 .gcodeReviewError {
-  color: #ff6b6b;
+  color: var(--dashboard-danger-text);
 }
 
 .gcodeReviewSummary {
-  color: #c3c8cb;
+  color: var(--dashboard-text-muted);
   margin-bottom: 8px;
 }
 
@@ -236,26 +236,26 @@
   gap: 2px 10px;
   text-align: left;
   padding: 8px 10px;
-  border: 1px solid #3a3d3e;
+  border: 1px solid var(--dashboard-border-strong);
   border-radius: 4px;
-  background: #191b1c;
-  color: #e8eaeb;
+  background: var(--dashboard-surface);
+  color: var(--dashboard-text);
   cursor: pointer;
 
   &:hover {
-    background: #242728;
+    background: var(--dashboard-surface-raised);
   }
 
   &.error {
-    border-left: 3px solid #ff6b6b;
+    border-left: 3px solid var(--dashboard-danger-text);
   }
 
   &.warning {
-    border-left: 3px solid #f0ad4e;
+    border-left: 3px solid var(--dashboard-warning);
   }
 
   .gcodeReviewFindingLine {
-    color: #aeb4b8;
+    color: var(--dashboard-text-muted);
     font-size: 0.85rem;
   }
 
@@ -265,7 +265,7 @@
 
   code {
     grid-column: 1 / -1;
-    color: #8f989d;
+    color: var(--dashboard-text-subtle);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
@@ -275,7 +275,7 @@
   flex: 1 1 auto;
   min-height: 0;
   position: relative;
-  border: 1px solid #2f3132;
+  border: 1px solid var(--dashboard-border);
   border-radius: 6px;
   overflow: hidden;
 }
@@ -310,12 +310,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
-  background: #111213;
+  color: var(--dashboard-text-disabled);
+  background: var(--dashboard-surface);
   z-index: 1;
 }
 
 .gcodeEditorEmpty {
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   padding: 16px;
 }

@@ -3,7 +3,7 @@
   height: 100%;
   min-height: 0;
   min-width: 0;
-  background: #343a3f;
+  background: var(--dashboard-border);
   overflow: hidden;
 }
 
@@ -13,7 +13,7 @@
   flex-direction: column;
   min-height: 0;
   min-width: 0;
-  background: #101213;
+  background: var(--dashboard-surface);
   overflow: hidden;
 }
 
@@ -25,8 +25,8 @@
   min-width: 0;
   min-height: 30px;
   padding: 2px;
-  background: #1b1f21;
-  border-bottom: 1px solid #30363a;
+  background: var(--dashboard-bg);
+  border-bottom: 1px solid var(--dashboard-border);
 }
 
 .centerPaneLayoutTabsMeasure {
@@ -57,16 +57,16 @@
     border: 0;
     border-radius: 4px;
     background: transparent;
-    color: #3690ff;
+    color: var(--dashboard-select-text);
     font: inherit;
 
     &:hover,
-    &:focus-visible { background: #17283c; }
+    &:focus-visible { background: var(--dashboard-select-bg); }
 
     &.active {
-      background: #193b66;
-      color: #73b3ff;
-      box-shadow: inset 0 0 0 1px #315c90;
+      background: var(--dashboard-select-bg);
+      color: var(--dashboard-select-text);
+      box-shadow: inset 0 0 0 1px var(--dashboard-select-border);
     }
   }
 }
@@ -77,15 +77,15 @@
   max-width: calc(100% - 66px);
   min-height: 26px;
   padding: 2px 26px 2px 10px;
-  border: 1px solid #315c90;
+  border: 1px solid var(--dashboard-select-border);
   border-radius: 4px;
-  background-color: #193b66;
-  color: #73b3ff;
+  background-color: var(--dashboard-select-bg);
+  color: var(--dashboard-select-text);
   font: inherit;
   cursor: pointer;
 
   &:hover,
-  &:focus-visible { border-color: #4f9fff; }
+  &:focus-visible { border-color: var(--dashboard-select-text); }
 }
 
 .centerPaneLayoutSplitControls {
@@ -107,19 +107,19 @@
   border: 0;
   border-radius: 4px;
   background: transparent;
-  color: #4f9fff;
+  color: var(--dashboard-select-text);
 
   &:hover:not(:disabled),
-  &:focus-visible { background: #17283c; }
+  &:focus-visible { background: var(--dashboard-select-bg); }
 
   &.active {
-    background: #193b66;
-    color: #8ac3ff;
-    box-shadow: inset 0 0 0 1px #315c90;
+    background: var(--dashboard-select-bg);
+    color: var(--dashboard-select-text);
+    box-shadow: inset 0 0 0 1px var(--dashboard-select-border);
   }
 
   &:disabled {
-    color: #555f67;
+    color: var(--dashboard-text-disabled);
     opacity: .48;
     cursor: default;
   }
@@ -195,9 +195,9 @@
     left: 50%;
     top: 50%;
     border-radius: 3px;
-    background: #4ade80;
+    background: var(--dashboard-accent);
     transform: translate(-50%, -50%);
-    box-shadow: 0 0 0 1px #18251e;
+    box-shadow: 0 0 0 1px var(--dashboard-bg);
   }
 
   &.vertical {

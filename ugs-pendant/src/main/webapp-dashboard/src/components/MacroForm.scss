@@ -96,9 +96,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #d1d5db;
+  border: 2px solid var(--dashboard-text-muted);
   border-radius: 6px;
   background: #fff;
+  // The swatch background is fixed white regardless of theme (same as the
+  // color swatches above), so the icon glyph (an SVG painted via
+  // fill: currentColor) needs a fixed dark color too, not the app's own
+  // --dashboard-text - that's near-white in dark theme, which disappears
+  // against this always-white background. The selected swatch overrides
+  // this via its own inline `color` (the macro's chosen color) instead.
+  color: #23272b;
   cursor: pointer;
 
   &.selected {
@@ -118,7 +125,7 @@
 .macroFormClear {
   border: none;
   background: none;
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.85rem;
   cursor: pointer;
   text-decoration: underline;

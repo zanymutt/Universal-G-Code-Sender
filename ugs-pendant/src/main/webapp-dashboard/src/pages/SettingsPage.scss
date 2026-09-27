@@ -1,0 +1,208 @@
+.settingsPage {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: clamp(24px, 5vw, 64px);
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
+}
+
+.settingsPageHeader {
+  max-width: 920px;
+  margin: 0 auto 28px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+
+  h1 { margin: 0; font-size: clamp(1.75rem, 3vw, 2.5rem); }
+}
+
+.settingsPageEyebrow {
+  margin: 0 0 6px;
+  color: var(--dashboard-accent);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.settingsPageIntro {
+  margin: 8px 0 0;
+  color: var(--dashboard-text-muted);
+}
+
+.settingsCard {
+  max-width: 920px;
+  margin: 0 auto 16px;
+  padding: 24px;
+  background: var(--dashboard-surface);
+  border: 1px solid var(--dashboard-border);
+  border-radius: 10px;
+  box-shadow: var(--dashboard-shadow);
+
+  h2 { margin: 0; font-size: 1.05rem; }
+  p { color: var(--dashboard-text-muted); }
+}
+
+.settingsCardHeading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 24px;
+
+  p { margin: 5px 0 0; }
+}
+
+.settingsCardIcon {
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: var(--dashboard-accent-soft);
+  color: var(--dashboard-accent);
+}
+
+.settingsField {
+  max-width: 420px;
+}
+
+.settingsFieldLabel {
+  display: block;
+  color: var(--dashboard-text);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+.settingsFieldHint {
+  margin: 10px 0 0;
+  color: var(--dashboard-text-muted);
+  font-size: 0.85rem;
+}
+
+.themeSwatchRow {
+  display: flex;
+  gap: 12px;
+}
+
+.themeSwatch {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 2px solid var(--dashboard-border);
+  border-radius: 10px;
+  background: var(--dashboard-surface-subtle);
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+
+  &[aria-pressed="true"] {
+    border-color: var(--dashboard-accent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 2px;
+  }
+}
+
+.themeSwatchPreview {
+  display: block;
+  height: 56px;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+}
+
+// Each swatch previews its OWN theme's colors regardless of which theme is
+// currently active, so picking "Light" from a dark dashboard still shows
+// what light mode actually looks like (and vice versa) - these are
+// deliberately literal colors, not the live --dashboard-* tokens.
+.themeSwatch[data-theme-preview="dark"] .themeSwatchPreview {
+  background: #111213;
+  border: 1px solid #3a3d3e;
+
+  .themeSwatchPreviewBar { background: #2a2c2d; }
+  .themeSwatchPreviewAccent { background: #4ade80; }
+}
+
+.themeSwatch[data-theme-preview="light"] .themeSwatchPreview {
+  background: #ffffff;
+  border: 1px solid #c7ced6;
+
+  .themeSwatchPreviewBar { background: #eef1f4; }
+  .themeSwatchPreviewAccent { background: #0f8a4c; }
+}
+
+.accentSwatchRow {
+  display: flex;
+  gap: 10px;
+}
+
+.accentSwatch {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 50%;
+
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 2px;
+  }
+}
+
+.accentSwatchDot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid var(--dashboard-border);
+  color: #fff;
+  font-size: 0.85rem;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.accentSwatch[aria-pressed="true"] .accentSwatchDot {
+  border-color: var(--dashboard-text);
+  transform: scale(1.08);
+}
+
+.themeSwatchPreviewBar {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 16px;
+}
+
+.themeSwatchPreviewAccent {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+}
+
+.themeSwatchLabel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: var(--dashboard-text);
+  font-weight: 600;
+  font-size: 0.9rem;
+
+  svg { color: var(--dashboard-accent); font-size: 0.8rem; }
+}
+
+.settingsCardFuture { margin-bottom: 0; }
+
+@media (max-width: 620px) {
+  .settingsPageHeader { flex-direction: column; }
+  .settingsPageHeader .btn { align-self: flex-start; }
+}

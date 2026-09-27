@@ -16,9 +16,11 @@ import DemoBanner from "../demo/DemoBanner";
 import { isDemo } from "../demo/isDemo";
 import "./Dashboard.scss";
 import "./TabletDashboard.scss";
+import SettingsPage from "./SettingsPage";
 
 const Dashboard = () => {
   const status = useAppSelector((state) => state.status);
+  const activePage = useAppSelector((state) => state.ui.activePage);
   // Keep the panels mounted across responsive layout changes.
   const [panel, setPanel] = useState("program");
   const [consoleOpen, setConsoleOpen] = useState(false);
@@ -46,6 +48,15 @@ const Dashboard = () => {
       <div className="dashboard" data-panel={panel} data-console-open={consoleOpen}>
         {isDemo && <DemoBanner />}
         <TopBar />
+        {activePage === "settings" && <SettingsPage />}
+        {/* display:contents when visible - this wrapper takes no part in the
+            flex layout below it, so it doesn't need any of its own sizing
+            rules to pass sibling layout through untouched. Kept mounted
+            (not conditionally rendered) so switching to Settings and back
+            doesn't unmount CenterPanel/RightRail - that would reset their
+            own local state (the pane layout, its splits/sizes, which pane
+            is maximized) back to defaults every time. */}
+        <div className="dashboardMain" style={{ display: activePage === "settings" ? "none" : "contents" }}>
         <div className="tabletReadout" aria-label="Current work position">
           {(["x", "y", "z"] as const).map(axis => <span key={axis}>{axis.toUpperCase()} <strong>{Number(status.workCoord?.[axis] ?? 0).toFixed(3)}</strong></span>)}
           <span>{status.workCoord?.units === "INCH" ? "in" : "mm"}</span>
@@ -80,6 +91,7 @@ const Dashboard = () => {
         <JobBar />
 
         {status.state === "ALARM" && <AlarmModal />}
+        </div>
       </div>
     </PluginManagerProvider>
   );

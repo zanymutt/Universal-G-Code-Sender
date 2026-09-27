@@ -356,7 +356,7 @@ const OpenFileModal = ({ handleClose, onPick }: Props) => {
       </Modal.Header>
 
       {error && (
-        <div style={{ color: "#ff6b6b", padding: "8px 16px 0" }}>{error}</div>
+        <div style={{ color: "var(--dashboard-danger-text)", padding: "8px 16px 0" }}>{error}</div>
       )}
 
       {hasAnyFiles && (

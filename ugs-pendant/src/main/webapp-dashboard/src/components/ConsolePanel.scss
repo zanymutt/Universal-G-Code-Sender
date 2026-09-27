@@ -13,8 +13,8 @@
   min-width: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  background: #111;
-  color: #ddd;
+  background: var(--dashboard-surface);
+  color: var(--dashboard-text);
   border-radius: 6px;
   padding: 12px;
   font-family: monospace;
@@ -25,14 +25,14 @@
   // Same slim scrollbar treatment as .rightRail/.dashboardLeft, for a
   // consistent look everywhere a panel can scroll.
   scrollbar-width: thin;
-  scrollbar-color: #3a3d3e transparent;
+  scrollbar-color: var(--dashboard-border-strong) transparent;
 
   &::-webkit-scrollbar {
     width: 8px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #3a3d3e;
+    background-color: var(--dashboard-border-strong);
     border-radius: 4px;
   }
 
@@ -66,7 +66,7 @@
   white-space: nowrap;
 
   .form-check-label {
-    color: #c3c8cb;
+    color: var(--dashboard-text-muted);
     font-size: 0.85rem;
   }
 }
@@ -80,8 +80,8 @@
 // Scoped to this one toggle for now rather than every .form-check-input,
 // since there's no theme system yet to route this through consistently.
 #verbose-toggle:checked {
-  background-color: #4ade80;
-  border-color: #4ade80;
+  background-color: var(--dashboard-accent);
+  border-color: var(--dashboard-accent);
 }
 
 .consoleFontSize {
@@ -99,11 +99,11 @@
   .consoleFontSizeSlider {
     display: none;
     width: 88px;
-    accent-color: #4ade80;
+    accent-color: var(--dashboard-accent);
   }
 
   .consoleFontSizeValue {
-    color: #9aa0a4;
+    color: var(--dashboard-text-subtle);
     font-size: 0.8rem;
     min-width: 3.2em;
     text-align: center;

@@ -1,4 +1,5 @@
 @import './bootstrap';
+@import './theme';
 
 html, body, #root {
     height: 100%;
@@ -12,8 +13,8 @@ html, body, #root {
 }
 
 body {
-    background-color: #1c1e1f;
-    color: #f2f2f2;
+    background-color: var(--dashboard-bg);
+    color: var(--dashboard-text);
 }
 
 .app {

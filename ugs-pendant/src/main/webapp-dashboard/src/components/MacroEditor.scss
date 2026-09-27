@@ -25,7 +25,7 @@
   // .macroEditorRow's min-width: 0), but this guarantees nothing it
   // contains can ever visually bleed into the form pane next to it.
   overflow-x: hidden;
-  border-right: 1px solid #2f3132;
+  border-right: 1px solid var(--dashboard-border);
   padding: 10px;
   gap: 8px;
 
@@ -51,7 +51,7 @@
 }
 
 .macroEditorEmpty {
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.85rem;
 }
 
@@ -84,12 +84,12 @@
   position: relative;
 
   &:hover {
-    background-color: #1c1d1e;
+    background-color: var(--dashboard-bg);
   }
 
   &.selected {
-    background-color: #1c1d1e;
-    border-color: #4ade80;
+    background-color: var(--dashboard-bg);
+    border-color: var(--dashboard-accent);
   }
 }
 
@@ -102,7 +102,7 @@
   align-items: center;
   justify-content: center;
   font-size: 0.75rem;
-  border: 1px solid #3a3d3e;
+  border: 1px solid var(--dashboard-border-strong);
 }
 
 .macroEditorRowName {
@@ -178,7 +178,7 @@
   align-items: center;
   gap: 4px;
   padding-left: 20px;
-  background: linear-gradient(to right, transparent, #1c1d1e 12px);
+  background: linear-gradient(to right, transparent, var(--dashboard-bg) 12px);
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.1s ease-out;
@@ -186,12 +186,12 @@
   button {
     border: none;
     background: none;
-    color: #9aa0a4;
+    color: var(--dashboard-text-subtle);
     padding: 2px 4px;
     cursor: pointer;
 
     &:hover:not(:disabled) {
-      color: #e5e7eb;
+      color: var(--dashboard-text);
     }
 
     &:disabled {
@@ -201,7 +201,7 @@
   }
 
   .macroEditorRowDelete:hover:not(:disabled) {
-    color: #f87171;
+    color: var(--dashboard-danger-text);
   }
 }
 
@@ -235,7 +235,7 @@
 }
 
 .macroEditorNoSelection {
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.9rem;
   padding-top: 20px;
   text-align: center;
@@ -245,7 +245,7 @@
   position: absolute;
   top: 8px;
   right: 12px;
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.8rem;
 }
 
@@ -257,8 +257,8 @@
   gap: 8px;
   min-width: 0;
   padding: 8px 10px;
-  border-top: 1px solid #3a3d3e;
-  background: #151819;
+  border-top: 1px solid var(--dashboard-border-strong);
+  background: var(--dashboard-bg);
 
   button {
     white-space: nowrap;

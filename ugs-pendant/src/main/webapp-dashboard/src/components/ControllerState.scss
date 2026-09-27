@@ -33,7 +33,7 @@
   }
 
   .alarm {
-    background-color: #dc3545;
+    background-color: var(--dashboard-danger);
     color: white;
     animation: blinker 1s linear infinite;
   }

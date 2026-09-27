@@ -15,8 +15,8 @@
   min-height: 160px;
   padding: 6px;
   border-radius: 12px;
-  background: rgba(17, 18, 19, 0.72);
-  border: 1px solid #2f3132;
+  background: var(--dashboard-hud-bg);
+  border: 1px solid var(--dashboard-hud-border);
   // The canvas underneath owns pan/rotate/pinch; this must never scroll the
   // page or start one of those gestures itself.
   touch-action: none;
@@ -63,12 +63,12 @@
 .visualizerZoomRail {
   top: 0;
   bottom: 0;
-  background: #3a3d3f;
+  background: var(--dashboard-hud-border);
 }
 
 .visualizerZoomFill {
   bottom: 0;
-  background: #7bdcff;
+  background: var(--dashboard-hud-info);
 }
 
 // bottom is set inline as the zoom fraction; translating by half its own
@@ -82,6 +82,6 @@
   transform: translateY(50%);
   border-radius: 50%;
   background: #e6edf1;
-  border: 2px solid #7bdcff;
+  border: 2px solid var(--dashboard-hud-info);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }

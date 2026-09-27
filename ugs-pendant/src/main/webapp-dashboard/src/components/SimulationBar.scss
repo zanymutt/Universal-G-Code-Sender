@@ -12,8 +12,8 @@
   gap: 8px;
   padding: 8px 10px;
   border-radius: 12px;
-  background: rgba(17, 18, 19, 0.82);
-  border: 1px solid #2f3132;
+  background: var(--dashboard-hud-bg);
+  border: 1px solid var(--dashboard-hud-border);
   // Keeps a drag on the scrubber from scrolling the page.
   touch-action: none;
   user-select: none;
@@ -207,13 +207,13 @@
 }
 
 .simulationLine {
-  color: #c3c8cb;
+  color: var(--dashboard-hud-text);
   font-size: 0.9rem;
   font-weight: 600;
 }
 
 .simulationClock {
-  color: #8a8f92;
+  color: var(--dashboard-hud-text-subtle);
   font-size: 0.8rem;
   font-variant-numeric: tabular-nums;
 }
@@ -233,7 +233,7 @@
   &::-webkit-slider-runnable-track {
     height: 4px;
     border-radius: 2px;
-    background: #3a3d3f;
+    background: var(--dashboard-hud-border);
   }
   &::-webkit-slider-thumb {
     -webkit-appearance: none;
@@ -242,18 +242,18 @@
     margin-top: -11px; // centers the thumb on the 4px track
     border-radius: 50%;
     background: #e6edf1;
-    border: 2px solid #7bdcff;
+    border: 2px solid var(--dashboard-hud-info);
   }
   &::-moz-range-track {
     height: 4px;
     border-radius: 2px;
-    background: #3a3d3f;
+    background: var(--dashboard-hud-border);
   }
   &::-moz-range-thumb {
     width: 22px;
     height: 22px;
     border-radius: 50%;
     background: #e6edf1;
-    border: 2px solid #7bdcff;
+    border: 2px solid var(--dashboard-hud-info);
   }
 }

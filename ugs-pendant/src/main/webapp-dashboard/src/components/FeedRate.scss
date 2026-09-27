@@ -5,7 +5,7 @@
 
   .feedRateHeading {
     font-size: 0.8rem;
-    color: #8a8f92;
+    color: var(--dashboard-text-subtle);
   }
 
   .feedRateRow {
@@ -39,9 +39,9 @@
   // directly to React state rather than a `:checked` sibling selector, which
   // can collide with Bootstrap's own default checked-button styling.
   .feedRateActive {
-    background-color: #4ade80 !important;
-    border-color: #4ade80 !important;
-    color: #111213 !important;
+    background-color: var(--dashboard-accent) !important;
+    border-color: var(--dashboard-accent) !important;
+    color: var(--dashboard-surface) !important;
   }
 
   .feedRateCurrent {
@@ -52,10 +52,10 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #2f3132;
+    border: 1px solid var(--dashboard-border);
     border-radius: 6px;
-    background-color: #111213;
-    color: #4ade80;
+    background-color: var(--dashboard-surface);
+    color: var(--dashboard-accent);
     font-weight: 700;
   }
 }

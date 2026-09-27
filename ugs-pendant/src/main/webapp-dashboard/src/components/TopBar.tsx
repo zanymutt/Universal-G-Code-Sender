@@ -6,12 +6,15 @@ import {
   faMagnifyingGlassPlus,
   faPlugCircleXmark,
   faRefresh,
+  faGear,
 } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useFullscreen } from "../hooks/useFullscreen";
 import { useZoomLevel } from "../hooks/useZoomLevel";
 import { disconnect, softReset } from "../services/machine";
+import { useAppDispatch } from "../hooks/useAppDispatch";
+import { uiActions } from "../store/uiSlice";
 import AccessoryState from "./AccessoryState";
 import ConnectionWidget from "./ConnectionWidget";
 import ConnectionHealth from "./ConnectionHealth";
@@ -21,6 +24,8 @@ import "./TopBar.scss";
 
 const TopBar = () => {
   const status = useAppSelector((state) => state.status);
+  const activePage = useAppSelector((state) => state.ui.activePage);
+  const dispatch = useAppDispatch();
   const isDisconnected = status.state === "DISCONNECTED";
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const { zoom, zoomIn, zoomOut, resetZoom, applyZoom, canZoomIn, canZoomOut } = useZoomLevel();
@@ -44,6 +49,13 @@ const TopBar = () => {
         <span className="topBarZoomLevel">{zoom}%</span>
         <Button variant="secondary" disabled={!canZoomIn} onClick={zoomIn} title="Zoom in">
           <FontAwesomeIcon icon={faMagnifyingGlassPlus} />
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={() => dispatch(uiActions.setActivePage(activePage === "settings" ? "dashboard" : "settings"))}
+          title={activePage === "settings" ? "Back to dashboard" : "Settings"}
+        >
+          <FontAwesomeIcon icon={faGear} />
         </Button>
         <Button
           variant="secondary"

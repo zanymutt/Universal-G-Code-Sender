@@ -5,7 +5,7 @@
   flex-shrink: 0;
 
   &.live {
-    background-color: #4ade80;
+    background-color: var(--dashboard-accent);
   }
 
   &.stale {
@@ -13,6 +13,6 @@
   }
 
   &.lost {
-    background-color: #dc3545;
+    background-color: var(--dashboard-danger);
   }
 }

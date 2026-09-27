@@ -8,9 +8,9 @@
   // selector, which turned out to collide with Bootstrap's own default checked-
   // button styling in a way that highlighted the wrong button.
   .spindleCoolantActive {
-    background-color: #4ade80 !important;
-    border-color: #4ade80 !important;
-    color: #111213 !important;
+    background-color: var(--dashboard-accent) !important;
+    border-color: var(--dashboard-accent) !important;
+    color: var(--dashboard-surface) !important;
   }
 }
 
@@ -21,7 +21,7 @@
   gap: 10px;
 
   .spindleCoolantLabel {
-    color: #c3c8cb;
+    color: var(--dashboard-text-muted);
     font-size: 1rem;
     font-weight: 700;
     min-width: 70px;

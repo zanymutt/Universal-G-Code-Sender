@@ -3,8 +3,8 @@
   align-items: center;
   gap: 20px;
   padding: 10px 16px;
-  background-color: #2a2c2d;
-  border-top: 1px solid #3a3d3e;
+  background-color: var(--dashboard-surface-raised);
+  border-top: 1px solid var(--dashboard-border-strong);
 
   .jobFile {
     font-weight: 600;
@@ -26,18 +26,18 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px 20px;
-      color: #c3c8cb;
+      color: var(--dashboard-text-muted);
       font-size: 1rem;
 
       .jobSendStatusLabel {
-        color: #ffffff;
+        color: var(--dashboard-text);
         font-weight: 700;
       }
 
       // Stands out from the rest of jobSendStatus's routine info - this one
       // means the next Start press won't run the whole file, worth noticing.
       .jobRunFromArmed {
-        color: #f0ad4e;
+        color: var(--dashboard-warning);
         font-weight: 600;
         display: flex;
         align-items: center;
@@ -47,7 +47,7 @@
       .jobRunFromReset {
         border: none;
         background: none;
-        color: #f0ad4e;
+        color: var(--dashboard-warning);
         font-weight: 400;
         text-decoration: underline;
         cursor: pointer;

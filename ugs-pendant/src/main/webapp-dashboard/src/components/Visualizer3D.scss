@@ -11,7 +11,7 @@
   gap: 12px;
   padding: 8px;
   flex: 0 0 auto;
-  border-bottom: 1px solid #2f3132;
+  border-bottom: 1px solid var(--dashboard-border);
   flex-wrap: wrap;
   // Same idea as GcodeEditor's toolbar: this pane can be full width or half of
   // a split, so the labels-to-icons switch below keys off the toolbar's own
@@ -88,9 +88,9 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 8px;
-  background: rgba(17, 18, 19, 0.72);
-  border: 1px solid #2f3132;
-  color: #c3c8cb;
+  background: var(--dashboard-hud-bg);
+  border: 1px solid var(--dashboard-hud-border);
+  color: var(--dashboard-hud-text);
   font-size: 0.75rem;
   white-space: nowrap;
   pointer-events: none;
@@ -124,7 +124,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  // Overlays the WebGL canvas, which paints its own fixed dark background
+  // (see theme.scss's --dashboard-hud-* comment) even with nothing loaded -
+  // needs the same fixed light-on-dark color, not the App-following token.
+  color: var(--dashboard-hud-text-disabled);
   z-index: 1;
   pointer-events: none;
 }

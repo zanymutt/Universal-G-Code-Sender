@@ -41,14 +41,14 @@
   // couple px of a jog button is a smaller cost than that mismatch, and
   // frees up a little extra width for this column's own content.
   scrollbar-width: thin;
-  scrollbar-color: #3a3d3e transparent;
+  scrollbar-color: var(--dashboard-border-strong) transparent;
 
   &::-webkit-scrollbar {
     width: 8px;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #3a3d3e;
+    background-color: var(--dashboard-border-strong);
     border-radius: 4px;
   }
 
@@ -59,11 +59,11 @@
 
 .dashboardLeftJog {
   padding-top: 10px;
-  border-top: 1px solid #2f3132;
+  border-top: 1px solid var(--dashboard-border);
 }
 
 .dashboardSectionHeading {
-  color: #8a8f92;
+  color: var(--dashboard-text-subtle);
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.05em;

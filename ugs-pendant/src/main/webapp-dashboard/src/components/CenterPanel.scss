@@ -59,9 +59,9 @@
       color: #3690ff;
 
       &.active {
-        background-color: #193b66;
-        color: #73b3ff;
-        box-shadow: inset 0 0 0 1px #315c90;
+        background-color: var(--dashboard-select-bg);
+        color: var(--dashboard-select-text);
+        box-shadow: inset 0 0 0 1px var(--dashboard-select-border);
       }
     }
   }
@@ -102,20 +102,20 @@
       height: 48px;
       width: 4px;
       border-radius: 2px;
-      background-color: #3a3d3e;
+      background-color: var(--dashboard-border-strong);
     }
 
     &:hover::after,
     &:active::after {
-      background-color: #4ade80;
+      background-color: var(--dashboard-accent);
     }
   }
 
   .centerPanelContent {
     flex: 1 1 auto;
     min-height: 0;
-    background-color: #111213;
-    border: 1px solid #2f3132;
+    background-color: var(--dashboard-surface);
+    border: 1px solid var(--dashboard-border);
     border-radius: 6px;
     overflow: hidden;
   }
@@ -196,12 +196,12 @@
       width: 48px;
       height: 4px;
       border-radius: 2px;
-      background-color: #687078;
+      background-color: var(--dashboard-text-disabled);
     }
 
     &:hover::after,
     &:active::after {
-      background-color: #4ade80;
+      background-color: var(--dashboard-accent);
     }
   }
 
@@ -233,7 +233,7 @@
   }
 
   .centerPanelHeading {
-    color: #8a8f92;
+    color: var(--dashboard-text-subtle);
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.05em;

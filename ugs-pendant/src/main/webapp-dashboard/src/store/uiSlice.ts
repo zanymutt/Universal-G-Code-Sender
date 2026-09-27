@@ -16,8 +16,10 @@ export type PaneContent = "visualize" | "edit" | "macros" | "probe";
 // system this is a fixed, three-way choice rather than a general content
 // picker, since Console only ever pairs with the gcode editor here.
 export type BottomView = "console" | "edit" | "split";
+export type DashboardPage = "dashboard" | "settings";
 
 type UiState = {
+  activePage: DashboardPage;
   centerView: CenterView;
   splitLeft: PaneContent;
   splitRight: PaneContent;
@@ -58,6 +60,7 @@ type UiState = {
 };
 
 const initialState: UiState = {
+  activePage: "dashboard",
   centerView: "visualize",
   splitLeft: "visualize",
   splitRight: "edit",
@@ -73,6 +76,9 @@ const uiSlice = createSlice({
   name: "ui",
   initialState,
   reducers: {
+    setActivePage: (state, action: { payload: DashboardPage }) => {
+      state.activePage = action.payload;
+    },
     setCenterView: (state, action: { payload: CenterView }) => {
       state.centerView = action.payload;
     },

@@ -111,9 +111,31 @@ const status = await Fluid.getStatus();
 console.log(`Machine is ${status.state} at X${status.wpos.x} Y${status.wpos.y}`);
 ```
 
+### `getTheme()`
+
+Returns the dashboard's current color theme and accent color, so a plugin can match its own look instead of assuming a fixed dark (or light) palette.
+
+```js
+const theme = await Fluid.getTheme();
+// theme.mode          -> "dark" | "light"
+// theme.colors.background     -> string, the dashboard's own page background
+// theme.colors.surface        -> string, a recessed/sunken panel background
+// theme.colors.surfaceRaised  -> string, a card/toolbar background
+// theme.colors.border         -> string, a subtle divider (pairs well against "surface")
+// theme.colors.borderStrong   -> string, a more visible border for buttons/inputs, or
+//                                 dividers against "surfaceRaised" (which "border" is too
+//                                 close in tone to - see the rotate-gcode example's CSS)
+// theme.colors.text           -> string, primary text color
+// theme.colors.textMuted      -> string, secondary text color
+// theme.colors.accent         -> string, the person's chosen accent color (adjusted for the current mode)
+document.documentElement.style.setProperty("--my-bg", theme.colors.background);
+```
+
+Subscribe to `"theme"` (see `on(event, callback)` below) to keep a plugin window in sync if the person changes the theme or accent color while it's open. See the rotate-gcode example's `sdk.js`/`app.js` for a plugin that uses this to drive its own CSS custom properties.
+
 ### `on(event, callback)` / `off(event, callback)`
 
-Subscribe to live events. Two event names exist: `"status"` (a status snapshot, same shape as `getStatus()`, pushed whenever it changes) and `"line"` (raw text the controller sends back over serial - `ok`, `error:9`, alarm text, everything, unfiltered).
+Subscribe to live events. Event names: `"status"` (a status snapshot, same shape as `getStatus()`, pushed whenever it changes), `"line"` (raw text the controller sends back over serial - `ok`, `error:9`, alarm text, everything, unfiltered), and `"theme"` (same shape as `getTheme()`'s return value, pushed whenever the person changes the dashboard's theme or accent color).
 
 ```js
 function onStatus(status) {

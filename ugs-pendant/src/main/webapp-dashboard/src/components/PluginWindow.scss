@@ -14,8 +14,8 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: #1c1e1f;
-  border: 1px solid #3a3d3e;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border-strong);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: 40;
   // The explicit grip below works on both desktop browsers and iPad Home
@@ -63,8 +63,8 @@
   height: 36px;
   flex-shrink: 0;
   padding: 0 8px 0 12px;
-  background: #26282a;
-  border-bottom: 1px solid #3a3d3e;
+  background: var(--dashboard-surface-sunken);
+  border-bottom: 1px solid var(--dashboard-border-strong);
   cursor: move;
   // Dragging the header shouldn't also select its own text.
   user-select: none;
@@ -85,7 +85,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 0.85rem;
-  color: #e5e7eb;
+  color: var(--dashboard-text);
 }
 
 .pluginWindowMinimize,
@@ -99,13 +99,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
+  color: var(--dashboard-text-subtle);
   border-radius: 4px;
   cursor: pointer;
 
   &:hover {
-    background: #3a3d3e;
-    color: #e5e7eb;
+    background: var(--dashboard-border-strong);
+    color: var(--dashboard-text);
   }
 }
 
@@ -116,8 +116,8 @@
   border: none;
   // The plugin paints its own background per its theme vars, but until it
   // finishes loading (or if it never sets one) this keeps the frame from
-  // flashing white against the rest of the dark UI.
-  background: #0c0e0f;
+  // flashing a mismatched color against the rest of the dashboard.
+  background: var(--dashboard-surface);
 }
 
 .pluginWindowResizeGrip {
@@ -131,7 +131,7 @@
   touch-action: none;
   // A small diagonal grip remains visible against both the dark window and
   // the plugin frame, while leaving most of the corner easy to grab.
-  background: linear-gradient(135deg, transparent 52%, #687078 53%, #687078 60%, transparent 61%);
+  background: linear-gradient(135deg, transparent 52%, var(--dashboard-text-disabled) 53%, var(--dashboard-text-disabled) 60%, transparent 61%);
   opacity: 0.8;
 
   &:hover { opacity: 1; }

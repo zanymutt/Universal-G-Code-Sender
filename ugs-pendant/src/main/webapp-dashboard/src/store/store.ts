@@ -7,6 +7,8 @@ import consoleReducer from "./consoleSlice";
 import alarmReducer from "./alarmSlice";
 import macrosReducer from "./macrosSlice";
 import uiReducer from "./uiSlice";
+import themeReducer from "./themeSlice";
+import accentReducer from "./accentSlice";
 
 import { socketMiddleware } from "./socketMiddleware";
 
@@ -19,6 +21,8 @@ const rootReducer = combineReducers({
   alarm: alarmReducer,
   macros: macrosReducer,
   ui: uiReducer,
+  theme: themeReducer,
+  accent: accentReducer,
 });
 
 export const store = configureStore({

@@ -428,7 +428,7 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
             </Form.Text>
           </>
         )}
-        {error && <div style={{ color: "#ff6b6b", marginTop: "8px" }}>{error}</div>}
+        {error && <div style={{ color: "var(--dashboard-danger-text)", marginTop: "8px" }}>{error}</div>}
       </Modal.Body>
       <Modal.Footer>
         <Button variant="secondary" onClick={handleClose} disabled={isSaving}>

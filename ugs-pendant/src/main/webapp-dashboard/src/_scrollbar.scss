@@ -4,14 +4,14 @@
 // were missing it can share the exact same rules instead of redrifting.
 @mixin darkScrollbar($width: 8px) {
   scrollbar-width: thin;
-  scrollbar-color: #3a3d3e transparent;
+  scrollbar-color: var(--dashboard-border-strong) transparent;
 
   &::-webkit-scrollbar {
     width: $width;
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #3a3d3e;
+    background-color: var(--dashboard-border-strong);
     border-radius: 4px;
   }
 

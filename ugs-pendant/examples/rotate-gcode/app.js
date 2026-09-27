@@ -447,8 +447,27 @@
     });
   }
 
+  // Matches this window's colors to the dashboard's own current theme/accent
+  // choice instead of the fixed dark palette in style.css's :root - falls
+  // back to that palette untouched if getTheme() isn't available (an older
+  // dashboard) or the call fails for any other reason.
+  function applyTheme(snapshot) {
+    if (!snapshot || !snapshot.colors) return;
+    const root = document.documentElement.style;
+    root.setProperty("--plugin-bg", snapshot.colors.background);
+    root.setProperty("--plugin-surface", snapshot.colors.surface);
+    root.setProperty("--plugin-surface-raised", snapshot.colors.surfaceRaised);
+    root.setProperty("--plugin-border", snapshot.colors.border);
+    root.setProperty("--plugin-border-strong", snapshot.colors.borderStrong);
+    root.setProperty("--plugin-text", snapshot.colors.text);
+    root.setProperty("--plugin-text-muted", snapshot.colors.textMuted);
+    root.setProperty("--plugin-accent", snapshot.colors.accent);
+  }
+
   async function start() {
     bindControls();
+    Fluid.getTheme().then(applyTheme).catch(() => {});
+    Fluid.on("theme", applyTheme);
     try {
       const saved = await Fluid.getSettings();
       state.savedSettings = saved && typeof saved === "object" ? saved : {};

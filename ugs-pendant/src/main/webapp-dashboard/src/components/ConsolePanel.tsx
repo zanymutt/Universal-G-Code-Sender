@@ -59,7 +59,7 @@ const ConsolePanel = () => {
     <div className="consolePanel">
       <div className="console" ref={consoleRef} style={{ fontSize: `${fontSize}px` }}>
         {messages.length === 0 ? (
-          <div style={{ color: "#888" }}>
+          <div style={{ color: "var(--dashboard-text-disabled)" }}>
             Controller console output will appear here.
           </div>
         ) : (
@@ -69,12 +69,12 @@ const ConsolePanel = () => {
               style={{
                 color:
                   line.type === "error"
-                    ? "#ff6b6b"
+                    ? "var(--dashboard-danger-text)"
                     : line.type === "ok"
-                      ? "#7bdcff"
+                      ? "var(--dashboard-info)"
                       : line.type === "verbose"
-                        ? "#6b7280"
-                        : "#ddd",
+                        ? "var(--dashboard-text-disabled)"
+                        : "var(--dashboard-text)",
               }}
             >
               {line.text}

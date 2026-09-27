@@ -1,0 +1,93 @@
+:root {
+  color-scheme: dark;
+  --dashboard-bg: #1c1e1f;
+  --dashboard-surface: #111213;
+  --dashboard-surface-raised: #2a2c2d;
+  --dashboard-surface-subtle: #232526;
+  --dashboard-surface-sunken: #26282a;
+  --dashboard-border: #2f3132;
+  --dashboard-border-strong: #3a3d3e;
+  --dashboard-text: #e5e7eb;
+  --dashboard-text-muted: #c3c8cb;
+  --dashboard-text-subtle: #9aa1a6;
+  --dashboard-text-disabled: #6b7280;
+  --dashboard-accent: #4ade80;
+  --dashboard-accent-soft: rgba(74, 222, 128, 0.14);
+  --dashboard-accent-border: #2d5a3f;
+  --dashboard-danger: #dc3545;
+  --dashboard-danger-text: #ff6b6b;
+  --dashboard-danger-soft: rgba(248, 113, 113, 0.12);
+  --dashboard-warning: #f0ad4e;
+  --dashboard-info: #7bdcff;
+  --dashboard-select-bg: #193b66;
+  --dashboard-select-text: #73b3ff;
+  --dashboard-select-border: #315c90;
+  --dashboard-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+
+  // "HUD" tokens - for text/chips overlaid directly on the 3D visualizer's
+  // canvas (readout, order legend, zoom control). That canvas paints its own
+  // fixed dark background (see Visualizer3D.tsx's scene.background) in BOTH
+  // themes, the same convention CAD/IDE viewports usually use rather than
+  // trying to maintain a second light-mode toolpath palette - so anything
+  // drawn on top of it needs fixed light-on-dark colors too, not the
+  // App-following --dashboard-* tokens above (which would turn dark-on-white
+  // once the light theme's versions kick in, and go illegible on this
+  // permanently-dark backdrop). Deliberately declared only once here, not
+  // repeated under :root[data-theme="light"], so they never change with the
+  // theme. --dashboard-hud-accent is the one exception that still varies -
+  // it's overridden inline by App.tsx with the *dark* variant of whichever
+  // accent preset is chosen, so the readout's numbers still reflect the
+  // person's accent choice without becoming illegible on the dark chip.
+  --dashboard-hud-bg: rgba(17, 18, 19, 0.72);
+  --dashboard-hud-border: #3a3d3e;
+  --dashboard-hud-text: #c3c8cb;
+  --dashboard-hud-text-subtle: #9aa1a6;
+  --dashboard-hud-text-disabled: #6b7280;
+  --dashboard-hud-info: #7bdcff;
+  --dashboard-hud-accent: #4ade80;
+}
+
+// A cool, high-contrast light palette - not just the dark theme's colors
+// inverted, but chosen so each token still reads clearly against a white/
+// near-white surface (status colors in particular need to darken, since a
+// pastel that pops on near-black surface can wash out to near-invisible on
+// white).
+:root[data-theme="light"] {
+  color-scheme: light;
+  --dashboard-bg: #eef1f4;
+  --dashboard-surface: #ffffff;
+  --dashboard-surface-raised: #ffffff;
+  --dashboard-surface-subtle: #f4f6f8;
+  --dashboard-surface-sunken: #e7ebef;
+  --dashboard-border: #dde2e7;
+  --dashboard-border-strong: #c7ced6;
+  --dashboard-text: #1b2027;
+  --dashboard-text-muted: #4d5761;
+  --dashboard-text-subtle: #6b7580;
+  --dashboard-text-disabled: #9aa3ac;
+  --dashboard-accent: #0f8a4c;
+  --dashboard-accent-soft: rgba(15, 138, 76, 0.1);
+  --dashboard-accent-border: #a3d9bb;
+  --dashboard-danger: #dc3545;
+  --dashboard-danger-text: #c8303f;
+  --dashboard-danger-soft: rgba(220, 53, 69, 0.1);
+  --dashboard-warning: #9a6400;
+  --dashboard-info: #1c7fae;
+  --dashboard-select-bg: #e4edfb;
+  --dashboard-select-text: #1d5fa8;
+  --dashboard-select-border: #aecbec;
+  --dashboard-shadow: 0 12px 30px rgba(30, 41, 59, 0.08);
+}
+
+html,
+body {
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
+}
+
+.dashboard,
+.dashboardBody,
+.settingsPage {
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
+}

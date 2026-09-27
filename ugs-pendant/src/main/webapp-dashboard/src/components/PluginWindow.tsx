@@ -19,6 +19,7 @@ import { acquireLineSubscription, releaseLineSubscription } from "../store/plugi
 import { refreshFileState } from "../store/refreshFileState";
 import { getFileName } from "../utils/getFileName";
 import { loadPluginWindowSize, PluginWindowSize, savePluginWindowSize } from "../utils/pluginWindowSize";
+import { getPluginThemeSnapshot } from "../theme/palette";
 import { Status } from "../model/Status";
 import SaveAsModal from "./SaveAsModal";
 import OpenFileModal from "./OpenFileModal";
@@ -35,7 +36,7 @@ type Props = {
   onActivate: () => void;
 };
 
-type SubscribableEvent = "status" | "line";
+type SubscribableEvent = "status" | "line" | "theme";
 
 // The shape handed to a plugin's getStatus()/'status' event - a flattened,
 // FigUI-shaped view of Dashboard's own richer Status model, since a plugin
@@ -140,6 +141,8 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
 
   const status = useAppSelector((state) => state.status);
   const consoleMessages = useAppSelector((state) => state.console.messages);
+  const theme = useAppSelector((state) => state.theme.theme);
+  const accent = useAppSelector((state) => state.accent.accent);
   // Same source GcodeEditor's own Save As uses for its defaultFileName - a
   // plugin calling saveGcodeAs() never supplies a filename itself, so this
   // is the only place that default can come from.
@@ -279,6 +282,9 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         case "getStatus":
           return Promise.resolve(toPluginStatus(statusRef.current));
 
+        case "getTheme":
+          return Promise.resolve(getPluginThemeSnapshot(theme, accent));
+
         case "subscribe": {
           const event = params.event as SubscribableEvent;
           const alreadySubscribed = subscribedEventsRef.current.has(event);
@@ -404,7 +410,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
           return Promise.reject(new Error(`Unknown method "${method}"`));
       }
     },
-    [dispatch, onClose, plugin.id, editorIsDirty]
+    [dispatch, onClose, plugin.id, editorIsDirty, theme, accent]
   );
 
   // --- Incoming requests from the plugin --------------------------------
@@ -434,6 +440,16 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     if (!subscribedEvents.has("status")) return;
     postToPlugin({ type: "fluid-event", event: "status", data: toPluginStatus(status) });
   }, [status, subscribedEvents, postToPlugin]);
+
+  // --- Outgoing 'theme' events --------------------------------------------
+  // Lets a plugin that opted in with subscribe("theme") restyle itself live
+  // when the person flips the dashboard's theme or accent color while the
+  // plugin window is already open, the same way a subscribed 'status' plugin
+  // already tracks machine state without polling getStatus() itself.
+  useEffect(() => {
+    if (!subscribedEvents.has("theme")) return;
+    postToPlugin({ type: "fluid-event", event: "theme", data: getPluginThemeSnapshot(theme, accent) });
+  }, [theme, accent, subscribedEvents, postToPlugin]);
 
   // --- Outgoing 'line' events ---------------------------------------------
   // Only forwards messages that arrived *after* subscribing - the console

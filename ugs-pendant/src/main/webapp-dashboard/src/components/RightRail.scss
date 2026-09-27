@@ -11,7 +11,7 @@
   // one plus a little right padding keeps it out of the way.
   padding-right: 10px;
   scrollbar-width: thin;
-  scrollbar-color: #3a3d3e transparent;
+  scrollbar-color: var(--dashboard-border-strong) transparent;
 
   .rightRailTabs {
     display: flex;
@@ -33,7 +33,7 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background-color: #3a3d3e;
+    background-color: var(--dashboard-border-strong);
     border-radius: 4px;
   }
 
@@ -42,7 +42,7 @@
   }
 
   .rightRailHeading {
-    color: #8a8f92;
+    color: var(--dashboard-text-subtle);
     text-transform: uppercase;
     font-size: 0.75rem;
     letter-spacing: 0.05em;
@@ -83,7 +83,7 @@
   .rightRailSpindle {
     margin-top: auto;
     padding-top: 8px;
-    border-top: 1px solid #2f3132;
+    border-top: 1px solid var(--dashboard-border);
   }
 }
 
@@ -101,7 +101,7 @@
     .rightRailTabPanel:last-child { flex: 0 0 auto; }
     .rightRailOverrides {
       padding-top: 8px;
-      border-top: 1px solid #2f3132;
+      border-top: 1px solid var(--dashboard-border);
     }
   }
 }

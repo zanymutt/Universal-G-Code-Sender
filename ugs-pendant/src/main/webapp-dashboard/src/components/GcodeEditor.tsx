@@ -26,24 +26,23 @@ import "./GcodeEditor.scss";
 // fontSizeCompartment below (see useEditorFontSize's own comment on why).
 const editorTheme = EditorView.theme(
   {
-    "&": { height: "100%", backgroundColor: "#111213" },
-    ".cm-content": { fontFamily: "monospace" },
-    ".cm-gutters": { backgroundColor: "#111213", color: "#5b6062", border: "none" },
-    ".cm-activeLine": { backgroundColor: "#1c1e1f" },
-    ".cm-activeLineGutter": { backgroundColor: "#1c1e1f" },
+    "&": { height: "100%", backgroundColor: "var(--dashboard-surface)" },
+    ".cm-content": { fontFamily: "monospace", color: "var(--dashboard-text)" },
+    ".cm-gutters": { backgroundColor: "var(--dashboard-surface)", color: "var(--dashboard-text-disabled)", border: "none" },
+    ".cm-activeLine": { backgroundColor: "var(--dashboard-bg)" },
+    ".cm-activeLineGutter": { backgroundColor: "var(--dashboard-bg)" },
     "&.cm-focused": { outline: "none" },
-    // Same dark, slim scrollbar as the rest of the dashboard (see
-    // _scrollbar.scss) - CodeMirror's own scroll container, so it needs its
-    // own copy here rather than picking that up from a wrapping element.
+    // Same slim scrollbar as the rest of the dashboard (see _scrollbar.scss) -
+    // CodeMirror's own scroll container, so it needs its own copy here rather
+    // than picking that up from a wrapping element.
     ".cm-scroller": {
       scrollbarWidth: "thin",
-      scrollbarColor: "#3a3d3e transparent",
+      scrollbarColor: "var(--dashboard-border-strong) transparent",
       "&::-webkit-scrollbar": { width: "8px" },
-      "&::-webkit-scrollbar-thumb": { backgroundColor: "#3a3d3e", borderRadius: "4px" },
+      "&::-webkit-scrollbar-thumb": { backgroundColor: "var(--dashboard-border-strong)", borderRadius: "4px" },
       "&::-webkit-scrollbar-track": { background: "transparent" },
     },
-  },
-  { dark: true }
+  }
 );
 
 // Dims lines 1..N (1-based, inclusive) to show what won't actually run next -

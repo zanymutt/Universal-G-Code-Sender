@@ -10,15 +10,15 @@
   cursor: pointer;
   border-radius: 4px;
   margin: 0 4px;
-  color: #d1d5db;
+  color: var(--dashboard-text-muted);
 
   &:hover {
-    background-color: #26282a;
+    background-color: var(--dashboard-surface-sunken);
   }
 
   &.active {
-    background-color: #1f3b2c;
-    color: #4ade80;
+    background-color: var(--dashboard-accent-soft);
+    color: var(--dashboard-accent);
   }
 }
 
@@ -32,12 +32,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.7rem;
   cursor: pointer;
 
   &:hover {
-    color: #e5e7eb;
+    color: var(--dashboard-text);
   }
 }
 
@@ -60,6 +60,6 @@
 .folderTreeCount {
   flex-shrink: 0;
   margin-left: 8px;
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.72rem;
 }

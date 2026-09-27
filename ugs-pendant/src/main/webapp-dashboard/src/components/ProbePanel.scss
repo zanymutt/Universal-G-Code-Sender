@@ -23,7 +23,7 @@
 }
 
 .probePanelGroupHeading {
-  color: #8a8f92;
+  color: var(--dashboard-text-subtle);
   text-transform: uppercase;
   font-size: 0.75rem;
   letter-spacing: 0.05em;
@@ -61,7 +61,7 @@
 }
 
 .probePanelInstructions {
-  color: #9aa0a4;
+  color: var(--dashboard-text-subtle);
   font-size: 0.85rem;
   margin: 0;
 }
@@ -92,7 +92,7 @@
   gap: 6px;
 
   span {
-    color: #9aa0a4;
+    color: var(--dashboard-text-subtle);
     font-size: 0.8rem;
     white-space: nowrap;
   }
@@ -102,8 +102,8 @@
   grid-column: 1 / -1;
 
   #probe-compensate-soft-limits:checked {
-    background-color: #4ade80;
-    border-color: #4ade80;
+    background-color: var(--dashboard-accent);
+    border-color: var(--dashboard-accent);
   }
 }
 
@@ -114,7 +114,7 @@
   align-items: center;
   gap: 12px;
   padding-top: 10px;
-  border-top: 1px solid #3a3d3e;
+  border-top: 1px solid var(--dashboard-border-strong);
 }
 
 .probePanelRun {
@@ -122,7 +122,7 @@
 }
 
 .probePanelDisabledHint {
-  color: #9aa0a4;
+  color: var(--dashboard-text-subtle);
   font-size: 0.8rem;
 }
 
@@ -134,11 +134,11 @@
 
   &.success {
     background-color: rgba(74, 222, 128, 0.12);
-    color: #4ade80;
+    color: var(--dashboard-accent);
   }
 
   &.failure {
-    background-color: rgba(248, 113, 113, 0.12);
-    color: #f87171;
+    background-color: var(--dashboard-danger-soft);
+    color: var(--dashboard-danger-text);
   }
 }

@@ -4,8 +4,8 @@
   .tabletNavigation {
     display: flex; flex: 0 0 auto; gap: 6px; padding: 6px 10px; flex-wrap: wrap;
     button {
-      border: 1px solid #3a3d3e; border-radius: 5px; background: #232526;
-      color: #c3c8cb; padding: 8px 12px; min-height: 44px; font-size: 14px;
+      border: 1px solid var(--dashboard-border-strong); border-radius: 5px; background: var(--dashboard-surface-subtle);
+      color: var(--dashboard-text-muted); padding: 8px 12px; min-height: 44px; font-size: 14px;
       &[aria-pressed="true"] { background: #323c65; border-color: #6879ed; color: white; }
     }
     .tabletConsoleToggle { margin-left: auto; }
@@ -67,8 +67,8 @@
   }
   .tabletReadout {
     display: flex; flex: 0 0 auto; justify-content: space-around; flex-wrap: wrap;
-    gap: 4px 12px; padding: 6px 10px; background: #111213;
-    font-size: 14px; strong { color: #4ade80; font-variant-numeric: tabular-nums; }
+    gap: 4px 12px; padding: 6px 10px; background: var(--dashboard-surface);
+    font-size: 14px; strong { color: var(--dashboard-accent); font-variant-numeric: tabular-nums; }
   }
   .tabletNavigation button { flex: 1; padding: 6px; }
   .tabletNavigation .tabletPositionTab { display: block; }

@@ -20,10 +20,10 @@ export const gcodeLanguage = StreamLanguage.define<null>({
 });
 
 export const gcodeHighlightStyle = HighlightStyle.define([
-  { tag: tags.comment, color: "#6b7280", fontStyle: "italic" },
-  { tag: tags.meta, color: "#8a8f92" },
-  { tag: tags.keyword, color: "#7bdcff", fontWeight: "bold" },
-  { tag: tags.number, color: "#4ade80" },
+  { tag: tags.comment, color: "var(--dashboard-text-subtle)", fontStyle: "italic" },
+  { tag: tags.meta, color: "var(--dashboard-text-muted)" },
+  { tag: tags.keyword, color: "var(--dashboard-info)", fontWeight: "bold" },
+  { tag: tags.number, color: "var(--dashboard-accent)" },
 ]);
 
 export const gcodeSyntaxHighlighting = syntaxHighlighting(gcodeHighlightStyle);

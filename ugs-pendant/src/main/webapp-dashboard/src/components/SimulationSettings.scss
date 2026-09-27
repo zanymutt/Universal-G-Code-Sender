@@ -9,15 +9,15 @@
   gap: 12px;
   padding: 12px;
   border-radius: 10px;
-  background: #1f2122;
-  border: 1px solid #2f3132;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   overscroll-behavior: contain;
 
   .simulationSettingsHeading,
   .form-label {
     margin-bottom: 6px;
-    color: #c3c8cb;
+    color: var(--dashboard-text-muted);
     font-size: 0.85rem;
     font-weight: 600;
   }
@@ -41,13 +41,13 @@
     padding: 0 2px;
     border: 0;
     background: none;
-    color: #8a8f92;
+    color: var(--dashboard-text-subtle);
     line-height: 1;
     cursor: help;
 
     &:hover,
     &:focus-visible {
-      color: #c3c8cb;
+      color: var(--dashboard-text-muted);
     }
   }
 }

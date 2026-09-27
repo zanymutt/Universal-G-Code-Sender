@@ -8,6 +8,12 @@ import { persistCurrentPaneLayout, PANE_LAYOUT_APPLY_EVENT } from "../hooks/useP
 import "./CenterPaneLayoutDemo.scss";
 
 export type PaneContent = "visualize" | "edit" | "macros" | "probe" | "console";
+
+// Lets something outside this component (RightRail's "Edit macros" pencil,
+// today) force a specific content type into view without needing to know
+// this component's own pane/id bookkeeping - it always lands on the first
+// pane, the same convention the console shortcut below already uses.
+export const SHOW_PANE_CONTENT_EVENT = "ugs-layout-demo-show-content";
 export type Orientation = "horizontal" | "vertical";
 export type Coordinate = 0 | 1 | 2;
 export type Rect = { x0: Coordinate; x1: Coordinate; y0: Coordinate; y1: Coordinate };
@@ -272,6 +278,24 @@ const CenterPaneLayoutDemo = () => {
     };
     window.addEventListener("ugs-layout-demo-console", onConsoleShortcut);
     return () => window.removeEventListener("ugs-layout-demo-console", onConsoleShortcut);
+  }, []);
+
+  useEffect(() => {
+    const onShowContent = (event: Event) => {
+      const content = (event as CustomEvent<{ content?: PaneContent }>).detail?.content;
+      if (!content) return;
+      setLayout(current => {
+        const next = clone(current);
+        const target = next.panes[0];
+        if (!target || target.content === content) return current;
+        const other = next.panes.find(pane => pane.id !== target.id && pane.content === content);
+        if (other) other.content = target.content;
+        target.content = content;
+        return next;
+      });
+    };
+    window.addEventListener(SHOW_PANE_CONTENT_EVENT, onShowContent);
+    return () => window.removeEventListener(SHOW_PANE_CONTENT_EVENT, onShowContent);
   }, []);
 
   const dividerSegments = useMemo(() => {

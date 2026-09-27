@@ -39,27 +39,27 @@ $modalStatusHeight: 30px;
   // side-by-side comparison of otherwise-identical test elements) - the
   // toggle ended up squeezed too narrow to fit its own text and caret.
   height: $modalStatusHeight;
-  // A visibly lighter fill than the read-only chips below (#111213), the
+  // A visibly lighter fill than the read-only chips below (var(--dashboard-surface)), the
   // same idea as Toolbox's buttons standing out from the panel behind
   // them - this is the one thing in the row you can actually tap, and
   // matching the chips' own resting look (previously just a green label
   // plus a small muted caret, easy to mistake for one more readout) didn't
   // make that obvious. The border stays a faint green at rest too, rather
   // than only appearing on hover/focus, as another always-visible cue.
-  background-color: #232526;
+  background-color: var(--dashboard-surface-subtle);
   border: 1px solid rgba(74, 222, 128, 0.35);
   border-radius: 4px;
   padding: 0 8px;
 
   &:has(.dropdown-toggle:hover),
   &:focus-within {
-    border-color: #4ade80;
+    border-color: var(--dashboard-accent);
     box-shadow: 0 0 0 0.2rem rgba(74, 222, 128, 0.25);
   }
 
   &:has(.dropdown-toggle:disabled) {
-    background-color: #111213;
-    border-color: #2f3132;
+    background-color: var(--dashboard-surface);
+    border-color: var(--dashboard-border);
   }
 
   .dropdown-toggle {
@@ -75,7 +75,7 @@ $modalStatusHeight: 30px;
     // Matches .modalStatusChip's own font-size (was 0.85rem) - a little
     // extra breathing room for the caret alongside it, and no reason for
     // this one to run larger than the read-only chips next to it anyway.
-    color: #4ade80;
+    color: var(--dashboard-accent);
     font-weight: 700;
     font-size: 0.8rem;
     white-space: nowrap;
@@ -93,7 +93,7 @@ $modalStatusHeight: 30px;
       border: none;
       vertical-align: 0;
       margin-left: 4px;
-      color: #9aa0a6;
+      color: var(--dashboard-text-subtle);
       font-size: 0.7rem;
     }
 
@@ -101,15 +101,15 @@ $modalStatusHeight: 30px;
     &:focus,
     &:active {
       background-color: transparent !important;
-      color: #4ade80 !important;
+      color: var(--dashboard-accent) !important;
       box-shadow: none !important;
     }
 
     &:disabled {
-      color: #6b7280;
+      color: var(--dashboard-text-disabled);
 
       &::after {
-        color: #55595c;
+        color: var(--dashboard-text-disabled);
       }
     }
   }
@@ -121,8 +121,8 @@ $modalStatusHeight: 30px;
   // including which entry is active (see .dropdown-item.active below).
   .dropdown-menu {
     min-width: 0;
-    background-color: #1c1e1f;
-    border-color: #2f3132;
+    background-color: var(--dashboard-bg);
+    border-color: var(--dashboard-border);
     padding: 4px;
   }
 
@@ -133,10 +133,10 @@ $modalStatusHeight: 30px;
     padding: 6px 10px;
     font-size: 0.85rem;
     font-weight: 700;
-    color: #c3c8cb;
+    color: var(--dashboard-text-muted);
 
     .modalStatusWcsCheck {
-      color: #4ade80;
+      color: var(--dashboard-accent);
       font-size: 0.75rem;
       margin-right: 8px;
       // Reserves the checkmark's own space on every row (active or not) so
@@ -148,13 +148,13 @@ $modalStatusHeight: 30px;
 
     &:hover,
     &:focus {
-      background-color: #2a2c2d;
-      color: #e5e7eb;
+      background-color: var(--dashboard-surface-raised);
+      color: var(--dashboard-text);
     }
 
     &.active {
       background-color: rgba(74, 222, 128, 0.15);
-      color: #4ade80;
+      color: var(--dashboard-accent);
 
       .modalStatusWcsCheck {
         visibility: visible;
@@ -170,11 +170,11 @@ $modalStatusHeight: 30px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background-color: #111213;
-  border: 1px solid #2f3132;
+  background-color: var(--dashboard-surface);
+  border: 1px solid var(--dashboard-border);
   border-radius: 4px;
   padding: 0 8px;
   font-size: 0.8rem;
   font-weight: 700;
-  color: #8a8f92;
+  color: var(--dashboard-text-subtle);
 }

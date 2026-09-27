@@ -9,7 +9,7 @@
 // makes it worth fixing now rather than carrying the same look forward into
 // more visible spots.
 .saveAsModalDialog code {
-  color: #4ade80;
+  color: var(--dashboard-accent);
   background: rgba(45, 90, 63, 0.15);
   padding: 1px 5px;
   border-radius: 3px;
@@ -25,7 +25,7 @@
 .saveAsModalPanes {
   display: flex;
   height: 320px;
-  border-top: 1px solid #2f3132;
+  border-top: 1px solid var(--dashboard-border);
   margin: 0 -1rem;
 }
 
@@ -33,7 +33,7 @@
   width: 220px;
   flex-shrink: 0;
   overflow-y: auto;
-  border-right: 1px solid #2f3132;
+  border-right: 1px solid var(--dashboard-border);
   padding: 8px 0;
   @include darkScrollbar;
 }
@@ -56,11 +56,11 @@
 }
 
 .saveAsModalCurrentPath {
-  color: #9ca3af;
+  color: var(--dashboard-text-subtle);
   font-size: 0.82rem;
 
   code {
-    color: #e5e7eb;
+    color: var(--dashboard-text);
   }
 }
 
@@ -74,7 +74,7 @@
 }
 
 .saveAsModalFolderError {
-  color: #ff6b6b;
+  color: var(--dashboard-danger-text);
   font-size: 0.8rem;
 }
 
@@ -99,23 +99,23 @@
   background: none;
   border: 1px solid transparent;
   border-radius: 4px;
-  color: #9ca3af;
+  color: var(--dashboard-text-subtle);
   font-size: 0.82rem;
   text-align: left;
   cursor: pointer;
 
   &:hover {
-    background: #26282a;
-    border-color: #3a3d3e;
-    color: #e5e7eb;
+    background: var(--dashboard-surface-sunken);
+    border-color: var(--dashboard-border-strong);
+    color: var(--dashboard-text);
   }
 
   // The currently-typed filename matches this file exactly - a preview of
   // "this is what you're about to overwrite" before Save is even pressed.
   &.active {
     background: rgba(45, 90, 63, 0.2);
-    border-color: #2d5a3f;
-    color: #4ade80;
+    border-color: var(--dashboard-accent-border);
+    color: var(--dashboard-accent);
   }
 }
 
@@ -131,7 +131,7 @@
 }
 
 .saveAsModalFileListEmpty {
-  color: #6b7280;
+  color: var(--dashboard-text-disabled);
   font-size: 0.78rem;
   margin: 4px 0;
 }
