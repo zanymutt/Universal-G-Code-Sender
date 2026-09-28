@@ -475,11 +475,15 @@
   let requestId = 0;
   const pending = new Map();
   window.addEventListener('message', event => {
-    if (event.source !== window.parent || event.data?.type !== 'fluid-response') return;
-    const p = pending.get(event.data.id);
-    if (!p) return;
-    pending.delete(event.data.id);
-    event.data.error ? p.reject(Error(event.data.error)) : p.resolve(event.data.result);
+    if (event.source !== window.parent) return;
+    if (event.data?.type === 'fluid-response') {
+      const p = pending.get(event.data.id);
+      if (!p) return;
+      pending.delete(event.data.id);
+      event.data.error ? p.reject(Error(event.data.error)) : p.resolve(event.data.result);
+    } else if (event.data?.type === 'fluid-event' && event.data.event === 'theme') {
+      applyTheme(event.data.data);
+    }
   });
   function host(method, params = {}) {
     return new Promise((resolve, reject) => {
@@ -487,6 +491,26 @@
       pending.set(id, { resolve, reject });
       window.parent.postMessage({ type: 'fluid-request', id, method, params }, '*');
     });
+  }
+  // Matches this window's colors to Dashboard's own current theme/accent
+  // choice instead of the fixed dark palette in style.css's :root - falls
+  // back to that palette untouched if getTheme() isn't available (an older
+  // Dashboard) or the call fails for any other reason.
+  function applyTheme(theme) {
+    if (!theme || !theme.colors) return;
+    const root = document.documentElement.style;
+    root.setProperty('--plugin-bg', theme.colors.background);
+    root.setProperty('--plugin-surface', theme.colors.surface);
+    root.setProperty('--plugin-surface-raised', theme.colors.surfaceRaised);
+    root.setProperty('--plugin-border', theme.colors.border);
+    root.setProperty('--plugin-border-strong', theme.colors.borderStrong);
+    root.setProperty('--plugin-text', theme.colors.text);
+    root.setProperty('--plugin-text-muted', theme.colors.textMuted);
+    root.setProperty('--plugin-accent', theme.colors.accent);
+  }
+  if (window.parent !== window) {
+    host('getTheme').then(applyTheme).catch(() => {});
+    host('subscribe', { event: 'theme' }).catch(() => {});
   }
   async function loadOpenFile(announce) {
     try {

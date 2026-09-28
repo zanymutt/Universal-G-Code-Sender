@@ -1,0 +1,283 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Batch Runner</title>
+  <style>
+    :root {
+      /* Overwritten from Fluid.getTheme()/the "theme" event once the
+         bridge responds (see applyTheme below) - these are just the
+         standalone/offline look. */
+      --plugin-bg: #1c1e1f;
+      --plugin-surface: #0c0e0f;
+      --plugin-surface-raised: #26282a;
+      --plugin-border: #3a3d3e;
+      --plugin-text: #e5e7eb;
+      --plugin-text-muted: #9ca3af;
+      --plugin-accent: #4ade80;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: var(--plugin-bg);
+      color: var(--plugin-text);
+      font: 14px/1.4 system-ui, sans-serif;
+    }
+    .panel { padding: 10px; display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; }
+    label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; color: var(--plugin-text-muted); }
+    .row { display: flex; gap: 6px; }
+    .row > * { flex: 1; }
+    button {
+      background: var(--plugin-surface-raised);
+      border: 1px solid var(--plugin-border);
+      border-radius: 4px;
+      color: var(--plugin-text);
+      padding: 6px 8px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) { border-color: var(--plugin-accent); color: var(--plugin-accent); }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.primary { border-color: var(--plugin-accent); color: var(--plugin-accent); }
+    button.danger { border-color: #5a2d2d; color: #f87171; }
+    .section-title { font-size: 0.72rem; color: var(--plugin-text-muted); text-transform: uppercase; letter-spacing: 0.03em; margin: 2px 0 0; }
+    .queue {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      /* ~5 rows at this item height/font size, so the queue has a stable,
+         easy-to-scan size instead of starting tiny and only growing as
+         files are added - overflow-y still scrolls past that. flex-shrink:0
+         because .panel is itself a flex column that would otherwise
+         compress this height down to fit everything else on screen -
+         .panel's own overflow-y:auto is what should give when content
+         doesn't all fit, not this. */
+      height: 165px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      border: 1px solid var(--plugin-border);
+      border-radius: 4px;
+      background: var(--plugin-surface);
+    }
+    .queue:empty::after {
+      content: "No files queued yet.";
+      display: block;
+      padding: 10px;
+      color: var(--plugin-text-muted);
+      font-size: 14px;
+    }
+    .queueItem {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 8px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--plugin-bg);
+    }
+    .queueItem:last-child { border-bottom: none; }
+    .queueItem .idx { color: var(--plugin-text-muted); width: 1.4em; flex-shrink: 0; }
+    .queueItem .path { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .queueItem .badge { font-size: 11px; padding: 1px 6px; border-radius: 999px; flex-shrink: 0; }
+    .queueItem.pending .badge { background: var(--plugin-surface-raised); color: var(--plugin-text-muted); }
+    .queueItem.running .badge { background: #2d3a5a; color: #93c5fd; }
+    .queueItem.done .badge { background: #1c3a2a; color: var(--plugin-accent); }
+    .queueItem.error .badge, .queueItem.stopped .badge { background: #3a1c1c; color: #f87171; }
+    .queueItem button { padding: 2px 6px; font-size: 12px; flex-shrink: 0; }
+    .progress {
+      height: 6px;
+      border-radius: 3px;
+      background: var(--plugin-surface);
+      border: 1px solid var(--plugin-border);
+      overflow: hidden;
+    }
+    .progress > div { height: 100%; background: var(--plugin-accent); width: 0%; }
+    .progressLabel { font-size: 0.72rem; color: var(--plugin-text-muted); }
+    .checkboxRow { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--plugin-text-muted); }
+    .checkboxRow input { width: auto; }
+    .log {
+      flex: 1;
+      min-height: 60px;
+      background: var(--plugin-surface);
+      border: 1px solid var(--plugin-border);
+      border-radius: 4px;
+      padding: 6px 8px;
+      font-family: ui-monospace, monospace;
+      font-size: 13px;
+      white-space: pre-wrap;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="panel">
+    <div class="row">
+      <button id="addFile" class="primary">+ Add file...</button>
+    </div>
+
+    <p class="section-title">Queue</p>
+    <ol id="queue" class="queue"></ol>
+    <div class="row">
+      <button id="clearQueue">Clear queue</button>
+      <label class="checkboxRow" style="flex: 1;">
+        <input id="autoAdvance" type="checkbox" checked />
+        Auto-advance to next file
+      </label>
+    </div>
+
+    <div class="row">
+      <button id="startBatch" class="primary">Start batch</button>
+      <button id="continueBatch" class="primary" style="display: none;">Continue</button>
+      <button id="pauseResume">Pause</button>
+      <button id="stopBatch" class="danger">Stop</button>
+    </div>
+
+    <div id="progressWrap" style="display: none;">
+      <div class="progress"><div id="progressFill"></div></div>
+      <p id="progressLabel" class="progressLabel"></p>
+    </div>
+
+    <div id="log" class="log">Add a file, then press Start batch.</div>
+  </div>
+
+  <script src="sdk.js"></script>
+  <script src="batch.js"></script>
+  <script>
+    const addFileBtn = document.getElementById("addFile");
+    const queueEl = document.getElementById("queue");
+    const clearQueueBtn = document.getElementById("clearQueue");
+    const autoAdvanceEl = document.getElementById("autoAdvance");
+    const startBatchBtn = document.getElementById("startBatch");
+    const continueBatchBtn = document.getElementById("continueBatch");
+    const pauseResumeBtn = document.getElementById("pauseResume");
+    const stopBatchBtn = document.getElementById("stopBatch");
+    const progressWrap = document.getElementById("progressWrap");
+    const progressFill = document.getElementById("progressFill");
+    const progressLabel = document.getElementById("progressLabel");
+    const logEl = document.getElementById("log");
+
+    // Matches this window's colors to Dashboard's own current theme/accent
+    // choice instead of the fixed dark palette in :root above - falls back
+    // to that palette untouched if getTheme() isn't available (an older
+    // Dashboard) or the call fails for any other reason.
+    function applyTheme(theme) {
+      if (!theme || !theme.colors) return;
+      const root = document.documentElement.style;
+      root.setProperty("--plugin-bg", theme.colors.background);
+      root.setProperty("--plugin-surface", theme.colors.surface);
+      root.setProperty("--plugin-surface-raised", theme.colors.surfaceRaised);
+      root.setProperty("--plugin-border", theme.colors.borderStrong);
+      root.setProperty("--plugin-text", theme.colors.text);
+      root.setProperty("--plugin-text-muted", theme.colors.textMuted);
+      root.setProperty("--plugin-accent", theme.colors.accent);
+    }
+    window.Fluid.getTheme().then(applyTheme).catch(() => {});
+    window.Fluid.on("theme", applyTheme);
+
+    // One file per click, same as the dashboard's own Open button - opens
+    // its real folder-browser dialog (search, folders, everything) rather
+    // than a flat list that stops being usable once there are more than a
+    // handful of files in the workspace. Click it again for the next one.
+    addFileBtn.addEventListener("click", () => {
+      window.Fluid.pickFile()
+        .then((result) => window.BatchRunner.addFiles([result.path]))
+        .catch(() => {
+          /* cancelled - nothing to do */
+        });
+    });
+
+    clearQueueBtn.addEventListener("click", () => window.BatchRunner.clearQueue());
+    autoAdvanceEl.addEventListener("change", () => {
+      window.BatchRunner.setAutoAdvance(autoAdvanceEl.checked);
+      window.Fluid.getSettings().then((settings) => {
+        window.Fluid.saveSettings({ ...settings, autoAdvance: autoAdvanceEl.checked });
+      });
+    });
+    startBatchBtn.addEventListener("click", () => window.BatchRunner.start());
+    continueBatchBtn.addEventListener("click", () => window.BatchRunner.continueNext());
+    pauseResumeBtn.addEventListener("click", () => window.BatchRunner.pauseOrResumeCurrent());
+    stopBatchBtn.addEventListener("click", () => window.BatchRunner.stopBatch());
+
+    function renderQueue(queue, currentIndex) {
+      queueEl.innerHTML = "";
+      queue.forEach((item, index) => {
+        const li = document.createElement("li");
+        li.className = "queueItem " + item.status;
+        const idx = document.createElement("span");
+        idx.className = "idx";
+        idx.textContent = index + 1 + ".";
+        const path = document.createElement("span");
+        path.className = "path";
+        path.textContent = item.path;
+        path.title = item.path;
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        badge.textContent = item.status;
+        li.appendChild(idx);
+        li.appendChild(path);
+        li.appendChild(badge);
+
+        const canEdit = index !== currentIndex || (item.status !== "running");
+        const removeBtn = document.createElement("button");
+        removeBtn.textContent = "×";
+        removeBtn.disabled = !canEdit;
+        removeBtn.addEventListener("click", () => window.BatchRunner.removeAt(index));
+        li.appendChild(removeBtn);
+
+        queueEl.appendChild(li);
+      });
+    }
+
+    function render(state) {
+      renderQueue(state.queue, state.currentIndex);
+
+      const editableState = state.batchState === "idle" || state.batchState === "complete" || state.batchState === "stopped";
+      clearQueueBtn.disabled = !editableState;
+      addFileBtn.disabled = !editableState;
+      startBatchBtn.disabled = !editableState || state.queue.length === 0;
+      startBatchBtn.textContent = state.batchState === "stopped" || state.batchState === "complete" ? "Restart batch" : "Start batch";
+
+      continueBatchBtn.style.display = state.batchState === "waiting-continue" ? "" : "none";
+      stopBatchBtn.disabled = state.batchState !== "running" && state.batchState !== "waiting-continue";
+
+      if (state.controllerState === "HOLD") {
+        pauseResumeBtn.textContent = "Resume";
+        pauseResumeBtn.disabled = false;
+      } else if (state.controllerState === "RUN" || state.controllerState === "CHECK") {
+        pauseResumeBtn.textContent = "Pause";
+        pauseResumeBtn.disabled = false;
+      } else {
+        pauseResumeBtn.textContent = "Pause";
+        pauseResumeBtn.disabled = true;
+      }
+
+      if (state.lastFileStatus && state.lastFileStatus.rowCount > 0 && state.batchState === "running") {
+        const { completedRowCount, rowCount } = state.lastFileStatus;
+        const pct = Math.min(100, Math.round((completedRowCount / rowCount) * 100));
+        progressWrap.style.display = "";
+        progressFill.style.width = pct + "%";
+        progressLabel.textContent = `${completedRowCount} / ${rowCount} lines (${pct}%)`;
+      } else {
+        progressWrap.style.display = "none";
+      }
+
+      logEl.textContent = state.logLines.length ? state.logLines.join("\n") : "Add a file, then press Start batch.";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    window.Fluid.getSettings().then((settings) => {
+      if (typeof settings.autoAdvance === "boolean") {
+        autoAdvanceEl.checked = settings.autoAdvance;
+        window.BatchRunner.setAutoAdvance(settings.autoAdvance);
+      }
+    });
+
+    window.BatchRunner.init(render);
+  </script>
+</body>
+</html>

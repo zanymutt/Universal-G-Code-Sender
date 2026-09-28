@@ -1,0 +1,6 @@
+{
+  "name": "Batch Runner",
+  "description": "Queue up multiple gcode files from the workspace and run them one after another, either automatically or one at a time with a Continue button.",
+  "version": "1.0.0",
+  "entry": "index.html"
+}
