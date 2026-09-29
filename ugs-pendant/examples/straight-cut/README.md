@@ -36,6 +36,17 @@ Dashboard visualizer) has no numeric value for it and drops the toolpath
 entirely; nothing renders even though the file runs on the machine exactly
 as documented above.
 
+**Custom probe code is checked before Generate accepts it.** UGS's parser
+treats any word starting with `F`, `S`, or `T` as a feed rate, spindle
+speed, or tool number and tries to read the rest of it as a plain number -
+a second one of the same letter on a line, or a value that isn't a clean
+number, makes it reject the *entire file* the next time it's opened, not
+just that line. Ordinary text pasted into this field by mistake can trigger
+this by accident (an English sentence can easily produce a stray word
+starting with `t` or `s`), so Generate now rejects that up front with the
+offending line, rather than producing a file that looks fine here and then
+fails the moment Dashboard reopens it.
+
 ## Install
 
 Copy this whole folder to the Dashboard plugin directory on the computer
