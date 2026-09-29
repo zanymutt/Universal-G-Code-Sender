@@ -587,6 +587,13 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         // the actual security boundary the whole bridge depends on - not
         // an incidental detail to relax later.
         sandbox="allow-scripts"
+        // Permissions Policy, not the sandbox - an entirely separate
+        // mechanism, so this doesn't touch the opaque-origin boundary above.
+        // Without it, Chromium silently denies both navigator.clipboard and
+        // document.execCommand('copy') to a cross-origin iframe (nesting's
+        // and svg-to-gcode's "Copy G-code" button selected the text but
+        // never actually put it on the clipboard - confirmed on 2026-09-29).
+        allow="clipboard-write"
       />
       {!maximized && <div
         className="pluginWindowResizeGrip"

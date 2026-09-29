@@ -554,9 +554,25 @@
     }
   };
   $('copy').onclick = async () => {
+    if (!code) return;
+    // The async Clipboard API copies the real, full code regardless of
+    // whether the preview textarea below was truncated, and (unlike
+    // execCommand) is the one that actually works from inside this plugin's
+    // sandboxed iframe - it needs the host's allow="clipboard-write" on the
+    // iframe (see PluginWindow.tsx), which a user of an older dashboard
+    // build won't have yet. Fall back to the old selection-based copy (or,
+    // for truncated code, to just telling them to use Save As) rather than
+    // leaving the button silently doing nothing on that older build.
+    try {
+      await navigator.clipboard.writeText(code);
+      message('G-code copied.');
+      return;
+    } catch {
+      // Falls through - most likely cause is the newer API not being
+      // available/permitted here at all, not a real rejection to act on.
+    }
     if (codeTruncated) {
-      try { await navigator.clipboard.writeText(code); message('G-code copied.'); }
-      catch { message('The program is too large to copy from here. Use Save As into Dashboard.', true); }
+      message('The program is too large to copy from here. Use Save As into Dashboard.', true);
       return;
     }
     $('output').focus();

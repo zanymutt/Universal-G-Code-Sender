@@ -298,7 +298,13 @@
     try{await new Promise((resolve,reject)=>{const id=++requestId;pending.set(id,{resolve,reject});window.parent.postMessage({type:'fluid-request',id,method:'saveGcodeAs',params:{content:code}},'*');});message('Saved and opened in Dashboard. The machine has not been started.');}
     catch(e){message(e.message,true);}finally{savePending=false;$('save').disabled=!code||generation!==revision;}
   };
-  $('copy').onclick=()=>{
+  $('copy').onclick=async()=>{
+    if(!code)return;
+    // The async Clipboard API is the one that actually works from inside this
+    // plugin's sandboxed iframe (needs the host's allow="clipboard-write" on
+    // the iframe - see PluginWindow.tsx); execCommand below is the fallback
+    // for an older dashboard build that doesn't set that yet.
+    try{await navigator.clipboard.writeText(code);message('G-code copied.');return;}catch{}
     $('output').focus();$('output').select();
     try{if(!document.execCommand('copy'))throw Error();message('G-code copied.');}catch{message('G-code selected. Use your device’s Copy command.');}
   };
