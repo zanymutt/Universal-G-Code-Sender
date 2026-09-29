@@ -1,0 +1,6 @@
+{
+  "name": "Straight Cut",
+  "description": "Generate a straight X/Y cut from the active work origin.",
+  "version": "1.0.0",
+  "entry": "index.html"
+}
