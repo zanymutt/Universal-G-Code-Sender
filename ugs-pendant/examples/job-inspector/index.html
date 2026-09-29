@@ -11,6 +11,7 @@
          bridge responds (see applyTheme below) - these are just the
          standalone/offline look. */
       --plugin-bg: #1c1e1f;
+      --plugin-surface: #111213;
       --plugin-text: #e5e7eb;
       --plugin-accent: #454ce5;
     }
@@ -22,7 +23,13 @@
     h1 { margin: 0 0 12px; font-size: 20px; }
     button {
       min-height: 44px; padding: 8px 14px; font: inherit;
-      background: var(--plugin-accent); color: white;
+      /* var(--plugin-surface) rather than a fixed white/black - it's dark in
+         dark theme and light in light theme, so it stays readable against
+         --plugin-accent regardless of which theme is active (accent itself
+         is tuned to be a bright, light-mode-text-legible color in dark
+         theme, and a dark, light-bg-legible color in light theme - a fixed
+         text color would only ever be right for one of those). */
+      background: var(--plugin-accent); color: var(--plugin-surface);
       border: 0; border-radius: 4px; cursor: pointer;
     }
     button:disabled { opacity: .6; cursor: wait; }
@@ -76,6 +83,7 @@
       if (!theme || !theme.colors) return;
       const root = document.documentElement.style;
       root.setProperty("--plugin-bg", theme.colors.background);
+      root.setProperty("--plugin-surface", theme.colors.surface);
       root.setProperty("--plugin-text", theme.colors.text);
       root.setProperty("--plugin-accent", theme.colors.accent);
     }

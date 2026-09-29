@@ -61,8 +61,8 @@ output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere;
 .settings [role=tabpanel] { margin-top: 4px; }
 .settingsTabs { display: flex; flex-wrap: wrap; gap: 4px; position: sticky; top: 0; z-index: 5; background: var(--plugin-bg); padding: 0 0 10px; }
 .settingsTabs button { flex: 1; padding: 7px 9px; min-height: 36px; font-size: 12px; }
-.settingsTabs [aria-selected=true] { background: var(--plugin-accent); border-color: var(--plugin-accent); }
-#nest { background: var(--plugin-accent); }
+.settingsTabs [aria-selected=true] { background: var(--plugin-accent); border-color: var(--plugin-accent); color: var(--plugin-surface); }
+#nest { background: var(--plugin-accent); color: var(--plugin-surface); }
 
 /* Preview and output share the available viewport height. */
 .work { display: grid; grid-template-columns: minmax(0, var(--split, 55%)) 12px minmax(0, 1fr); overflow: hidden; padding: 0; scrollbar-gutter: auto; gap: 0; }

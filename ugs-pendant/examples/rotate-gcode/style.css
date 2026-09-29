@@ -33,7 +33,7 @@ button {
 }
 button:hover:not(:disabled) { border-color: var(--plugin-accent); }
 button:disabled { cursor: default; opacity: .45; }
-button.primary { border-color: var(--plugin-accent); background: var(--plugin-accent); color: white; }
+button.primary { border-color: var(--plugin-accent); background: var(--plugin-accent); color: var(--plugin-surface); }
 button.danger { border-color: #a35a5a; }
 input, select, textarea {
   width: 100%;
