@@ -7,80 +7,98 @@
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <header class="pageHeader">
+    <div>
+      <p class="eyebrow">UGS Dashboard</p>
+      <h1>Straight Cut</h1>
+      <p class="intro">Generate one straight X/Y cut from the active work origin.</p>
+    </div>
+    <div id="machineState" class="machineState" role="status">Dashboard connection pending…</div>
+  </header>
+
   <main>
-    <header class="pageHeader">
-      <div>
-        <p class="eyebrow">UGS Dashboard</p>
-        <h1>Straight Cut</h1>
-        <p class="intro">Generate one straight X/Y cut from the active work origin.</p>
-      </div>
-      <div id="machineState" class="machineState" role="status">Dashboard connection pending…</div>
-    </header>
-
-    <section class="card" aria-labelledby="cut-settings-heading">
-      <h2 id="cut-settings-heading">Cut settings</h2>
-      <div class="grid two">
-        <label>Direction
-          <select id="direction">
-            <option value="X-">−X</option>
-            <option value="X+">+X</option>
-            <option value="Y-">−Y</option>
-            <option value="Y+">+Y</option>
-          </select>
-        </label>
-        <label>Units
-          <select id="units">
-            <option value="mm">Millimeters (G21)</option>
-            <option value="inch">Inches (G20)</option>
-          </select>
-        </label>
-        <label>Distance <span class="unitHint">in selected units</span>
-          <input id="distance" type="number" min="0.000001" step="any" value="10">
-        </label>
-        <label>Cut speed <span class="unitHint">units/min</span>
-          <input id="cutSpeed" type="number" min="0.000001" step="any" value="100">
-        </label>
-        <label>Safe move height
-          <input id="safeHeight" type="number" step="any" value="5">
-        </label>
-        <label>Pierce height
-          <input id="pierceHeight" type="number" step="any" value="1.5">
-        </label>
-        <label>Cut height
-          <input id="cutHeight" type="number" step="any" value="0">
-        </label>
-        <label>Pierce delay <span class="unitHint">seconds</span>
-          <input id="pierceDelay" type="number" min="0" step="any" value="1">
-        </label>
+    <section class="settings" aria-labelledby="settings-heading">
+      <div class="panelHeading">
+        <div>
+          <p class="eyebrow">Parameters</p>
+          <h2 id="settings-heading">Cut settings</h2>
+        </div>
+        <span class="stepBadge">1 / 2</span>
       </div>
 
-      <label class="checkRow">
-        <input id="thc" type="checkbox">
-        <span>Enable THC with <code>M8</code>; disable with <code>M9</code> after the cut</span>
-      </label>
+      <fieldset>
+        <legend>Cut setup</legend>
+        <div class="fieldGrid">
+          <label>Direction
+            <select id="direction">
+              <option value="X-">−X</option>
+              <option value="X+">+X</option>
+              <option value="Y-">−Y</option>
+              <option value="Y+">+Y</option>
+            </select>
+          </label>
+          <label>Units
+            <select id="units">
+              <option value="mm">Millimeters (G21)</option>
+              <option value="inch">Inches (G20)</option>
+            </select>
+          </label>
+          <label>Distance <span class="unitHint">in selected units</span>
+            <input id="distance" type="number" min="0.000001" step="any" value="10">
+          </label>
+          <label>Cut speed <span class="unitHint">units/min</span>
+            <input id="cutSpeed" type="number" min="0.000001" step="any" value="100">
+          </label>
+          <label>Safe move height
+            <input id="safeHeight" type="number" step="any" value="5">
+          </label>
+          <label>Pierce height
+            <input id="pierceHeight" type="number" step="any" value="1.5">
+          </label>
+          <label>Cut height
+            <input id="cutHeight" type="number" step="any" value="0">
+          </label>
+          <label>Pierce delay <span class="unitHint">seconds</span>
+            <input id="pierceDelay" type="number" min="0" step="any" value="1">
+          </label>
+        </div>
 
-      <label>Custom probe code <span class="unitHint">optional; inserted before the pierce move</span>
-        <textarea id="probeCode" rows="5" spellcheck="false" placeholder="Leave blank to omit probing"></textarea>
-      </label>
+        <label class="checkRow">
+          <input id="thc" type="checkbox">
+          <span>Enable THC with <code>M8</code>; disable with <code>M9</code> after the cut</span>
+        </label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Probe</legend>
+        <label>Custom probe code <span class="unitHint">optional; runs before the pierce move</span>
+          <textarea id="probeCode" rows="7" spellcheck="false" placeholder="Leave blank to omit probing"></textarea>
+        </label>
+        <p class="hint">The active XY origin is written before and after this code so FluidNC has an explicit position for the following pierce move.</p>
+      </fieldset>
 
       <p class="originNote"><strong>Origin:</strong> Zero the active work coordinate system at the intended start point. The generated program uses absolute coordinates and does not add an XY repositioning move.</p>
-      <div class="actions">
-        <button id="generate" type="button" class="primary">Generate code</button>
-        <button id="save" type="button" disabled>Save As into Dashboard</button>
-        <button id="copy" type="button" disabled>Copy code</button>
-      </div>
-      <p id="message" class="message" role="status" aria-live="polite">Nothing has been generated.</p>
+      <button id="generate" type="button" class="primary generateButton">Generate code</button>
     </section>
 
-    <section class="card outputCard" aria-labelledby="output-heading">
-      <div class="sectionHeading">
-        <div>
-          <h2 id="output-heading">Generated G-code</h2>
-          <p>Review the program, then save it into Dashboard. Start the loaded job from the main Dashboard controls.</p>
+    <section class="work" aria-labelledby="output-heading">
+      <div class="outputCard">
+        <div class="panelHeading">
+          <div>
+            <p class="eyebrow">Preview</p>
+            <h2 id="output-heading">Generated G-code</h2>
+            <p class="sectionDescription">Review the program, then save it into Dashboard. Start the loaded job from the main Dashboard controls.</p>
+          </div>
+          <span id="lineCount" class="lineCount">0 lines</span>
         </div>
-        <span id="lineCount" class="lineCount">0 lines</span>
+
+        <textarea id="output" readonly spellcheck="false" aria-label="Generated G-code" placeholder="Click Generate code to create the program."></textarea>
+        <div class="actions">
+          <button id="save" type="button" disabled>Save As into Dashboard</button>
+          <button id="copy" type="button" disabled>Copy code</button>
+        </div>
+        <p id="message" class="message" role="status" aria-live="polite">Nothing has been generated.</p>
       </div>
-      <textarea id="output" readonly spellcheck="false" aria-label="Generated G-code" placeholder="Click Generate code to create the program."></textarea>
     </section>
   </main>
   <script src="core.js"></script>

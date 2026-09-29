@@ -153,7 +153,15 @@
       `G0 X0 Y0 Z${format(safeHeight)}`,
     ];
 
-    if (probe) lines.push('; Custom probe code', ...probe.split('\n'));
+    if (probe) {
+      lines.push(
+        '; Custom probe code',
+        ...probe.split('\n'),
+        // FluidNC needs the active XY position stated again after probing.
+        // The probe macro may change the controller's reported position.
+        'G0 X0 Y0',
+      );
+    }
 
     lines.push(
       `G0 Z${format(pierceHeight)}`,

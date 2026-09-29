@@ -76,6 +76,15 @@ test("a real, ordinary probe macro is accepted, including one with an F word", (
   assert.doesNotThrow(() => generate({ ...BASE, probeCode }));
 });
 
+test("restates the XY origin immediately after custom probe code", () => {
+  const lines = generate({ ...BASE, probeCode: "G38.2 Z-10 F50\nG10 L20 Z0" }).split("\n");
+  const firstProbeLine = lines.indexOf("G38.2 Z-10 F50");
+  assert.equal(lines[firstProbeLine - 2], "G0 X0 Y0 Z25");
+  const lastProbeLine = lines.indexOf("G10 L20 Z0");
+  assert.equal(lines[lastProbeLine + 1], "G0 X0 Y0");
+  assert.equal(lines[lastProbeLine + 2], "G0 Z3");
+});
+
 test("an actually malformed or doubled F/S/T word is caught, wherever it appears", () => {
   for (const probeCode of ["G38.2 Z-10 Ffast", "M3 Sabc", "T", "G1 X10 F100 F200"]) {
     assert.throws(() => generate({ ...BASE, probeCode }), /Custom probe code, line 1/);

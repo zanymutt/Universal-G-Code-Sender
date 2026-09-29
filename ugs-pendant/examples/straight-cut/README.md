@@ -12,6 +12,7 @@ G90
 G21                 ; or G20
 G0 X0 Y0 Z[safe height]
 [custom probe code, if provided]
+G0 X0 Y0           ; after custom probe code, if provided
 G0 Z[pierce height]
 M3
 G4 P[pierce delay]
@@ -30,11 +31,9 @@ leaves the final Start action to the main Dashboard controls.
 
 The opening `X0 Y0` states outright what every other line already assumes -
 that the cut starts at the active work origin - since the file otherwise
-never mentions whichever axis isn't being cut. Without a stated value for
-that axis anywhere in the file, UGS's own position tracking (and so the
-Dashboard visualizer) has no numeric value for it and drops the toolpath
-entirely; nothing renders even though the file runs on the machine exactly
-as documented above.
+never mentions whichever axis isn't being cut. The same `G0 X0 Y0` is emitted
+after custom probe code so the controller has the intended XY position stated
+again before the pierce and cut moves.
 
 **Custom probe code is checked before Generate accepts it.** UGS's parser
 treats any word starting with `F`, `S`, or `T` as a feed rate, spindle
