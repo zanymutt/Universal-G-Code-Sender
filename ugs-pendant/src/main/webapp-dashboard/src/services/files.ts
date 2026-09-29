@@ -10,8 +10,19 @@ import { WorkspaceFileList } from "../model/WorkspaceFileList";
 // it was.
 async function checkOk(response: Response): Promise<void> {
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`Request to ${response.url} failed (${response.status})${body ? `: ${body}` : ""}`);
+    // A backend exception comes back as a PendantError JSON body (see
+    // ExceptionMapper.java) - `{"errorMessage": "..."}`. Prefer that (the
+    // file/path and the real OS-level reason, e.g. a locked file or a
+    // network share that dropped out) over the raw response text, which is
+    // just that same JSON unparsed.
+    let reason = "";
+    try {
+      const body = await response.clone().json();
+      if (typeof body?.errorMessage === "string" && body.errorMessage) reason = body.errorMessage;
+    } catch {
+      reason = await response.text().catch(() => "");
+    }
+    throw new Error(`Request to ${response.url} failed (${response.status})${reason ? `: ${reason}` : ""}`);
   }
 }
 

@@ -24,13 +24,25 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 public class ExceptionMapper implements jakarta.ws.rs.ext.ExceptionMapper<Exception> {
+    private static final Logger LOGGER = Logger.getLogger(ExceptionMapper.class.getName());
 
     @Override
     public Response toResponse(Exception e) {
         if (e instanceof WebApplicationException) {
             return ((WebApplicationException) e).getResponse();
         }
+
+        // Nothing else logged this - the response body already carries e.getMessage()
+        // (see PendantError), but until now that was the *only* record of a resource
+        // method failing; nothing appeared in this app's own log at all. Confirmed
+        // while investigating a real failed save/open: the dashboard genuinely wasn't
+        // just showing a bad message, there was no server-side trace of the failure
+        // to check either.
+        LOGGER.log(Level.WARNING, "Unhandled exception in a dashboard API request", e);
 
         return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
                 .type(MediaType.APPLICATION_JSON_TYPE)

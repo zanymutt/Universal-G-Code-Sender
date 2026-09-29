@@ -434,7 +434,7 @@ const GcodeEditor = () => {
   const handleSave = () => {
     setIsSaving(true);
     doSave()
-      .catch(() => setError("Couldn't save this file."))
+      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't save this file."))
       .finally(() => setIsSaving(false));
   };
 

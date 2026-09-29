@@ -238,7 +238,7 @@ const SaveAsModal = ({ defaultFileName, getContent, onSaveToWorkspace, handleClo
         if (isBrowsingWorkspace) writeLastWorkspaceFolder(currentPath);
         handleClose();
       })
-      .catch(() => setError("Couldn't save the file."))
+      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't save the file."))
       .finally(() => setIsSaving(false));
   };
 

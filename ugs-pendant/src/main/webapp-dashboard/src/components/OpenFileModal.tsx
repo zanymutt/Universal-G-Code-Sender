@@ -307,7 +307,7 @@ const OpenFileModal = ({ handleClose, onPick }: Props) => {
       // anything, with no way to tell what actually happened. Left open
       // (not handleClose()) so the error is still visible, not dismissed
       // along with the modal.
-      .catch(() => setError(`Couldn't open "${basename(path)}".`))
+      .catch((err) => setError(err instanceof Error ? err.message : `Couldn't open "${basename(path)}".`))
       .finally(() => setIsLoading(false));
   };
 
@@ -343,7 +343,7 @@ const OpenFileModal = ({ handleClose, onPick }: Props) => {
         refreshFileState(dispatch);
         handleClose();
       })
-      .catch(() => setError("Couldn't open that file."))
+      .catch((err) => setError(err instanceof Error ? err.message : "Couldn't open that file."))
       .finally(() => {
         setIsLoading(false);
       });

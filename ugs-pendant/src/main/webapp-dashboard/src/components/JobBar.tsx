@@ -77,7 +77,7 @@ const JobBar = () => {
     setIsSavingBeforeRun(true);
     saveEditorContent()
       .then(() => setShowUnsavedConfirm(false))
-      .catch(() => setUnsavedSaveError("Couldn't save the file."))
+      .catch((err) => setUnsavedSaveError(err instanceof Error ? err.message : "Couldn't save the file."))
       .finally(() => setIsSavingBeforeRun(false));
   };
 
@@ -88,7 +88,7 @@ const JobBar = () => {
         setShowUnsavedConfirm(false);
         send();
       })
-      .catch(() => setUnsavedSaveError("Couldn't save the file."))
+      .catch((err) => setUnsavedSaveError(err instanceof Error ? err.message : "Couldn't save the file."))
       .finally(() => setIsSavingBeforeRun(false));
   };
 
