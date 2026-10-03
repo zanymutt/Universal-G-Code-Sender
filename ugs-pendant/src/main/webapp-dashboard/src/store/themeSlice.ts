@@ -5,9 +5,9 @@ export type DashboardTheme = "dark" | "light";
 const STORAGE_KEY = "ugs-dashboard-theme";
 
 const getInitialTheme = (): DashboardTheme => {
-  if (typeof window === "undefined") return "light";
+  if (typeof window === "undefined") return "dark";
   const saved = window.localStorage.getItem(STORAGE_KEY);
-  return saved === "dark" ? "dark" : "light";
+  return saved === "light" ? "light" : "dark";
 };
 
 type ThemeState = {
