@@ -87,6 +87,7 @@ const PluginManagerProvider = ({ children }: Props) => {
           plugin={openWindow.plugin}
           isFront={windowState.frontKey === openWindow.key}
           focusRequest={openWindow.focusRequest}
+          dockSlot={openWindow.dockSlot}
           onActivate={() => dispatchWindow({ type: "activate", key: openWindow.key })}
           initialOffset={{
             x: 80 + STAGGER_STEP * (index % STAGGER_MAX_STEPS),

@@ -88,3 +88,53 @@ test("a minimized window can't be activated; closing the front skips minimized s
   const closed = reduce(min, { type: "close", key: c.frontKey });
   assert.equal(closed.frontKey, a.frontKey);
 });
+
+test("windows open floating; dock records the slot without touching DOM order", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  assert.equal(b.windows[0].dockSlot, null);
+  const docked = reduce(b, { type: "dock", key: b.windows[0].key, slot: "pane-1" });
+  assert.equal(docked.windows[0].dockSlot, "pane-1");
+  assert.equal(docked.windows[0].minimized, false);
+  // JSON compare: the reducer runs in a vm context, so its arrays have a
+  // different prototype and strict deepEqual rejects them.
+  assert.equal(JSON.stringify(docked.windows.map(w => w.key)), JSON.stringify(b.windows.map(w => w.key)));
+  assert.equal(docked.windows[1], b.windows[1]);
+});
+test("docking over an occupied slot parks the previous plugin (minimized, still open), not closes it", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  const first = reduce(b, { type: "dock", key: b.windows[0].key, slot: "pane-1" });
+  const second = reduce(first, { type: "dock", key: b.windows[1].key, slot: "pane-1" });
+  assert.equal(second.windows.length, 2);
+  assert.equal(second.windows[1].dockSlot, "pane-1");
+  assert.equal(second.windows[0].dockSlot, null);
+  assert.equal(second.windows[0].minimized, true);
+  assert.equal(second.frontKey, b.windows[1].key);
+});
+test("plugins in different slots coexist", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  const s = reduce(reduce(b, { type: "dock", key: b.windows[0].key, slot: "pane-1" }),
+    { type: "dock", key: b.windows[1].key, slot: "pane-2" });
+  assert.equal(JSON.stringify(s.windows.map(w => [w.dockSlot, w.minimized])), JSON.stringify([["pane-1", false], ["pane-2", false]]));
+});
+test("float returns a docked window to floating and raises it; relaunch keeps it docked", () => {
+  const a = open(initial);
+  const docked = reduce(a, { type: "dock", key: a.windows[0].key, slot: "pane-1" });
+  const relaunched = open(docked);
+  assert.equal(relaunched.windows[0].dockSlot, "pane-1");
+  const floated = reduce(docked, { type: "float", key: a.windows[0].key });
+  assert.equal(floated.windows[0].dockSlot, null);
+  assert.equal(floated.frontKey, a.windows[0].key);
+  assert.equal(reduce(floated, { type: "float", key: a.windows[0].key }), floated);
+});
+test("a parked plugin restored from the tray comes back floating", () => {
+  const a = open(initial);
+  const b = open(a, { ...plugin, id: "other" });
+  const s = reduce(reduce(b, { type: "dock", key: b.windows[0].key, slot: "pane-1" }),
+    { type: "dock", key: b.windows[1].key, slot: "pane-1" });
+  const restored = reduce(s, { type: "restore", key: b.windows[0].key });
+  assert.equal(restored.windows[0].dockSlot, null);
+  assert.equal(restored.windows[0].minimized, false);
+});

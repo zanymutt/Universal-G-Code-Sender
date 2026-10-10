@@ -4,6 +4,7 @@ import { faMinus, faWindowMaximize, faWindowRestore, faXmark } from "@fortawesom
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useLayoutRect } from "../hooks/useLayoutRect";
+import { useDockRect } from "../hooks/useDockRect";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
 import {
@@ -35,6 +36,10 @@ type Props = {
   isFront: boolean;
   focusRequest: number;
   onActivate: () => void;
+  // Set when this window is docked into a layout slot (see useDockRect) rather
+  // than floating. Same iframe, same component instance - only the box it's
+  // laid out in changes, so nothing reloads when it docks or floats.
+  dockSlot?: string | null;
 };
 
 type SubscribableEvent = "status" | "line" | "theme";
@@ -81,10 +86,16 @@ type PickFileRequest = {
   reject: (error: Error) => void;
 };
 
-const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate }: Props) => {
+const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate, dockSlot = null }: Props) => {
   const dispatch = useAppDispatch();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
+  const docked = dockSlot !== null;
+  const dockRect = useDockRect(dockSlot);
+  // A ref for the size observer below, same reason as maximizedRef: its
+  // callback is registered once and must see the current value.
+  const dockedRef = useRef(false);
+  dockedRef.current = docked;
   useEffect(() => {
     // Focus the existing shell without reloading its iframe or losing plugin state.
     windowRef.current?.focus({ preventScroll: true });
@@ -116,7 +127,9 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     // noted as the baseline to restore to, but not worth persisting.
     let baseline = sizeRef.current === null;
     const observer = new ResizeObserver(() => {
-      if (maximizedRef.current || element.offsetWidth === 0) return;
+      // A docked window's size is its slot's, not something the person chose
+      // for the floating window - don't remember it as that.
+      if (maximizedRef.current || dockedRef.current || element.offsetWidth === 0) return;
       const size = { width: element.offsetWidth, height: element.offsetHeight };
       const known = sizeRef.current;
       if (known && Math.abs(known.width - size.width) < 1 && Math.abs(known.height - size.height) < 1) return;
@@ -544,7 +557,8 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         }}
       />
     )}
-    <div className={"pluginWindow" + (maximized ? " pluginWindowMaximized" : "")} ref={windowRef} tabIndex={-1}
+    <div className={"pluginWindow" + (maximized ? " pluginWindowMaximized" : "") + (docked ? " pluginWindowDocked" : "")}
+      ref={windowRef} tabIndex={-1}
       aria-label={plugin.name}
       onPointerDownCapture={onActivate}
       onFocusCapture={onActivate}
@@ -553,14 +567,25 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
       // visibility (not display:none) so the frame keeps its layout size -
       // a display:none iframe is 0x0, and plugins that size a canvas off
       // their viewport would see a bogus resize on restore.
-      style={{
-        ...(maximized
-          ? mainArea && { left: mainArea.left, top: mainArea.top, width: mainArea.width, height: mainArea.height }
-          : { left: position.x, top: position.y, width: sizeRef.current?.width, height: sizeRef.current?.height }),
-        zIndex: isFront ? 41 : 40,
-        visibility: minimized ? "hidden" : "visible",
-      }}>
-      <div
+      //
+      // Docked: laid over the slot's measured box (no box yet, or the slot is
+      // hidden, means hidden - the same visibility trick, so it keeps its
+      // last size). z-index sits under floating windows (40/41) so a floating
+      // plugin can still be dragged over a docked one.
+      style={docked
+        ? {
+            ...(dockRect && { left: dockRect.left, top: dockRect.top, width: dockRect.width, height: dockRect.height }),
+            zIndex: 30,
+            visibility: minimized || !dockRect ? "hidden" : "visible",
+          }
+        : {
+            ...(maximized
+              ? mainArea && { left: mainArea.left, top: mainArea.top, width: mainArea.width, height: mainArea.height }
+              : { left: position.x, top: position.y, width: sizeRef.current?.width, height: sizeRef.current?.height }),
+            zIndex: isFront ? 41 : 40,
+            visibility: minimized ? "hidden" : "visible",
+          }}>
+      {!docked && <div
         className="pluginWindowHeader"
         onPointerDown={handleHeaderPointerDown}
         onPointerMove={handleHeaderPointerMove}
@@ -582,7 +607,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         <button type="button" className="pluginWindowClose" onClick={onClose} aria-label="Close plugin" title="Close">
           <FontAwesomeIcon icon={faXmark} />
         </button>
-      </div>
+      </div>}
       <iframe
         ref={iframeRef}
         src={plugin.entryUrl}
@@ -602,7 +627,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         // never actually put it on the clipboard - confirmed on 2026-09-29).
         allow="clipboard-write"
       />
-      {!maximized && <div
+      {!maximized && !docked && <div
         className="pluginWindowResizeGrip"
         role="separator"
         aria-label="Resize plugin window"
