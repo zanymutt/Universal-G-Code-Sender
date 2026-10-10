@@ -15,7 +15,10 @@ import "./MacroGcodeEditor.scss";
 const editorTheme = EditorView.theme(
   {
     "&": { height: "100%", backgroundColor: "var(--dashboard-bg)" },
-    ".cm-content": { fontFamily: "monospace", color: "var(--dashboard-text)" },
+    // caretColor: CodeMirror's base theme sets the (native) caret to black on
+    // any theme not flagged dark, invisible on this dark background - follow
+    // the text color instead so it flips with the dashboard theme.
+    ".cm-content": { fontFamily: "monospace", color: "var(--dashboard-text)", caretColor: "var(--dashboard-text)" },
     ".cm-gutters": { backgroundColor: "var(--dashboard-bg)", color: "var(--dashboard-text-disabled)", border: "none" },
     ".cm-activeLine": { backgroundColor: "var(--dashboard-surface-subtle)" },
     ".cm-activeLineGutter": { backgroundColor: "var(--dashboard-surface-subtle)" },

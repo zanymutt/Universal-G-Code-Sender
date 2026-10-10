@@ -27,7 +27,10 @@ import "./GcodeEditor.scss";
 const editorTheme = EditorView.theme(
   {
     "&": { height: "100%", backgroundColor: "var(--dashboard-surface)" },
-    ".cm-content": { fontFamily: "monospace", color: "var(--dashboard-text)" },
+    // caretColor: CodeMirror's base theme sets the (native) caret to black on
+    // any theme not flagged dark, invisible on this dark surface - follow the
+    // text color instead so it flips with the dashboard theme.
+    ".cm-content": { fontFamily: "monospace", color: "var(--dashboard-text)", caretColor: "var(--dashboard-text)" },
     ".cm-gutters": { backgroundColor: "var(--dashboard-surface)", color: "var(--dashboard-text-disabled)", border: "none" },
     ".cm-activeLine": { backgroundColor: "var(--dashboard-bg)" },
     ".cm-activeLineGutter": { backgroundColor: "var(--dashboard-bg)" },

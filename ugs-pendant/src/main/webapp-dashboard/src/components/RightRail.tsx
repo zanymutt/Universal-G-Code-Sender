@@ -7,14 +7,12 @@ import MacrosPanel from "./MacrosPanel";
 import SpindleCoolantControls from "./SpindleCoolantControls";
 import OverrideControls from "./OverrideControls";
 import PluginListPanel from "./PluginListPanel";
-import { useAppDispatch } from "../hooks/useAppDispatch";
-import { uiActions } from "../store/uiSlice";
-import { SHOW_PANE_CONTENT_EVENT } from "./CenterPaneLayoutDemo";
+import MacroEditorModal from "./MacroEditorModal";
 import "./RightRail.scss";
 
 const RightRail = () => {
-  const dispatch = useAppDispatch();
   const [tab, setTab] = useState<"machine" | "overrides">("machine");
+  const [macroEditorOpen, setMacroEditorOpen] = useState(false);
 
   return (
     <div className="rightRail">
@@ -36,13 +34,7 @@ const RightRail = () => {
             variant="outline-secondary"
             className="rightRailEditButton"
             title="Edit macros"
-            onClick={() => {
-              // setCenterView still drives the old CenterPanel (only reachable
-              // via ?legacyLayout=1 - see CenterPanel.tsx); the window event
-              // is what the current pane-layout system actually listens for.
-              dispatch(uiActions.setCenterView("macros"));
-              window.dispatchEvent(new CustomEvent(SHOW_PANE_CONTENT_EVENT, { detail: { content: "macros" } }));
-            }}
+            onClick={() => setMacroEditorOpen(true)}
           >
             <FontAwesomeIcon icon={faPen} />
           </Button>
@@ -66,6 +58,7 @@ const RightRail = () => {
           <OverrideControls />
         </div>
       </div>
+      <MacroEditorModal show={macroEditorOpen} onClose={() => setMacroEditorOpen(false)} />
     </div>
   );
 };

@@ -1,0 +1,15 @@
+// Wide enough for the 300px macro list beside the full form without
+// tripping MacroEditor's own narrow-width container query.
+.macroEditorModalDialog {
+  max-width: min(1040px, 96vw);
+}
+
+// MacroEditor fills its parent's height (height: 100%), so the body needs a
+// definite one - capped so a short viewport still leaves room for the header
+// and footer.
+.macroEditorModalBody {
+  padding: 0;
+  height: 70vh;
+  max-height: 640px;
+  overflow: hidden;
+}

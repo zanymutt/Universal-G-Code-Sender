@@ -43,9 +43,12 @@ type Props = {
   // full center panel - trims a few layouts (button groups to two rows) so
   // the form stays usable at roughly half the normal width.
   compact?: boolean;
+  // Reports whether there are unsaved edits, so a host that can close this
+  // editor out from under the person (MacroEditorModal) can warn first.
+  onDirtyChange?: (dirty: boolean) => void;
 };
 
-const MacroEditor = ({ compact = false }: Props) => {
+const MacroEditor = ({ compact = false, onDirtyChange }: Props) => {
   const dispatch = useAppDispatch();
   const macros = useAppSelector((state) => state.macros.macros);
   const loaded = useAppSelector((state) => state.macros.loaded);
@@ -71,6 +74,10 @@ const MacroEditor = ({ compact = false }: Props) => {
 
   const original = selectedUuid ? macros.find((m) => m.uuid === selectedUuid) : undefined;
   const isDirty = draft !== null && (isNewDraft || JSON.stringify(draft) !== JSON.stringify(original));
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   const persist = (newList: Macro[]): Promise<Macro[]> => {
     setIsSaving(true);
