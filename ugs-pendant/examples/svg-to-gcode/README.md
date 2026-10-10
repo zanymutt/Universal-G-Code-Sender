@@ -1,6 +1,24 @@
-# SVG to G-code — Dashboard plugin
+# SVG / DXF to G-code — Dashboard plugin
 
-Version 0.6.0 includes passive drag-knife compensation and is a working release for Z-lift plotters, drag knives, and vector lasers. It generates millimeter, absolute-coordinate G-code for inspection in UGS Dashboard. It never sends machine commands or starts a job.
+Version 0.7.0 imports SVG and ASCII 2D DXF, including passive drag-knife compensation for Z-lift plotters, drag knives, and vector lasers. It generates millimeter, absolute-coordinate G-code for inspection in UGS Dashboard. It never sends machine commands or starts a job.
+
+## DXF import (0.7.0)
+
+Choose an `.svg` or `.dxf` in the same file picker. DXF supports model-space LINE, ARC, CIRCLE, LWPOLYLINE and ordinary 2D POLYLINE/VERTEX/SEQEND, including positive and negative bulges. Analytic lines/arcs share the SVG curve sampler, cleanup, tangents and knife compensation. Ordering, picked starts, individual reversal, cut-order labels, presets, G-code generation and the Dashboard Save As bridge work with both formats.
+
+DXF units default to **Automatic - from DXF**, using `$INSUNITS`. Inch, foot, millimeter, centimeter, meter, mil, yard, micron and decimeter declarations are supported. Unitless, missing or unsupported units require an explicit choice in **Artwork > DXF units**, then **Reimport DXF with these units**. Overrides include millimeters, inches, centimeters, meters and feet; all output remains millimeters. Units are saved in presets; older presets default to Automatic. SVG's pixel DPI does not affect DXF. Coordinates retain their original XY directions and position before the existing origin/scale/rotation controls. DXF has no SVG page, so its page-origin option uses artwork extents.
+
+Connected LINE/ARC endpoints on the same layer join into contours only at degree-two junctions, using a fixed 0.0000001 mm matching tolerance for export rounding. Branches remain separate; different layers and ordinary polylines are not joined together. A joined contour uses its first entity's name plus a joined count. Hidden/frozen layers and paper-space entities are skipped. Text, dimensions, leaders, points and viewport annotations are skipped with a visible count; polyline widths are ignored with a notice. Binary DXF, nonzero Z/thickness, tilted/reversed extrusion, fitted/3D polylines, meshes, INSERT blocks, SPLINE, ELLIPSE, HATCH and other unsupported geometry reject the whole import rather than silently generating partial cutting geometry. Convert these to plain 2D lines/arcs/polylines first. DWG is not supported.
+
+Limits: 5 MB file, 10,000 geometry entities before joining, 500 resulting contours, 3,000 segments per contour and the existing 100,000 sampled-point limit. Drawing units affect sampling size; an unexpectedly large drawing can hit these limits. Parsing/joining run on the UI thread within these limits; curve sampling runs in the cancellable worker with a yielding fallback.
+
+Validation: run `node dxf.test.cjs`, plus `core.test.cjs`, `knife.test.cjs`, `geometry.test.cjs` and `cleanup.test.cjs`. The downloaded ezdxf sample at the workspace's `dxf-samples/1_polylines.dxf` declares meters; its numeric drawing extents are about 224 by 200. With an explicit millimeter override it produces 10 contours (8 closed), joining 74 line/arc entities and reporting 9 skipped TEXT labels. The companion `2d-contours-mm.dxf` changes only the units declaration to millimeters for convenient testing, intentionally making its physical size 1000 times smaller. The original remains unchanged.
+
+Manual check: close/reopen **SVG to G-code** in UGS Desktop Dashboard, choose `2d-contours-mm.dxf`, and leave units on Automatic. Expect 10 paths and about 223.97 x 199.98 mm. Change path direction/order, Generate G-code and Save As into Dashboard. With the original sample, select Millimeters and Reimport first. Browser checks cover both samples, unitless-file rejection, unit overrides, preset reload, plotter and knife generation, SVG switching, small windows, cancellation, worker fallback and the simulated Save As bridge. No physical cuts or new live Dashboard save were performed for this update.
+
+Source references: [ezdxf sample](https://github.com/mozman/ezdxf/blob/master/examples/edgeminer/1_polylines.dxf), [Autodesk DXF reference](https://images.autodesk.com/adsk/files/autocad_2014_pdf_dxf_reference_enu.pdf).
+
+Changed runtime files: `dxf-importer.js` (new), `importer.js` (shared worker entry), `app.js`, `index.html`, `plugin.json`, and this README. The plugin folder/id stays `svg-to-gcode`; installation preserves `settings.json`. Reopen the plugin after deployment; no backend rebuild or UGS restart is required.
 
 ## Bounded nearby-node merging (0.6.0)
 

@@ -8,12 +8,12 @@
   const tabs=[...document.querySelectorAll('[role=tab]')];
   function showTab(tab){tabs.forEach(t=>{const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;});window.Dropdowns?.refresh();}
   tabs.forEach((tab,i)=>{tab.onclick=()=>showTab(tab);tab.onkeydown=e=>{let index;if(e.key==='ArrowRight')index=(i+1)%tabs.length;else if(e.key==='ArrowLeft')index=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;e.preventDefault();showTab(tabs[index]);tabs[index].focus({preventScroll:true});};});
-  let documentData=null,svgText='',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
+  let documentData=null,svgText='',fileFormat='svg',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
   let importController=null;
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
-  $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or click Reimport.');};
+  $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
   function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
@@ -24,7 +24,7 @@
   function applyView(){if(viewBox)$('preview').setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);$('zoomLevel').textContent=fitBox&&viewBox?Math.round(fitBox.w/viewBox.w*100)+'%':'100%';}
   function draw(){
     window.Dropdowns?.refresh();
-    const svg=$('preview');svg.replaceChildren();if(!job){el('text',{x:50,y:50,'text-anchor':'middle','font-size':5},svg).textContent='Import an SVG to preview toolpaths';return;}
+    const svg=$('preview');svg.replaceChildren();if(!job){el('text',{x:50,y:50,'text-anchor':'middle','font-size':5},svg).textContent='Import SVG or DXF to preview toolpaths';return;}
     const b=SvgCam.bounds([...job.paths.flatMap(p=>p.points),...(job.knife?[{x:job.knife.bounds.minX,y:job.knife.bounds.minY},{x:job.knife.bounds.maxX,y:job.knife.bounds.maxY}]:[]),{x:0,y:0}]),size=Math.max(b.maxX-b.minX,b.maxY-b.minY,1),pad=size*.08;
     fitBox={x:b.minX-pad,y:-b.maxY-pad,w:Math.max(b.maxX-b.minX,1)+2*pad,h:Math.max(b.maxY-b.minY,1)+2*pad};
     if(!viewBox)viewBox={...fitBox};applyView();
@@ -73,7 +73,7 @@
     try {
       const zs=SvgCam.depths(o);$('passes').textContent=`${zs.length} pass${zs.length===1?'':'es'} per path · Z: ${zs.length>8?zs.slice(0,3).join(', ')+', …, '+zs.at(-1):zs.map(v=>Number(v.toFixed(4))).join(', ')} mm`;
       if(!documentData){draw();return;}
-      if(importDirty)throw Error('Click Reimport to apply SVG import settings.');
+      if(importDirty)throw Error('Click Reimport to apply import settings.');
       job=SvgCam.plan(documentData,o,locks,directions);$('generate').disabled=false;
       const selected=$('selected').value;
       $('selected').replaceChildren(...job.paths.map(p=>new Option(`Path ${p.number} - ${p.name}${p.closed?' (closed)':' (open)'}`,p.id)));
@@ -85,12 +85,12 @@
   }
   async function importSvg(){
     const request=++loadId;importController?.abort();const controller=new AbortController();importController=controller;
-    const source=svgText,options=Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),started=performance.now();
-    busy('Opening SVG…');
+    const source=svgText,format=fileFormat,options={...Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),dxfUnits:$('dxfUnits').value},started=performance.now();
+    busy('Opening '+format.toUpperCase()+'…');
     invalidate();job=null;documentData=null;locks={};directions={};$('generate').disabled=true;$('selected').replaceChildren();
     for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=true;
     try{
-      const imported=await SvgImport.parseAsync(source,options,{signal:controller.signal,onProgress:p=>{if(request===loadId)busy(p.stage+(p.total?' · path '+p.path+' / '+p.total:''),p.fraction);}});
+      const imported=await (format==='dxf'?DxfImport:SvgImport).parseAsync(source,options,{signal:controller.signal,onProgress:p=>{if(request===loadId)busy(p.stage+(p.total?' · path '+p.path+' / '+p.total:''),p.fraction);}});
       if(request!==loadId)return;
       documentData=imported;
       importDirty=false;
@@ -104,22 +104,24 @@
   $('file').addEventListener('change',async()=>{
     const file=$('file').files[0];if(!file)return;cancelImport();const request=++loadId;busy('Reading '+file.name+'…');
     invalidate();documentData=null;job=null;$('generate').disabled=true;$('reimport').disabled=true;$('preview').replaceChildren();
-    if(file.size>5000000){endBusy();message('SVG exceeds 5 MB.',true);return;}
-    try{const text=await file.text();if(request!==loadId)return;svgText=text;$('reimport').disabled=false;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
+    if(file.size>5000000){endBusy();message('File exceeds 5 MB.',true);return;}
+    try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('reimport').disabled=false;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
   });
   $('reimport').onclick=importSvg;
+  $('reimportDxf').onclick=importSvg;
+  function svgExample(){fileFormat='svg';$('dxfControls').hidden=true;$('dpi').disabled=false;}
   $('example').onclick=()=>{
-    loadId++;
+    svgExample();loadId++;
     svgText='<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="outer" x="5" y="5" width="70" height="50" rx="4"/><circle id="hole" cx="20" cy="20" r="6"/><path id="wave" d="M32 20 C40 5 55 35 65 18 M15 42 Q40 22 65 42"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
-  importFields.forEach(id=>$(id).addEventListener('input',()=>{cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply SVG import settings.');}));
+  [...importFields,'dxfUnits'].forEach(id=>$(id).addEventListener('input',()=>{cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
   [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift'].forEach(id=>$(id).addEventListener('input',()=>{
     if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';update();
   }));
   $('knifeOverlay').onchange=draw;
   $('knifeCalibration').onclick=()=>{
-    loadId++;svgText='<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="55mm" viewBox="0 0 90 55"><path id="square" d="M10 10 H30 V30 H10 Z"/><circle id="circle" cx="48" cy="20" r="10"/><path id="triangle" d="M65 30 L75 10 L85 30 Z"/><path id="open-line" d="M10 45 H30"/></svg>';
+    svgExample();loadId++;svgText='<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="55mm" viewBox="0 0 90 55"><path id="square" d="M10 10 H30 V30 H10 Z"/><circle id="circle" cx="48" cy="20" r="10"/><path id="triangle" d="M65 30 L75 10 L85 30 Z"/><path id="open-line" d="M10 45 H30"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&pick){setPick(null);message('Point picking canceled.');}});
@@ -250,7 +252,7 @@
     host('subscribe',{event:'theme'}).catch(()=>{});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse',...importFields];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse',...importFields,'dxfUnits'];
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));
     presets.forEach((p,i)=>$('presets').append(new Option(p.name,String(i))));
@@ -268,7 +270,8 @@
   };
   $('loadPreset').onclick=()=>{
     const preset=presets[Number($('presets').value)];if($('presets').value===''||!preset)return;
-    const oldImport=JSON.stringify(importFields.map(k=>$(k).value));
+    const oldImport=JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value));
+    $('dxfUnits').value=preset.values.dxfUnits??'auto';
     for(const [k,v]of Object.entries({mergeDistance:.001,curveSegments:12,tolerance:.01,equalDistance:0,outputTolerance:.01}))$(k).value=preset.values[k]??v;
     $('cleanup').value=Object.hasOwn(preset.values,'cleanup')?preset.values.cleanup:'0';
     if(preset.values.mode==='knife'){$('knifeAlign').checked=true;$('knifeLift').checked=true;knifeNumeric.forEach(k=>$(k).value=({knifeArcAngle:'10',knifeOffset:'0.45',knifePasses:'1',knifeAngle:'30',knifeFeed:'200',knifeLead:'0',knifeHeading:'0'})[k]??'');}
@@ -280,7 +283,7 @@
       else {$('surface').value='';$('final').value='';}
     }
     $('presetName').value=preset.name;
-    if(svgText&&oldImport!==JSON.stringify(importFields.map(k=>$(k).value)))importSvg();else update();
+    if(svgText&&oldImport!==JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value)))importSvg();else update();
     message('Loaded preset: '+preset.name+(migrated?'. Previous fixed cut Z was kept as Surface and Final Z; repeats are preserved. Set Surface / Final / Step down for progressive passes.':''));
   };
   $('deletePreset').onclick=async()=>{

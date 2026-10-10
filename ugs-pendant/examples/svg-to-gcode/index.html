@@ -1,8 +1,8 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SVG to G-code</title><link rel="stylesheet" href="style.css"></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SVG / DXF to G-code</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>SVG to G-code <small>Preview · 0.6.0</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
-<div class="importBar"><label>SVG file<input id="file" type="file" accept=".svg,image/svg+xml"></label><button id="example">Load example artwork</button></div></header>
+<header><h1>SVG / DXF to G-code <small>Preview · 0.7.0</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
+<div class="importBar"><label>SVG or DXF file<input id="file" type="file" accept=".svg,.dxf,image/svg+xml,application/dxf,image/vnd.dxf"></label><button id="example">Load example artwork</button></div></header>
 <div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
 <section class="settings">
@@ -15,10 +15,11 @@
 <p class="hint">Saved in UGS across sessions. Includes import, tool, origin and ordering settings; excludes artwork and individual path edits. Use an existing name to replace it.</p>
 </fieldset>
 <fieldset id="panel-artwork" role="tabpanel" aria-labelledby="tab-artwork"><legend>1 · Artwork</legend>
+<div id="dxfControls" hidden><label>DXF units<select id="dxfUnits"><option value="auto">Automatic - from DXF</option><option value="mm">Millimeters</option><option value="in">Inches</option><option value="cm">Centimeters</option><option value="m">Meters</option><option value="ft">Feet</option></select></label><button id="reimportDxf" type="button">Reimport DXF with these units</button><p class="hint">Choose units explicitly if the file is unitless or its size looks wrong. Supports ASCII 2D lines, arcs, circles and polylines (including bulged arcs). Connected lines/arcs on the same layer join into contours. Text and annotations are skipped with a notice. Convert blocks, splines and hatches to supported geometry first.</p></div>
 <div class="pair"><label>Scale (%)<input id="scale" type="number" value="100" min="0.01" step="1"></label><label>Rotation (° CCW)<input id="rotation" type="number" value="0" step="1"></label></div>
-<div class="pair"><label>Origin bounds<select id="originBounds"><option value="artwork">Artwork</option><option value="page">SVG page</option></select></label><label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Center</option><option value="custom">Custom</option></select></label></div>
+<div class="pair"><label>Origin bounds<select id="originBounds"><option value="artwork">Artwork</option><option value="page">SVG page / DXF extents</option></select></label><label>Origin<select id="origin"><option value="bottom-left">Bottom left</option><option value="bottom-right">Bottom right</option><option value="top-left">Top left</option><option value="top-right">Top right</option><option value="center">Center</option><option value="custom">Custom</option></select></label></div>
 <div class="pair"><label>Custom X (mm)<input id="originX" type="number" value="0" step="0.1"></label><label>Custom Y (mm)<input id="originY" type="number" value="0" step="0.1"></label></div>
-<button id="pickOrigin" disabled>Pick origin in preview</button><p class="hint">Custom coordinates are in the scaled, rotated SVG coordinate system (Y upward). This changes output coordinates, not machine zero.</p>
+<button id="pickOrigin" disabled>Pick origin in preview</button><p class="hint">Custom coordinates are in the scaled, rotated artwork coordinate system (Y upward). This changes output coordinates, not machine zero.</p>
 </fieldset>
 <fieldset id="panel-tool" role="tabpanel" aria-labelledby="tab-tool" hidden><legend>2 · Tool and passes</legend>
 <label>Tool mode<select id="mode"><option value="plotter">Plotter — Z lift</option><option value="knife">Drag knife — offset compensated</option><option value="laser">Laser — M3/M4 power control</option></select></label>
@@ -49,13 +50,13 @@
 <div class="pair"><label>S value / laser power<input id="power" type="number" value="100" min="0"></label><label>Configured maximum S<input id="powerMax" type="number" value="1000" min="1"></label></div>
 </fieldset>
 <fieldset id="panel-paths" role="tabpanel" aria-labelledby="tab-paths" hidden><legend>3 · Paths</legend>
-<label>Order<select id="order"><option value="svg">Original SVG order</option><option value="nearest">Reduce travel</option></select></label>
+<label>Order<select id="order"><option value="svg">Original file order</option><option value="nearest">Reduce travel</option></select></label>
 <label class="check"><input id="inner" type="checkbox" checked>Inner contours first</label><label class="check"><input id="largest" type="checkbox">Largest closed contour last</label>
-<label>Start points<select id="start"><option value="original">Original SVG starts</option><option value="auto">Automatic — nearest point</option></select></label>
+<label>Start points<select id="start"><option value="original">Original path starts</option><option value="auto">Automatic — nearest point</option></select></label>
 <label class="check"><input id="reverse" type="checkbox">Allow automatic reversal of open paths</label>
 <label>Closed-path overlap (mm)<input id="overlap" type="number" value="0" min="0" step="0.1"></label>
-<label>Selected path<select id="selected"><option>Import an SVG first</option></select></label>
-<label>Selected path direction<select id="pathDirection" disabled><option value="auto">Use start / automatic settings</option><option value="forward">Original SVG direction</option><option value="reverse">Reverse SVG direction</option></select></label>
+<label>Selected path<select id="selected"><option>Import SVG or DXF first</option></select></label>
+<label>Selected path direction<select id="pathDirection" disabled><option value="auto">Use start / automatic settings</option><option value="forward">Original path direction</option><option value="reverse">Reverse path direction</option></select></label>
 <div class="pair"><button id="pickStart" disabled>Pick start on path</button><button id="clearStarts" disabled>Clear manual starts</button></div>
 <p class="hint">Click near the selected path to lock a start. Open paths use an endpoint. Manual starts and direction choices survive order changes; reimport clears them. Reversing a closed path keeps its start. For open paths, picking an endpoint sets direction; changing direction clears that endpoint lock.</p>
 </fieldset>
@@ -75,13 +76,13 @@
 <label>Endpoint equality (mm; 0 = off)<input id="equalDistance" type="number" value="0.01" min="0" max="1" step="0.001"></label>
 <p class="hint">Closes a single path when its start and end are this close. Does not join separate paths. Use 0 to preserve intentional tiny openings.</p>
 <button id="reimport" disabled>Reimport with these settings</button>
-<p class="hint">Reimport applies the controls above and clears manual starts and directions. Original SVG files are unchanged. Import distances are measured before artwork scaling.</p>
+<p class="hint">Reimport applies the controls above and clears manual starts and directions. Original files are unchanged. Import distances are measured before artwork scaling.</p>
 <label>Output simplification tolerance (mm; 0 = off)<input id="outputTolerance" type="number" value="0.01" min="0" max="1" step="0.001"></label>
 <p class="hint">Removes redundant output points within this distance of the sampled path, after scaling. In knife mode this applies to the holder path; it is not a guaranteed blade-tip error. Starts, ends, Z changes and explicit swivels are retained. All tool modes omit repeated feed words.</p>
 </fieldset>
 </section>
 <section class="work" id="work">
-<div class="previewCard"><div id="summary">Import an SVG to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel / tight turn</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import an SVG to preview toolpaths</text></svg><p class="hint">Green = other cuts · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel, pinch, or +/− to zoom · drag to pan</p></div>
+<div class="previewCard"><div id="summary">Import SVG or DXF to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel / tight turn</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import SVG or DXF to preview toolpaths</text></svg><p class="hint">Green = other cuts · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel, pinch, or +/− to zoom · drag to pan</p></div>
 <div id="divider" role="separator" tabindex="0" aria-label="Resize preview and G-code" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" title="Drag to resize; arrow keys adjust; double-click resets"></div>
 <div class="codePane">
 <div id="message" role="status" aria-live="polite">Nothing is sent to the machine by this plugin.</div>
@@ -90,5 +91,5 @@
 </div>
 </section>
 </main>
-<script src="core.js"></script><script src="geometry.js"></script><script src="importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
+<script src="core.js"></script><script src="geometry.js"></script><script src="importer.js"></script><script src="dxf-importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
 </body></html>

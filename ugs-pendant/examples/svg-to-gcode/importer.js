@@ -133,6 +133,11 @@
     abort();onProgress({stage:'Reading SVG',fraction:0});
     await new Promise(resolve=>setTimeout(resolve,0));abort();
     const prepared=prepare(text,options);abort();
+    return processPreparedAsync(prepared,{signal,onProgress});
+  }
+  async function processPreparedAsync(prepared,{signal,onProgress=()=>{}}={}){
+    const abort=()=>{if(signal?.aborted)throw new DOMException('Import canceled.','AbortError');};
+    abort();
     // Blob workers also work in the Dashboard's opaque-origin sandbox. If its
     // content policy blocks workers, the same generator yields between chunks.
     try{
@@ -153,5 +158,5 @@
       return step.value;
     }
   }
-  window.SvgImport={parse,parseAsync,prepare,splitPath};
+  window.SvgImport={parse,parseAsync,prepare,splitPath,processPreparedAsync};
 })();
