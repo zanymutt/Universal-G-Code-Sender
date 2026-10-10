@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>THC Control Panel</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="thc-panel-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body data-view="link">
+<div class="app">
+  <div class="stickyTop">
+    <header class="shell">
+      <div class="brand"><strong>THC</strong><span class="brandSub">Control Panel</span></div>
+      <nav class="nav" role="tablist" aria-label="Workspace">
+        <button type="button" role="tab" id="navOperate" data-view="operate" aria-selected="false" title="Operate"><span class="navIcon" aria-hidden="true">&#9654;</span><span class="navLabel">Operate</span></button>
+        <button type="button" role="tab" id="navSettings" data-view="settings" aria-selected="false" title="Settings"><span class="navIcon" aria-hidden="true">&#9881;</span><span class="navLabel">Settings</span></button>
+        <button type="button" role="tab" id="navLink" data-view="link" aria-selected="true" title="Link / connection"><span class="dot" id="linkDot"></span><span class="navIcon" aria-hidden="true">&#8644;</span><span class="navLabel">Link</span></button>
+      </nav>
+    </header>
+    <div class="liveStrip" id="liveStrip" aria-label="Live readout">
+      <span title="Current voltage"><span class="k">Current</span><span class="v vRed" id="stripV">--</span></span>
+      <span title="Setpoint voltage"><span class="k">Setpoint</span><span class="v vGreen" id="stripSp">--</span></span>
+      <span class="modeTag" id="stripMode" data-mode="" title="THC mode">--</span>
+      <span class="v lockTag" id="stripLock" title="Interlock">--</span>
+    </div>
+  </div>
+  <div id="offlineBar" class="offlineBar" role="status" hidden></div>
+
+  <main class="views">
+  <!-- ===================== OPERATE ===================== -->
+  <section class="view" data-view="operate">
+    <div class="col opCol">
+      <!-- Order below follows the user's explicit reorder request: voltage
+           tiles, mode/test, pills+up/down, test voltage, output/position,
+           jog/calibrate, interlock+raw - each its own card, matching this
+           page's existing one-concern-per-card convention (same pattern
+           Mode/Test run, Jog/Calibrate, Datalog already used, rather than
+           inventing a new "sub-section within one big card" convention). -->
+      <div class="card">
+        <div class="cardBody voltGrid">
+          <div class="stat statBig statRed"><span class="statLabel">Current voltage</span><span class="statValue" id="rPlasma">--</span></div>
+          <div class="stat statBig statGreen"><span class="statLabel">Setpoint voltage</span><span class="statValue" id="rSetpoint">--</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="cardHeader"><h2>Mode / Test run</h2></header>
+        <div class="cardBody">
+          <div class="modeGrid">
+            <button type="button" class="modeBtn modeOff" id="modeOffBtn">OFF</button>
+            <button type="button" class="modeBtn modeAvg" id="modeAvgBtn">AVG</button>
+            <button type="button" class="modeBtn modePreset" id="modePresetBtn">PRE-SET</button>
+          </div>
+          <button type="button" id="testRunBtn" class="toggleBtn" style="width:100%; margin-top:6px;">Test run: OFF</button>
+        </div>
+      </div>
+
+      <div class="card statusCard">
+        <div class="cardBody statusRow">
+          <div class="pillGrid">
+            <span class="pill" id="pArcOk">Arc OK</span>
+            <span class="pill" id="pCoolant">Coolant</span>
+            <span class="pill" id="pAntidive">Anti-dive</span>
+            <span class="pill" id="pVoidsense">Void-sense</span>
+            <span class="pill" id="pCut">In cut</span>
+            <span class="pill" id="pTest">Test run</span>
+          </div>
+          <div class="zDirStack">
+            <div class="zDirItem" id="zDirUp">&#9650; UP</div>
+            <div class="zDirItem" id="zDirOk">&#9679; OK</div>
+            <div class="zDirItem" id="zDirDown">&#9660; DOWN</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardBody">
+          <div class="stat"><span class="statLabel">Test run avg voltage</span><span class="statValue" id="rTestVoltage">--</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardBody statGrid">
+          <div class="stat"><span class="statLabel">Output</span><span class="statValue" id="rOutput">--</span></div>
+          <div class="stat"><span class="statLabel">Position</span><span class="statValue" id="rPos">--</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardBody jogGrid">
+          <button id="jogUp" aria-label="Z up">Z &#9650;</button>
+          <button id="jogDown" aria-label="Z down">Z &#9660;</button>
+          <button id="calibrateBtn">Calibrate<span id="calOffsetReadout" class="calOffsetReadout">--</span></button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="cardBody">
+          <div id="interlockBanner" class="banner">Interlock clear - jog/calibrate allowed</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="cardHeader"><h2>Datalog</h2></header>
+        <div class="cardBody">
+          <p class="hint" style="margin-top:0">The THC buffers samples internally and sends them in small batches, independent of the live sync rate - recorded rows aren't limited by how often the stat tiles above refresh.</p>
+          <div class="row">
+            <button id="recordBtn">Start recording</button>
+            <button id="downloadLogBtn">Save CSV</button>
+          </div>
+          <p class="hint">Rows recorded: <span id="recCount">0</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section class="view" data-view="settings">
+    <div class="col">
+      <div class="card">
+        <nav class="tabs" role="tablist" aria-label="Settings">
+          <button type="button" role="tab" data-tab="presets" aria-selected="true">Presets</button>
+          <button type="button" role="tab" data-tab="thc" aria-selected="false">THC</button>
+          <button type="button" role="tab" data-tab="movement" aria-selected="false">Movement</button>
+          <button type="button" role="tab" data-tab="voltage" aria-selected="false">Voltage</button>
+          <button type="button" role="tab" data-tab="sync" aria-selected="false">Sync</button>
+        </nav>
+        <div class="settingsBody">
+          <div class="tabPanel" data-panel="presets">
+            <p class="hint" style="margin-top:0">Reads/writes the SAME settings.csv the Sunton's SD card uses - parsed and built entirely in this browser, nothing uploaded anywhere. Loading a preset sends its whole settings group in one command; Add/Update capture the THC's current LIVE settings, never a typed value. Save settings.csv gives you the updated file to copy onto the SD card by hand.</p>
+            <input type="file" id="settingsFile" accept=".csv">
+            <div class="presetControls">
+              <button id="prevPresetBtn" disabled>&#9664;</button>
+              <select id="presetSelect" disabled><option>(load a file first)</option></select>
+              <button id="nextPresetBtn" disabled>&#9654;</button>
+            </div>
+            <div class="presetActions">
+              <button id="loadPresetBtn" class="primary" disabled>Load &amp; sync to THC</button>
+              <input id="newPresetName" aria-label="New preset name" placeholder="New preset name" autocomplete="off" spellcheck="false">
+              <button id="addPresetBtn">Add as new (from live)</button>
+              <button id="updatePresetBtn" disabled>Update selected (from live)</button>
+              <button id="deletePresetBtn" disabled>Delete selected</button>
+              <button id="downloadSettingsBtn" disabled>Save settings.csv</button>
+            </div>
+            <div id="presetPreview"></div>
+            <p id="presetStatus" class="hint"></p>
+          </div>
+
+          <div class="tabPanel" data-panel="thc" hidden><table class="fieldTable" id="thcTable"></table></div>
+          <div class="tabPanel" data-panel="movement" hidden>
+            <table class="fieldTable" id="movementTable"></table>
+            <p class="hint">minSpeed/maxSpeed/ultimateMax are stored as steps/s on the wire; shown and edited here in mm/min, matching the Sunton's own conversion. Needs at least one telemetry frame first so stepsPerMm is known.</p>
+            <div class="card" style="margin-top:10px;">
+              <header class="cardHeader"><h2>Speed curve preview</h2><span class="muted">speed = a&middot;|&Delta;V|<sup>n</sup> + b, clamped to [min, ultimate max]</span></header>
+              <div class="cardBody">
+                <svg id="curveSvg" viewBox="0 0 460 280" style="width:100%; height:auto; display:block;"></svg>
+                <p class="hint" style="margin-top:6px">Live preview of the actual firmware formula (main.cpp's process(), not an approximation) - <span style="color:var(--plugin-danger)">red dot</span> = (min voltage, min speed), <span style="color:var(--plugin-good)">green dot</span> = (max voltage, max speed). Updates as you type in the fields above, before you Send anything.</p>
+              </div>
+            </div>
+          </div>
+          <div class="tabPanel" data-panel="voltage" hidden>
+            <table class="fieldTable" id="voltageTable"></table>
+            <div class="card" style="margin-top:10px;">
+              <header class="cardHeader"><h2>Rolling voltage (3s)</h2><span class="muted" id="voltGraphRange">--</span></header>
+              <div class="cardBody">
+                <svg id="voltGraphSvg" viewBox="0 0 460 220" style="width:100%; height:auto; display:block;"></svg>
+                <p class="hint" style="margin-top:6px">Raw plasma voltage, newest on the right, scrolling left as it ages past 3s - the y-axis auto-scales to whatever range the signal is actually in right now (tight at idle, widens as voltage rises), so smoothing/filtering changes here (Num averaged readings, Num realtime median samples, Exponential filter alpha) show up clearly instead of being lost against a fixed axis.</p>
+              </div>
+            </div>
+          </div>
+          <div class="tabPanel" data-panel="sync" hidden><table class="fieldTable" id="syncTable"></table></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== LINK (connection + diagnostics) ===================== -->
+  <section class="view" data-view="link">
+    <div class="col linkCol">
+      <div class="card">
+        <header class="cardHeader"><h2>Connect to THC</h2><span id="status" class="pill bad">disconnected</span></header>
+        <div class="cardBody">
+          <label>THC address
+            <input id="host" class="linkAddress" placeholder="e.g. 10.0.2.146" inputmode="decimal" autocomplete="off" spellcheck="false">
+          </label>
+          <div class="linkRow">
+            <button id="connectBtn" class="primary">Connect</button>
+            <button id="disconnectBtn">Disconnect</button>
+          </div>
+          <p class="hint" id="linkHint">The THC's IP is shown in its serial log on boot. This window opens on Link until a connection is up, then jumps to Operate.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="cardHeader"><h2>Diagnostics</h2></header>
+        <div class="cardBody">
+          <dl class="diag">
+            <div><dt>Link</dt><dd id="dState">disconnected</dd></div>
+            <div><dt>Address</dt><dd id="dHost">--</dd></div>
+            <div><dt>Frame rate</dt><dd id="dFps">--</dd></div>
+            <div><dt>Last frame</dt><dd id="dAge">--</dd></div>
+            <div><dt>Frames received</dt><dd id="dFrames">0</dd></div>
+            <div><dt>Missed frames</dt><dd id="dGaps">0</dd></div>
+            <div><dt>THC uptime</dt><dd id="dUptime">--</dd></div>
+            <div><dt>Sync interval</dt><dd id="dSync">--</dd></div>
+          </dl>
+          <div id="diagWarn" class="diagWarn" hidden></div>
+          <p class="hint">Sync interval only sets how often live readouts update. The datalog is buffered separately on the THC and is unaffected by it.</p>
+          <details class="rawFrame">
+            <summary>Raw data</summary>
+            <p id="frameInfo" class="rawStats">no frames yet</p>
+            <pre id="raw">(nothing yet)</pre>
+          </details>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="cardHeader"><h2>THC WiFi</h2></header>
+        <div class="cardBody">
+          <div class="linkRow" style="margin-top:0">
+            <button id="forgetBtn" title="Forget saved WiFi credentials and reboot the THC into its setup AP">&#8635; Forget THC WiFi &amp; reboot to setup AP</button>
+          </div>
+          <p class="hint">Forget WiFi clears the credentials stored on the THC and reboots it into the <b>THC-Setup</b> access point so you can join a different network. Needs a live connection to the THC.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+  </main>
+</div>
+
+<div id="notice" class="notice" role="status" hidden></div>
+<div id="confirmBar" class="confirmBar" role="alertdialog" aria-live="assertive" hidden>
+  <span id="confirmMessage"></span>
+  <div class="confirmActions">
+    <button type="button" id="confirmCancelBtn">Cancel</button>
+    <button type="button" id="confirmAcceptBtn" class="primary">Continue</button>
+  </div>
+</div>
+<section id="exportPanel" class="exportPanel" hidden aria-labelledby="exportTitle">
+  <header class="cardHeader"><h2 id="exportTitle">Export</h2><button type="button" id="closeExportBtn" class="iconBtn" aria-label="Close">&#215;</button></header>
+  <div class="cardBody">
+    <p class="hint" style="margin-top:0" id="exportHint">Copy this into a file named <b id="exportName"></b>. The dashboard sandbox doesn't allow downloads.</p>
+    <textarea id="exportText" readonly spellcheck="false"></textarea>
+    <div class="row tight" style="margin-top:8px">
+      <button type="button" id="copyExportBtn" class="primary">Copy to clipboard</button>
+    </div>
+  </div>
+</section>
+
+
+<script src="sdk.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,402 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+html { background: var(--plugin-bg); }
+:root {
+  /* Same variable names/shape as the UGS Dashboard's plugin theme bridge
+     (see ugs-pendant/examples/*/style.css + PluginThemeSnapshot in
+     src/theme/palette.ts) - these defaults are the dashboard's own dark
+     palette + green accent, so this page looks right standalone AND needs
+     no CSS changes once it's wired to Fluid.getTheme()/onThemeChange as a
+     real plugin later, only a JS bridge call setting the same properties. */
+  --plugin-bg: #1c1e1f;
+  --plugin-surface: #111213;
+  --plugin-surface-raised: #2a2c2d;
+  --plugin-border: #2f3132;
+  --plugin-border-strong: #3a3d3e;
+  --plugin-text: #e5e7eb;
+  --plugin-text-muted: #c3c8cb;
+  --plugin-accent: #4ade80;
+  --plugin-accent-soft: color-mix(in srgb, var(--plugin-accent) 14%, transparent);
+  --plugin-warn: #f2b84b;
+  --plugin-warn-soft: rgba(242, 184, 75, 0.16);
+  --plugin-danger: #ff9b9b;
+  --plugin-danger-soft: rgba(255, 155, 155, 0.16);
+  /* Dedicated semantic tokens (current-voltage red, setpoint/OK green),
+     independent of --plugin-accent - the dashboard's accent is user-
+     configurable (5 presets), but "current is red, setpoint/good is
+     green" is a fixed convention here regardless of which accent color
+     the dashboard happens to be on. Same values as the default green
+     accent today since that's the dashboard's own default. */
+  --plugin-good: #4ade80;
+  --plugin-good-soft: rgba(74, 222, 128, 0.14);
+}
+:root[data-theme="light"] {
+  --plugin-bg: #eef1f4;
+  --plugin-surface: #ffffff;
+  --plugin-surface-raised: #ffffff;
+  --plugin-border: #dde2e7;
+  --plugin-border-strong: #c7ced6;
+  --plugin-text: #1b2027;
+  --plugin-text-muted: #4d5761;
+  --plugin-accent: #0f8a4c;
+  --plugin-accent-soft: color-mix(in srgb, var(--plugin-accent) 10%, transparent);
+  --plugin-warn: #b2790a;
+  --plugin-warn-soft: rgba(178, 121, 10, 0.12);
+  --plugin-danger: #b23a3a;
+  --plugin-danger-soft: rgba(178, 58, 58, 0.12);
+  --plugin-good: #0f8a4c;
+  --plugin-good-soft: rgba(15, 138, 76, 0.1);
+}
+body {
+  margin: 0;
+  min-width: 200px;
+  background: var(--plugin-bg);
+  color: var(--plugin-text);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+button, input, select, textarea { font: inherit; }
+button {
+  min-height: 32px;
+  padding: 6px 11px;
+  border: 1px solid var(--plugin-border-strong);
+  border-radius: 6px;
+  background: var(--plugin-surface-raised);
+  color: inherit;
+  cursor: pointer;
+}
+/* :hover, not :active - deliberately NOT used for this. Touch browsers
+   simulate ":hover" on tap and don't clear it until the next tap lands
+   elsewhere on the page, so a button stays visually "hovered" after the
+   finger lifts. The UGS Dashboard hit this exact bug and first tried
+   gating it behind @media (hover: hover), which did NOT actually work on
+   a real Windows+Chrome touchscreen - that combo reports (hover: hover)
+   for a touch-only display regardless (it reflects what the *system*
+   supports, not how a given interaction happened) - so the media query
+   silently never excluded touch. Fixed there (and matched here) by using
+   :active instead: it's tied to the actual press duration and correctly
+   releases on pointerup/touchend on every platform, giving real "yes, I
+   registered that press" feedback without ever getting stuck.
+   ALSO gated on `.modeBtn, .toggleBtn`'s own :active/.active states
+   intentionally winning by CSS specificity below - a colored button
+   keeps its own color at rest, this generic accent only shows while
+   actually pressed. */
+button:active:not(:disabled) { border-color: var(--plugin-accent); }
+button:disabled { cursor: default; opacity: .45; }
+button.primary { border-color: var(--plugin-accent); background: var(--plugin-accent); color: #0b1210; font-weight: 600; }
+:root[data-theme="light"] button.primary { color: #fff; }
+button.iconBtn { min-height: 32px; min-width: 32px; padding: 4px; border-color: transparent; background: transparent; font-size: 16px; }
+button.iconBtn:active:not(:disabled) { background: var(--plugin-surface-raised); }
+input, select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--plugin-border-strong);
+  border-radius: 6px;
+  background: var(--plugin-surface);
+  color: inherit;
+  padding: 6px 8px;
+}
+label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--plugin-text-muted); font-size: 12.5px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; min-width: 0; }
+.row > * { flex: 1 1 120px; min-width: 0; }
+.row.tight > * { flex: 0 0 auto; }
+
+.app { max-width: 1180px; margin: 0 auto; padding: 12px; }
+
+.pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; border: 1px solid var(--plugin-border-strong); background: var(--plugin-surface); color: var(--plugin-text-muted); }
+.pill.on { border-color: var(--plugin-accent); background: var(--plugin-accent-soft); color: var(--plugin-text); }
+.pill.bad { border-color: var(--plugin-danger); color: var(--plugin-danger); }
+
+.col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+
+.card { border: 1px solid var(--plugin-border-strong); border-radius: 8px; background: var(--plugin-surface-raised); overflow: hidden; }
+.cardHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 8px; padding: 6px 11px; border-bottom: 1px solid var(--plugin-border-strong); }
+.cardHeader h2 { margin: 0; font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--plugin-text-muted); }
+.cardBody { padding: 9px; }
+
+.statGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; }
+.stat { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--plugin-border); border-radius: 6px; background: var(--plugin-surface); }
+.statLabel { font-size: 11px; color: var(--plugin-text-muted); text-transform: uppercase; letter-spacing: .03em; }
+/* Monospace so every character (digits, sign slot, decimal point) is the
+   same width - a fast-changing reading (voltage, etc) then never shifts
+   its own position on screen as digits/sign come and go, unlike a
+   proportional font where e.g. "1" and "8" render at different widths. */
+/* tabular-nums alone already makes every digit the same width within this
+   font (confirmed - that's what was already here before the jitter fix);
+   a full monospace font-family is NOT needed for that and renders wider
+   per character at this size, which was overflowing/wrapping the big
+   voltage tiles - reverted, keep just tabular-nums + the fixed-width sign
+   slot from fixedNum() (the actual fix for the reported jump). */
+.statValue { font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Fixed-width box for the optional leading '-' (see fixedNumHtml()) - a
+   plain space isn't guaranteed the same rendered width as '-' in a
+   proportional font, even with tabular-nums (that only equalizes digits),
+   so the sign needs its own reserved, centered slot instead. */
+.signSlot { display: inline-block; width: 0.55em; text-align: center; }
+
+/* Current/setpoint voltage - large and colored, readable in either theme
+   since they use the dedicated --plugin-danger/--plugin-good tokens
+   (already tuned per-theme), not a single fixed hex. */
+.voltGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin-bottom: 9px; }
+.statBig .statValue { font-size: 30px; }
+.statRed { border-color: var(--plugin-danger); background: var(--plugin-danger-soft); }
+.statRed .statValue { color: var(--plugin-danger); }
+.statGreen { border-color: var(--plugin-good); background: var(--plugin-good-soft); }
+.statGreen .statValue { color: var(--plugin-good); }
+
+/* Status pills (left 2/3) and the Z-direction indicator (right 1/3) share
+   one row - pills get a fixed 3-column grid instead of wrapping, so they
+   can run bigger/more legible than the small inline .pill default used
+   elsewhere (e.g. the connection status pill in the header, untouched). */
+/* The card is a flex column so its body fills whatever height the grid row
+   gives it (the Mode card beside it can be taller), and the pill grid is two
+   equal-height rows that stretch to fill that body. Each pill is also at
+   least two text lines tall, so the row is the same height whether or not a
+   label ("Anti-dive", "Void-sense") wraps at a narrow width - nothing jumps. */
+.statusCard { display: flex; flex-direction: column; }
+.statusCard .statusRow { flex: 1 1 auto; }
+.statusRow { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; align-items: stretch; }
+.pillGrid { display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr); gap: 6px; align-content: stretch; }
+.pillGrid .pill { justify-content: center; align-items: center; padding: 9px 6px; min-height: calc(2 * 1.4em + 22px); font-size: 13px; font-weight: 600; border-width: 2px; border-radius: 7px; text-align: center; }
+
+/* What the THC is currently commanding the Z axis to do - derived from
+   output's sign (output>0 -> up, <0 -> down, ==0 -> ok), same condition
+   the Sunton's own screen1 UP/OK/DOWN LEDs use (main.cpp ~655-668).
+   Reuses the same red/green/amber semantic tokens as the mode buttons
+   for visual consistency across the page. */
+.zDirStack { display: flex; flex-direction: column; gap: 5px; }
+.zDirItem { padding: 8px 6px; border-radius: 6px; border: 2px solid var(--plugin-border-strong); background: var(--plugin-surface); color: var(--plugin-text-muted); font-weight: 700; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center; flex: 1; }
+.zDirItem#zDirUp.active { background: var(--plugin-warn); border-color: var(--plugin-warn); color: rgba(0, 0, 0, .78); }
+.zDirItem#zDirOk.active { background: var(--plugin-good); border-color: var(--plugin-good); color: rgba(0, 0, 0, .78); }
+.zDirItem#zDirDown.active { background: var(--plugin-danger); border-color: var(--plugin-danger); color: rgba(0, 0, 0, .78); }
+
+.banner { margin-top: 10px; padding: 8px 10px; border-radius: 6px; font-size: 12.5px; background: var(--plugin-accent-soft); border: 1px solid var(--plugin-accent); color: var(--plugin-text); }
+.banner.active { background: var(--plugin-warn-soft); border-color: var(--plugin-warn); color: var(--plugin-warn); font-weight: 600; }
+
+/* Mode select - OFF/AVG/PRE-SET map to thc.mode 0/1/2. Outlined in its own
+   color when not the live mode, filled solid when it is (read from the
+   THC's own telemetry echo, same as every other "current" indicator on
+   this page - clicking sends the command, the fill only follows once the
+   THC actually confirms it). */
+.modeGrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.modeBtn { min-height: 46px; padding: 4px 4px; font-size: 18px; font-weight: 700; border-width: 2px; letter-spacing: .01em; }
+.modeBtn.modeOff { border-color: var(--plugin-danger); color: var(--plugin-danger); background: var(--plugin-surface); }
+.modeBtn.modeAvg { border-color: var(--plugin-good); color: var(--plugin-good); background: var(--plugin-surface); }
+.modeBtn.modePreset { border-color: var(--plugin-warn); color: var(--plugin-warn); background: var(--plugin-surface); }
+.modeBtn.modeOff.active { background: var(--plugin-danger); color: rgba(0, 0, 0, .78); }
+.modeBtn.modeAvg.active { background: var(--plugin-good); color: rgba(0, 0, 0, .78); }
+.modeBtn.modePreset.active { background: var(--plugin-warn); color: rgba(0, 0, 0, .78); }
+
+.toggleBtn { min-height: 40px; font-weight: 600; }
+.toggleBtn.on { background: var(--plugin-good); border-color: var(--plugin-good); color: rgba(0, 0, 0, .78); }
+
+/* Z up on top, Z down below it, Calibrate to the right spanning both rows. */
+.jogGrid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 8px; }
+.jogGrid #jogUp { grid-column: 1; grid-row: 1; }
+.jogGrid #jogDown { grid-column: 1; grid-row: 2; }
+.jogGrid #calibrateBtn { grid-column: 2; grid-row: 1 / span 2; min-height: 0; }
+.calOffsetReadout { display: block; margin-top: 4px; font-size: 16px; font-weight: 600; color: var(--plugin-text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Matches the Sunton's own screen2_btn_calibrate outline behavior exactly
+   (main.cpp ~700-704/1139-1141): green outline when calibrationOffset != 0,
+   none when it's 0 - "a calibration is currently applied" indicator. */
+#calibrateBtn.calibrated { border-color: var(--plugin-good); background: var(--plugin-good-soft); }
+#calibrateBtn.calibrated .calOffsetReadout { color: var(--plugin-good); }
+
+.hint, .muted { color: var(--plugin-text-muted); font-size: 12px; }
+.hint { margin: 8px 0 0; }
+
+.tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 7px; border-bottom: 1px solid var(--plugin-border-strong); background: var(--plugin-surface-raised); }
+.tabs button { min-height: 30px; flex: 1 1 auto; padding: 5px 6px; border-color: transparent; background: transparent; font-size: 12.5px; }
+.tabs button[aria-selected=true] { border-color: var(--plugin-accent); background: var(--plugin-surface); color: var(--plugin-text); }
+.settingsBody { padding: 11px; }
+
+table.fieldTable { width: 100%; border-collapse: collapse; }
+table.fieldTable th, table.fieldTable td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--plugin-border); font-size: 14px; vertical-align: middle; }
+table.fieldTable th { color: var(--plugin-text-muted); font-weight: 500; }
+/* font-weight 700 (not just the color) is what actually fixes low-contrast
+   green-on-light-background readability here - bold strokes stay legible
+   even where the raw color contrast ratio is only borderline on its own. */
+table.fieldTable .curcol { color: var(--plugin-accent); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+table.fieldTable td:nth-child(3) { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+table.fieldTable input, table.fieldTable select { width: auto; flex: 1 1 auto; min-width: 70px; max-width: 130px; }
+/* Thicker, more visible border than the generic button default so the
+   Send buttons read as clearly clickable at this small size. */
+table.fieldTable .setbtn { min-height: 30px; padding: 4px 10px; font-size: 13px; border-width: 2px; border-color: var(--plugin-border-strong); }
+table.fieldTable .setbtn:active:not(:disabled) { border-color: var(--plugin-accent); }
+
+#presetPreview table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+#presetPreview td, #presetPreview th { border-bottom: 1px solid var(--plugin-border); padding: 5px 6px; font-size: 13.5px; }
+#presetPreview th[colspan] { background: var(--plugin-surface); color: var(--plugin-text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: .03em; }
+#presetPreview .curcol { color: var(--plugin-accent); font-weight: 700; }
+
+.presetControls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
+.presetControls select { flex: 1 1 100px; }
+.presetActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.presetActions button { flex: 1 1 auto; font-size: 12.5px; }
+
+details.rawFrame { margin-top: 10px; }
+details.rawFrame summary { cursor: pointer; color: var(--plugin-text-muted); font-size: 12px; }
+details.rawFrame pre { white-space: pre-wrap; font-size: 11px; max-height: 220px; overflow: auto; background: var(--plugin-surface); border: 1px solid var(--plugin-border); border-radius: 6px; padding: 8px; margin-top: 6px; }
+
+.curveGrid { stroke: var(--plugin-border); stroke-width: 1; }
+.curveAxis { stroke: var(--plugin-border-strong); stroke-width: 1.5; }
+.curvePathProposed { fill: none; stroke: var(--plugin-accent); stroke-width: 2.5; }
+.curvePathCurrent { fill: none; stroke: var(--plugin-text-muted); stroke-width: 2; stroke-dasharray: 6 4; }
+.curveAxisLabel { fill: var(--plugin-text-muted); font-size: 9px; }
+.curveAxisTitle { fill: var(--plugin-text-muted); font-size: 10px; }
+.curveMsg { fill: var(--plugin-text-muted); font-size: 12px; }
+
+
+/* ---- Workspace shell: Operate / Settings / Link -------------------------
+   The old top bar carried the address box, Connect, status, frame counter,
+   Forget-WiFi, zoom AND theme all at once - fine at 1200px, a wall of
+   controls in a narrow plugin window. Now the bar is only brand + three
+   tabs; everything about the connection lives on the Link page (which is
+   also where you land when not connected, like a login screen), and
+   anything that's easy to miss while on the other pages - being
+   disconnected - gets one slim banner instead of a permanent control row. */
+.app { max-width: 1000px; }
+/* Below the 2-column breakpoint the page is one phone-style column, so cap it
+   instead of stretching every control across a wide window. The cap is in
+   zoomed units, so lowering Zoom genuinely narrows the column (75% = a 75%
+   narrower column) rather than the same full-width layout with smaller text. */
+@media (max-width: 699px) { .app { max-width: 560px; } }
+.stickyTop { position: sticky; top: 0; z-index: 20; background: var(--plugin-bg); padding: 0 0 8px; }
+.shell { display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 12px; border: 1px solid var(--plugin-border-strong); border-radius: 10px; background: var(--plugin-surface-raised); }
+.brand { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.brand strong { font-size: 17px; }
+.brandSub { color: var(--plugin-text-muted); font-size: 12px; white-space: nowrap; }
+.nav { display: inline-flex; gap: 3px; margin-left: auto; padding: 3px; border: 1px solid var(--plugin-border-strong); border-radius: 9px; background: var(--plugin-surface); }
+.nav button { display: inline-flex; align-items: center; gap: 7px; min-height: 38px; padding: 4px 12px; border: 0; border-radius: 6px; background: transparent; color: var(--plugin-text-muted); font-weight: 700; font-size: 13px; letter-spacing: .03em; }
+.nav button .navIcon { font-size: 15px; line-height: 1; }
+.nav button[aria-selected=true] { background: var(--plugin-accent); color: #07121a; }
+:root[data-theme="light"] .nav button[aria-selected=true] { color: #fff; }
+.dot { width: 10px; height: 10px; border-radius: 50%; background: var(--plugin-danger); flex: none; }
+.dot.on { background: var(--plugin-good); }
+.dot.wait { background: var(--plugin-warn); }
+.nav button[aria-selected=true] .dot { box-shadow: 0 0 0 2px rgba(0, 0, 0, .35); }
+
+.offlineBar { margin: 0 0 8px; padding: 8px 10px; border: 1px solid var(--plugin-warn); border-radius: 8px; background: var(--plugin-warn-soft); color: var(--plugin-warn); font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.offlineBar[hidden] { display: none; }
+body[data-view=link] .offlineBar { display: none; }
+
+.liveStrip { display: none; margin-top: 6px; padding: 6px 10px; gap: 6px 16px; flex-wrap: wrap; align-items: center; border: 1px solid var(--plugin-border-strong); border-radius: 8px; background: var(--plugin-surface-raised); font-size: 13px; }
+body[data-view=settings] .liveStrip { display: flex; }
+.liveStrip .k { color: var(--plugin-text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; margin-right: 6px; }
+.liveStrip .v { font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.liveStrip .vRed { color: var(--plugin-danger); }
+.liveStrip .vGreen { color: var(--plugin-good); }
+.modeTag { padding: 2px 10px; border-radius: 999px; border: 2px solid var(--plugin-border-strong); font-size: 12px; font-weight: 700; }
+.modeTag[data-mode="0"] { border-color: var(--plugin-danger); color: var(--plugin-danger); }
+.modeTag[data-mode="1"] { border-color: var(--plugin-good); color: var(--plugin-good); }
+.modeTag[data-mode="2"] { border-color: var(--plugin-warn); color: var(--plugin-warn); }
+.lockTag { color: var(--plugin-text-muted); }
+.lockTag.active { color: var(--plugin-warn); }
+
+.view { display: none; }
+body[data-view=operate] .view[data-view=operate],
+body[data-view=settings] .view[data-view=settings],
+body[data-view=link] .view[data-view=link] { display: block; }
+
+/* Operate: single column below ~700px (the approved card order), a 2-up
+   grid above it with the first and last cards (voltages, datalog) spanning. */
+@media (min-width: 700px) {
+  .opCol { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .opCol > .card:first-child, .opCol > .card:last-child { grid-column: 1 / -1; }
+}
+
+/* Link page */
+.linkCol { max-width: 640px; margin: 0 auto; }
+.linkRow { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.linkRow button { flex: 1 1 140px; min-height: 44px; }
+.linkAddress { font-size: 17px; min-height: 44px; }
+.diag { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(210px, 100%), 1fr)); gap: 0 18px; margin: 0; }
+.diag > div { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--plugin-border); }
+.diag dt { color: var(--plugin-text-muted); font-size: 12.5px; }
+.diag dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.diagWarn { margin-top: 8px; padding: 7px 10px; border: 1px solid var(--plugin-warn); border-radius: 6px; background: var(--plugin-warn-soft); color: var(--plugin-warn); font-size: 12.5px; }
+.diagWarn[hidden] { display: none; }
+.rawStats { margin: 8px 0 0; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* Plugin-width settings: the 4-column Setting|Current|New value|Send table
+   needs ~380px and its Send column was being clipped by the card. Below
+   ~560px each setting becomes a two-line row instead - the label on the
+   first line, then the same left-to-right order as the wide table on the
+   second: live value | proposal box (+ unit) | Send. The live-value column
+   is a fixed width so it lines up from row to row (each row is its own
+   grid), sized for the longest value ("1800 mm/min"). */
+@media (max-width: 560px) {
+  table.fieldTable, table.fieldTable tbody { display: block; }
+  table.fieldTable tr:first-child { display: none; }
+  table.fieldTable tr { display: grid; grid-template-columns: 108px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--plugin-border); }
+  table.fieldTable td { display: block; padding: 0; border: 0; min-width: 0; }
+  table.fieldTable td:nth-child(1) { grid-column: 1 / -1; grid-row: 1; }
+  table.fieldTable td:nth-child(2) { grid-column: 1; grid-row: 2; text-align: left; }
+  table.fieldTable td:nth-child(3) { grid-column: 2; grid-row: 2; display: flex; }
+  table.fieldTable td:nth-child(4) { grid-column: 3; grid-row: 2; }
+  table.fieldTable input, table.fieldTable select { max-width: 130px; }
+  #presetPreview { overflow-x: auto; }
+}
+
+@media (max-width: 520px) {
+  .brandSub, .navLabel { display: none; }
+  .nav button { min-width: 44px; justify-content: center; padding: 4px 10px; }
+  .nav button .navIcon { font-size: 18px; }
+  .app { padding: 8px; }
+}
+/* ---- Very narrow widths (an embedded plugin window can be ~220px) ----------
+   Everything below is progressive: each block only kicks in once the layout
+   above it would start clipping. Checked down to 220px with no horizontal
+   scroll. */
+@media (max-width: 380px) {
+  .app { padding: 6px; }
+  .shell { gap: 6px; padding: 4px 6px 4px 8px; }
+  .nav button { min-height: 34px; }
+  .cardBody { padding: 7px; }
+  .settingsBody { padding: 8px; }
+  .statBig .statValue { font-size: 26px; }
+  .presetActions button { flex-basis: 100%; }
+  #presetPreview table, #presetPreview tbody { display: block; }
+  #presetPreview tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  #presetPreview td, #presetPreview th { display: block; }
+  #presetPreview th[colspan] { grid-column: 1 / -1; }
+  #presetPreview td:empty { display: none; }
+}
+@media (max-width: 340px) {
+  /* Setting | Current | New value | Send no longer fits on one line: label and
+     live value share the first line, entry box + Send the second. */
+  table.fieldTable tr { grid-template-columns: minmax(0, 1fr) auto; }
+  table.fieldTable td:nth-child(1) { grid-column: 1; grid-row: 1; }
+  table.fieldTable td:nth-child(2) { grid-column: 2; grid-row: 1; text-align: right; }
+  table.fieldTable td:nth-child(3) { grid-column: 1; grid-row: 2; }
+  table.fieldTable td:nth-child(4) { grid-column: 2; grid-row: 2; }
+  table.fieldTable input, table.fieldTable select { max-width: none; min-width: 50px; }
+  .liveStrip { gap: 4px 8px; padding: 5px 8px; font-size: 12px; }
+  body[data-view=settings] .liveStrip { display: grid; grid-template-columns: 1fr 1fr; }
+  .liveStrip .k { display: none; }
+}
+@media (max-width: 300px) {
+  .nav button { min-width: 38px; padding: 4px 6px; }
+  .voltGrid, .statGrid { grid-template-columns: 1fr; }
+  .statusRow { grid-template-columns: 1fr; }
+  .pillGrid { grid-template-columns: repeat(2, 1fr); grid-template-rows: repeat(3, 1fr); }
+  .zDirStack { flex-direction: row; }
+  .zDirItem { padding: 8px 2px; font-size: 11px; white-space: nowrap; }
+  .modeBtn { font-size: 14px; }
+}
+/* A very short window: only the nav pins, never the whole header. */
+@media (max-height: 300px) {
+  .stickyTop { position: static; }
+}
+
+/* ---- In-page replacements for alert() / confirm() / prompt() / downloads ---
+   The plugin iframe is sandboxed, so the browser silently blocks all four.
+   Notices and the confirm bar are fixed to the bottom of the window so they're
+   visible wherever the page is scrolled to. */
+.notice, .confirmBar { position: fixed; z-index: 40; left: 8px; right: 8px; bottom: 8px; margin: 0; padding: 8px 10px; border: 1px solid var(--plugin-border-strong); border-radius: 8px; background: var(--plugin-surface-raised); color: var(--plugin-text); font-size: 13px; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
+.notice.warn, .confirmBar { border-color: var(--plugin-warn); }
+.notice[hidden], .confirmBar[hidden], .exportPanel[hidden] { display: none; }
+.confirmBar { z-index: 45; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-weight: 600; }
+.confirmActions { display: flex; gap: 6px; flex: 1 1 auto; justify-content: flex-end; }
+.exportPanel { position: fixed; z-index: 50; inset: 8px; display: flex; flex-direction: column; border: 1px solid var(--plugin-border-strong); border-radius: 8px; background: var(--plugin-surface-raised); box-shadow: 0 12px 36px rgba(0, 0, 0, .45); }
+.exportPanel .cardBody { min-height: 0; display: flex; flex: 1; flex-direction: column; }
+#exportText { flex: 1; min-height: 120px; width: 100%; resize: none; border: 1px solid var(--plugin-border-strong); border-radius: 6px; background: var(--plugin-surface); color: var(--plugin-text); padding: 8px; font: 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }

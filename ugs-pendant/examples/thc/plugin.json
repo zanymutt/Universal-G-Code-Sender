@@ -1,0 +1,8 @@
+{
+  "name": "THC Control Panel",
+  "description": "Live control, settings presets and datalog capture for the ESP32 plasma torch height controller.",
+  "version": "0.2.0",
+  "entry": "index.html",
+  "icon": "thc-panel-icon.svg",
+  "allowMultipleInstances": false
+}
