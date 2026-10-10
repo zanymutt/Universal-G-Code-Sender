@@ -627,6 +627,18 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         // never actually put it on the clipboard - confirmed on 2026-09-29).
         allow="clipboard-write"
       />
+      {/* A click inside the sandboxed iframe is delivered to the iframe's own
+          document and never reaches this window's pointer handlers, so a
+          window sitting behind another could only be raised by its header.
+          While it isn't the front window, this transparent shield takes that
+          first click instead (raising the window, which removes the shield)
+          and the plugin underneath then behaves normally. Not for docked
+          windows - they don't overlap each other or take part in the
+          floating stack - or minimized ones. */}
+      {!docked && !isFront && !minimized && <div
+        className="pluginWindowActivateShield"
+        onPointerDown={onActivate}
+      />}
       {!maximized && !docked && <div
         className="pluginWindowResizeGrip"
         role="separator"

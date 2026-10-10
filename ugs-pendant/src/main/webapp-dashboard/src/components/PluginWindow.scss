@@ -120,6 +120,19 @@
   background: var(--dashboard-surface);
 }
 
+// Covers everything under the header (36px, see .pluginWindowHeader) except
+// the resize grip, which sits above it (z-index 2). Transparent: it exists
+// only to catch the click that raises a window stacked behind another.
+.pluginWindowActivateShield {
+  position: absolute;
+  top: 36px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 1;
+  cursor: pointer;
+}
+
 .pluginWindowResizeGrip {
   position: absolute;
   right: 0;
