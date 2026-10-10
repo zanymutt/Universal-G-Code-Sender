@@ -55,3 +55,8 @@ ugs-pendant/src/main/webapp/node
 ugs-pendant/src/main/webapp/.angular/cache
 /ugs-fx/.jdks
 /ugs-fx/zulu*
+
+# Local scratch from dashboard work
+/dxf-import-update/
+/preview-backup-*/
+/sizing-preview-*.err
