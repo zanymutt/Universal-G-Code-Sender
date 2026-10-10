@@ -2,6 +2,10 @@
 
 Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. The classic pendant (`/`) is unaffected unless noted.
 
+## 2026-10-10
+
+- Plugins can now save generated text files with `downloadFile(filename, content)`: the dashboard page (not the sandboxed iframe) opens a normal Save As dialog (Chrome/Edge on `localhost`) or falls back to an ordinary browser download. Only plain-text data types are accepted (`csv`, `txt`, `log`, `md`, `json`, `nc`, `ngc`, `gcode`, `tap`, `svg`), names are sanitized, and files are capped at 25 MB; nothing is written to the workspace and the loaded job is untouched.
+
 ## 2026-09-17
 
 - Added a plugin system: a puzzle-piece "Plugins" section in the right rail lists whatever's dropped into UGS's own `dashboard-plugins` folder, and opening one shows it as a draggable, resizable floating window. Plugins run in a sandboxed iframe (`sandbox="allow-scripts"`, no `allow-same-origin`) with zero access to the parent page except through a small, curated `postMessage` API (`getStatus`, `subscribe`/`unsubscribe` to live status/console-line events, `sendCommand`, `getGcode`/`setGcode`/`saveGcodeAs`, `listFiles`/`openFile`, per-plugin `getSettings`/`saveSettings`) - a plugin author gets exactly those capabilities, never a raw pass-through to the REST API. The protocol shape matches FigUI's own plugin API on purpose, so a plugin already written for that project needs to change very little to run here.

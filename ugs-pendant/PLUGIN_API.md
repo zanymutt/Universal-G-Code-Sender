@@ -59,7 +59,8 @@ Your plugin opens as a **floating, draggable, resizable window** on top of the d
 
 - Your plugin gets a unique, opaque origin - it cannot read or touch anything on the parent page (no access to the dashboard's DOM, `localStorage`, cookies, or anything else) except through the message-based API below.
 - **`alert()`, `confirm()`, and `prompt()` are all silently blocked.** They won't throw an error - they'll just do nothing. Build your own UI for anything you'd normally use one of these for (a status `<div>` you update, a real `<input>` instead of `prompt()`).
-- Your plugin can still use its own `localStorage`/`fetch`/etc. freely - it's isolated from the *dashboard's* page, not from the network or its own browser storage.
+- Your plugin can still use `fetch`/WebSockets/etc. against the network freely - it's isolated from the *dashboard's* page, not from the network. Browser storage (`localStorage` and friends) is not available to an opaque-origin page; use `getSettings`/`saveSettings`.
+- **Downloads are blocked** - `<a download>` / `Blob` URLs inside the iframe do nothing. Use `downloadFile(filename, content)`.
 
 ## Talking to the dashboard
 
@@ -203,6 +204,29 @@ try {
 ```
 
 This is deliberate: a plugin never gets to choose *where* something lands on disk. That choice always goes through the same UI a person uses everywhere else in the dashboard.
+
+### `downloadFile(filename, content)`
+
+Saves generated **text** (a CSV export, a JSON dump, a log) to the person's own computer. The sandbox has no `allow-downloads`, so a `Blob` + `<a download>` inside your iframe is silently blocked - this does the same thing from the dashboard page instead. It does **not** write into the UGS workspace and does **not** touch the loaded job (unlike `saveGcodeAs`).
+
+Where it goes depends on the browser. In Chrome or Edge over a secure context (`http://localhost`, which is what a dashboard opened on the UGS computer itself uses) the person gets a normal **Save As** dialog and picks the folder and name. Anywhere else - Firefox/Safari, or a tablet reaching the dashboard over a plain-`http` LAN address - it's an ordinary browser download into the Downloads folder. Call it straight from the click handler so the browser still counts it as a user gesture.
+
+```js
+try {
+  const result = await Fluid.downloadFile("cut-log.csv", csvText);
+  // result.filename -> string, the name actually used (sanitized, or what the person typed in Save As)
+} catch (err) {
+  // err.message explains why - e.g. "Save cancelled" if the person closed the Save As
+  // dialog, a type that isn't allowed, or over 25 MB
+}
+```
+
+Limits, all enforced by the dashboard:
+
+- `filename` and `content` must both be strings. Any folder part of the name is dropped and unsafe characters become `_`.
+- Only these extensions are accepted: `csv`, `txt`, `log`, `md`, `json`, `nc`, `ngc`, `gcode`, `tap`, `svg`. The file's type comes from the extension - a plugin can't download an executable or script this way.
+- 25 MB per file. The browser may ask the person to allow multiple downloads the first time.
+- An older dashboard rejects with `Unknown method "downloadFile"` - catch that and fall back to showing the text for copying if your plugin needs to run on both.
 
 ### `listFiles()`
 

@@ -75,7 +75,7 @@ Thin REST wrappers, one file per backend resource, all `fetch("/api/v1/...")`.
 
 ## Plugin bridge (dashboard ⇄ sandboxed plugin iframe)
 
-- `ugs-pendant/src/main/webapp-dashboard/src/components/PluginWindow.tsx` — parent side; `callMethod(method, params)` switch (the whole plugin API surface): `getStatus`, `subscribe`/`unsubscribe`, `sendCommand`, `getGcode`/`setGcode`, `saveGcodeAs`, `listFiles`, `openFile`, `pickFile`, `getFileStatus`, `startSend`, `pauseSend`, `stopSend`, `readFile`/`writeFile`, `getSettings`/`saveSettings`, `getDeviceInfo`, `getMachineSettings`, `close`.
+- `ugs-pendant/src/main/webapp-dashboard/src/components/PluginWindow.tsx` — parent side; `callMethod(method, params)` switch (the whole plugin API surface): `getStatus`, `subscribe`/`unsubscribe`, `sendCommand`, `getGcode`/`setGcode`, `saveGcodeAs`, `downloadFile`, `listFiles`, `openFile`, `pickFile`, `getFileStatus`, `startSend`, `pauseSend`, `stopSend`, `readFile`/`writeFile`, `getSettings`/`saveSettings`, `getDeviceInfo`, `getMachineSettings`, `close`.
 - postMessage protocol: plugin→parent `{type:"fluid-request", id, method, params}`; parent→plugin `{type:"fluid-response", id, result|error}`; parent→plugin push `{type:"fluid-event", event, data}` (events: `"status"`, `"line"`).
 - `ugs-pendant/src/main/webapp-dashboard/src/components/PluginManager.tsx` — owns plugin window list via `useReducer(pluginWindowsReducer, ...)`, renders one `<PluginWindow>` per open window.
 - `ugs-pendant/src/main/webapp-dashboard/src/store/pluginWindows.ts` — pure reducer, `PluginWindowsState={windows, frontKey, nextKey}`, actions: `open`(plugin), `activate`(key), `close`(key); enforces one-window-per-plugin unless `manifest.allowMultipleInstances`.

@@ -18,6 +18,7 @@ import { sendGcode } from "../services/machine";
 import { acquireLineSubscription, releaseLineSubscription } from "../store/pluginLineSubscription";
 import { refreshFileState } from "../store/refreshFileState";
 import { getFileName } from "../utils/getFileName";
+import { downloadTextFile } from "../utils/pluginDownload";
 import { loadPluginWindowSize, PluginWindowSize, savePluginWindowSize } from "../utils/pluginWindowSize";
 import { getPluginThemeSnapshot } from "../theme/palette";
 import { Status } from "../model/Status";
@@ -387,6 +388,12 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
 
         case "stopSend":
           return stopFileSend();
+
+        case "downloadFile":
+          // Browser download of plugin-generated text (CSV, JSON...) to the
+          // person's own Downloads folder - nothing is written to the UGS
+          // workspace and no loaded job is touched.
+          return downloadTextFile(params.filename, params.content);
 
         case "readFile":
         case "writeFile":
