@@ -99,6 +99,83 @@
     }, 500);
   }
 
+  // --- Left/right divider -------------------------------------------------
+  // Dragging (or arrow keys on the focused divider) sets --settings-width on
+  // <main>; it's remembered in the plugin settings as straightCutLayout. The
+  // divider only exists in the two-column layout (hidden by CSS when stacked).
+  const DEFAULT_SETTINGS_WIDTH = 330;
+  const MIN_SETTINGS_WIDTH = 250;
+  const MIN_WORK_WIDTH = 260;
+  let layoutTimer = null;
+
+  function currentSettingsWidth() {
+    const column = document.querySelector('.settings');
+    return column ? Math.round(column.getBoundingClientRect().width) : DEFAULT_SETTINGS_WIDTH;
+  }
+
+  function clampSettingsWidth(width) {
+    const main = document.querySelector('main');
+    const splitter = $('splitter');
+    const available = main ? main.getBoundingClientRect().width - splitter.offsetWidth - MIN_WORK_WIDTH : width;
+    return Math.round(Math.max(MIN_SETTINGS_WIDTH, Math.min(width, Math.max(MIN_SETTINGS_WIDTH, available))));
+  }
+
+  function setSettingsWidth(width, persist) {
+    const clamped = clampSettingsWidth(width);
+    document.querySelector('main').style.setProperty('--settings-width', clamped + 'px');
+    $('splitter').setAttribute('aria-valuenow', String(clamped));
+    if (persist && window.parent !== window) {
+      clearTimeout(layoutTimer);
+      layoutTimer = setTimeout(() => {
+        settings = { ...settings, straightCutLayout: { settingsWidth: clamped } };
+        host('saveSettings', { data: settings }).catch(() => {});
+      }, 500);
+    }
+  }
+
+  (function setupSplitter() {
+    const splitter = $('splitter');
+    const main = document.querySelector('main');
+    splitter.setAttribute('aria-valuemin', String(MIN_SETTINGS_WIDTH));
+    let dragging = false;
+
+    splitter.addEventListener('pointerdown', event => {
+      dragging = true;
+      splitter.setPointerCapture(event.pointerId);
+      splitter.classList.add('dragging');
+      document.body.classList.add('resizing');
+      event.preventDefault();
+    });
+    splitter.addEventListener('pointermove', event => {
+      if (!dragging) return;
+      const left = main.getBoundingClientRect().left;
+      setSettingsWidth(event.clientX - left - splitter.offsetWidth / 2, false);
+    });
+    const endDrag = event => {
+      if (!dragging) return;
+      dragging = false;
+      splitter.classList.remove('dragging');
+      document.body.classList.remove('resizing');
+      if (splitter.hasPointerCapture(event.pointerId)) splitter.releasePointerCapture(event.pointerId);
+      setSettingsWidth(currentSettingsWidth(), true);
+    };
+    splitter.addEventListener('pointerup', endDrag);
+    splitter.addEventListener('pointercancel', endDrag);
+
+    splitter.addEventListener('keydown', event => {
+      const step = event.shiftKey ? 48 : 16;
+      let width = null;
+      if (event.key === 'ArrowLeft') width = currentSettingsWidth() - step;
+      else if (event.key === 'ArrowRight') width = currentSettingsWidth() + step;
+      else if (event.key === 'Home') width = MIN_SETTINGS_WIDTH;
+      if (width === null) return;
+      event.preventDefault();
+      setSettingsWidth(width, true);
+    });
+    splitter.addEventListener('dblclick', () => setSettingsWidth(DEFAULT_SETTINGS_WIDTH, true));
+    splitter.setAttribute('aria-valuenow', String(DEFAULT_SETTINGS_WIDTH));
+  })();
+
   function invalidateGeneratedCode() {
     code = '';
     $('output').value = '';
@@ -186,6 +263,8 @@
       if (settings.straightCutLast && typeof settings.straightCutLast === 'object') {
         applyForm(settings.straightCutLast);
       }
+      const savedWidth = Number(settings.straightCutLayout && settings.straightCutLayout.settingsWidth);
+      if (Number.isFinite(savedWidth) && savedWidth > 0) setSettingsWidth(savedWidth, false);
     } catch (error) {
       message('Could not load saved settings: ' + (error.message || error), true);
     }

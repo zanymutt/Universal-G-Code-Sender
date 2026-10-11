@@ -20,61 +20,129 @@ body {
   min-height: 100%;
   height: 100%;
   margin: 0;
-  padding: 14px;
+  padding: 16px;
   overflow: hidden;
   background: var(--plugin-bg);
   color: var(--plugin-text);
   font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-.pageHeader, .panelHeading {
+/* ---- Page header -------------------------------------------------------- */
+.pageHeader {
   display: flex;
+  flex: none;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  margin-bottom: 16px;
 }
-.pageHeader { flex: none; margin-bottom: 14px; }
-.eyebrow { margin: 0 0 3px; color: var(--plugin-accent); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
-h1, h2 { margin: 0; line-height: 1.2; }
-h1 { font-size: 21px; }
+.eyebrow { margin: 0 0 2px; color: var(--plugin-accent); font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1, h2, h3 { margin: 0; line-height: 1.2; }
+h1 { font-size: 22px; }
 h2 { font-size: 16px; }
-.intro, .sectionDescription { margin: 5px 0 0; color: var(--plugin-text-muted); }
-.sectionDescription { max-width: 580px; }
-.machineState { flex: 0 0 auto; max-width: 190px; color: var(--plugin-text-muted); font-size: 12px; text-align: right; }
-.stepBadge, .lineCount { flex: 0 0 auto; color: var(--plugin-text-muted); font-size: 12px; }
-.stepBadge { padding: 3px 7px; border: 1px solid var(--plugin-border); border-radius: 999px; }
+.intro { margin: 4px 0 0; color: var(--plugin-text-muted); }
+.machineState {
+  flex: 0 0 auto;
+  max-width: 200px;
+  padding: 3px 10px;
+  border: 1px solid var(--plugin-border);
+  border-radius: 999px;
+  color: var(--plugin-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
+/* ---- Two-column layout, with a draggable divider ------------------------ */
 main {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(250px, 330px) minmax(260px, 1fr);
-  gap: 14px;
+  /* The left column's width is --settings-width (set by dragging the divider,
+     remembered in the plugin's settings); it still gives way when the window
+     is too narrow for it. The divider is the middle 14px track. */
+  grid-template-columns: minmax(250px, var(--settings-width, 330px)) 14px minmax(260px, 1fr);
   min-height: 0;
 }
 .settings, .work {
+  min-width: 0;
   min-height: 0;
   overflow: auto;
-  scrollbar-gutter: stable;
   overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--plugin-border-strong) transparent;
 }
-.settings { padding-right: 2px; }
+.work { display: flex; flex-direction: column; gap: 14px; }
 
-fieldset, .outputCard {
-  margin: 0 0 12px;
-  padding: 14px;
+.splitter {
+  position: relative;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.splitter::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 48px;
+  border-radius: 3px;
+  background: var(--plugin-border-strong);
+  transform: translate(-50%, -50%);
+  transition: background .12s;
+}
+.splitter:hover::after, .splitter.dragging::after, .splitter:focus-visible::after { background: var(--plugin-accent); }
+.splitter:focus-visible { outline: none; }
+body.resizing { cursor: ew-resize; user-select: none; }
+
+/* ---- Cards and step headers --------------------------------------------- */
+.card {
+  padding: 16px;
   border: 1px solid var(--plugin-border);
-  border-radius: 8px;
+  border-radius: 10px;
   background: var(--plugin-surface);
 }
-legend { padding: 0 6px; color: var(--plugin-text-muted); font-size: 12px; font-weight: 700; }
-.fieldGrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.work > .card { flex: none; }
+
+.stepHeader { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.stepHeader h2 { flex: 1; min-width: 0; }
+.stepNumber {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--plugin-accent);
+  color: var(--plugin-accent-contrast);
+  font-size: 12px;
+  font-weight: 800;
+}
+.tag, .lineCount { flex: 0 0 auto; color: var(--plugin-text-muted); font-size: 12px; }
+.tag { padding: 1px 8px; border: 1px solid var(--plugin-border-strong); border-radius: 999px; }
+
+/* ---- Form --------------------------------------------------------------- */
+.group + .group { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--plugin-border); }
+h3 {
+  margin-bottom: 8px;
+  color: var(--plugin-text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+h3 .unitHint { letter-spacing: 0; text-transform: none; }
+
+.fieldGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; align-items: end; }
+.fieldGrid.threeUp { grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); }
 label { display: flex; flex-direction: column; gap: 4px; color: var(--plugin-text); font-weight: 600; }
 .unitHint { color: var(--plugin-text-muted); font-size: 11px; font-weight: 400; }
 
 input, select, textarea {
   width: 100%;
   border: 1px solid var(--plugin-border-strong);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--plugin-surface-raised);
   color: var(--plugin-text);
   font: inherit;
@@ -82,47 +150,63 @@ input, select, textarea {
 input, select { min-height: 38px; padding: 7px 9px; }
 textarea { padding: 8px 9px; resize: vertical; }
 textarea:focus, input:focus, select:focus, button:focus-visible { outline: 2px solid var(--plugin-accent); outline-offset: 2px; }
-textarea#probeCode { min-height: 126px; margin-top: 8px; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
-textarea#output { flex: 1; min-height: 240px; height: 0; margin-top: 14px; resize: none; background: var(--plugin-bg); font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre; }
+textarea#probeCode { min-height: 88px; font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; }
 
-.checkRow { flex-direction: row; align-items: center; margin: 14px 0 0; font-weight: 500; }
-.checkRow input { width: 18px; height: 18px; min-height: 0; accent-color: var(--plugin-accent); }
+.checkRow { flex-direction: row; align-items: center; gap: 8px; margin: 12px 0 0; font-weight: 500; }
+.checkRow input { width: 18px; height: 18px; min-height: 0; flex: none; accent-color: var(--plugin-accent); }
 code { color: var(--plugin-accent); }
-.hint, .originNote { color: var(--plugin-text-muted); font-size: 12px; }
-.hint { margin: 9px 0 0; }
-.originNote { margin: 0 2px 12px; }
+.hint { margin: 8px 0 0; color: var(--plugin-text-muted); font-size: 12px; }
+.originNote {
+  margin: 12px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--plugin-accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--plugin-surface);
+  color: var(--plugin-text-muted);
+  font-size: 12px;
+}
 
-.work { display: flex; flex-direction: column; }
-.outputCard { display: flex; flex: 1; min-height: 0; flex-direction: column; margin: 0; }
+/* ---- Generate & review -------------------------------------------------- */
+.outputCard { display: flex; flex: 1 1 auto; min-height: 380px; flex-direction: column; }
+textarea#output {
+  flex: 1;
+  min-height: 160px;
+  height: 0;
+  margin-top: 12px;
+  resize: none;
+  background: var(--plugin-bg);
+  font: 12px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace;
+  white-space: pre;
+}
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 button {
   min-height: 40px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--plugin-border-strong);
-  border-radius: 4px;
+  border-radius: 6px;
   background: var(--plugin-surface-raised);
   color: var(--plugin-text);
   cursor: pointer;
   font: inherit;
   font-weight: 600;
 }
+button:hover:not(:disabled) { border-color: var(--plugin-accent); }
 button.primary { border-color: var(--plugin-accent); background: var(--plugin-accent); color: var(--plugin-accent-contrast); }
 button:disabled { cursor: not-allowed; opacity: .5; }
-.generateButton { width: 100%; }
+.generateButton { width: 100%; min-height: 44px; }
 .message { min-height: 1.45em; margin: 10px 0 0; color: var(--plugin-text-muted); }
 .message.error { color: #f87171; }
 
-@media (max-width: 1000px) {
-  body { overflow: auto; }
-  main { display: flex; height: auto; flex-direction: column; }
-  .settings { flex: none; overflow: visible; }
-  .work { flex: 1; min-height: 480px; overflow: visible; }
+/* ---- Narrow windows and panes: the same order, one column ---------------- */
+@media (max-width: 760px) {
+  body { height: auto; min-height: 100%; padding: 12px; overflow: auto; }
+  main { display: flex; flex: none; flex-direction: column; gap: 14px; }
+  .splitter { display: none; }
+  .settings, .work { overflow: visible; }
+  .outputCard { flex: none; min-height: 420px; }
+  textarea#output { min-height: 240px; }
 }
-@media (max-width: 680px) {
-  body { height: auto; min-height: 100%; padding: 9px; }
-  .pageHeader, .panelHeading { flex-direction: column; }
-  .machineState { max-width: none; text-align: left; }
-  .work { order: -1; min-height: 500px; }
-  .outputCard { min-height: 500px; }
-  .fieldGrid { grid-template-columns: 1fr; }
+@media (max-width: 480px) {
+  .pageHeader { flex-direction: column; gap: 8px; }
+  .machineState { max-width: none; }
 }
