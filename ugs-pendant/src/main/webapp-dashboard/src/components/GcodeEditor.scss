@@ -138,107 +138,180 @@
   }
 }
 
-.gcodeReviewOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1050;
+// G-code review: a panel docked under the code (never over it), so the lines
+// being discussed stay fully visible and untinted while it's open.
+.gcodeReviewPanel {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.45);
-}
-
-.gcodeReviewWindow {
-  display: flex;
+  flex: 0 1 auto;
   flex-direction: column;
-  width: min(900px, calc(100vw - 48px));
-  max-height: calc(100vh - 48px);
+  min-height: 96px;
+  max-height: 50%;
   overflow: hidden;
   border: 1px solid var(--dashboard-border-strong);
-  border-radius: 10px;
-  background: var(--dashboard-bg);
-  color: var(--dashboard-text);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  border-radius: 6px;
+  background: var(--dashboard-surface);
 }
 
-.gcodeReviewHeader {
+// Once the height has been dragged it's an explicit pixel height (inline
+// style), not "up to half" - but still capped so the code and toolbar keep
+// room (matches RESERVED_EDITOR_HEIGHT in utils/gcodeReviewHeight.ts).
+.gcodeReviewPanel.custom {
+  flex: 0 0 auto;
+  max-height: calc(100% - 140px);
+}
+
+// The grab strip on the panel's top edge.
+.gcodeReviewResizer {
+  position: relative;
+  flex: 0 0 12px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: var(--dashboard-bg);
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 40px;
+    height: 4px;
+    border-radius: 3px;
+    background: var(--dashboard-border-strong);
+    transform: translate(-50%, -50%);
+    transition: background 0.12s;
+  }
+
+  &:hover::after,
+  &:focus-visible::after {
+    background: var(--dashboard-accent);
+  }
+
+  &:focus-visible {
+    outline: none;
+  }
+}
+
+.gcodeReviewPanelHeader {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  justify-content: space-between;
-  padding: 16px 22px;
+  gap: 10px;
+  padding: 4px 6px 4px 12px;
   border-bottom: 1px solid var(--dashboard-border);
-  cursor: move;
-  user-select: none;
-
-  h2 {
-    margin: 0;
-    font-size: 1.35rem;
-  }
+  background: var(--dashboard-bg);
 }
 
-.gcodeReviewClose {
-  border: 0;
-  background: transparent;
-  color: var(--dashboard-text-muted);
-  font-size: 2rem;
-  line-height: 1;
-  cursor: pointer;
-
-  &:hover {
-    color: var(--dashboard-text);
-  }
-}
-
-.gcodeReviewBody {
-  min-height: 0;
-  overflow: auto;
-  padding: 22px;
-}
-
-.gcodeReviewFooter {
-  display: flex;
-  flex: 0 0 auto;
-  justify-content: flex-end;
-  padding: 14px 22px;
-  border-top: 1px solid var(--dashboard-border);
-}
-
-.gcodeReviewStatus,
-.gcodeReviewSuccess,
-.gcodeReviewError {
-  padding: 8px 0;
-}
-
-.gcodeReviewSuccess {
-  color: var(--dashboard-accent);
-}
-
-.gcodeReviewError {
-  color: var(--dashboard-danger-text);
+.gcodeReviewPanelTitle {
+  font-weight: 600;
 }
 
 .gcodeReviewSummary {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
   color: var(--dashboard-text-muted);
-  margin-bottom: 8px;
+  font-size: 0.85rem;
+}
+
+.gcodeReviewCount {
+  font-weight: 600;
+
+  &.error {
+    color: var(--dashboard-danger-text);
+  }
+
+  &.warning {
+    color: var(--dashboard-warning);
+  }
+}
+
+.gcodeReviewOk {
+  color: var(--dashboard-accent);
+}
+
+.gcodeReviewErrorText {
+  color: var(--dashboard-danger-text);
+}
+
+.gcodeReviewPanelActions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 2px;
+
+  button {
+    min-width: 32px;
+    min-height: 30px;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--dashboard-text-muted);
+    cursor: pointer;
+
+    &:hover:not(:disabled) {
+      background: var(--dashboard-surface-raised);
+      color: var(--dashboard-text);
+    }
+
+    &:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+  }
+}
+
+.gcodeReviewShowIgnored {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 8px 0 0;
+  color: var(--dashboard-text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.gcodeReviewStale {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--dashboard-border);
+  background: var(--dashboard-surface-subtle);
+  color: var(--dashboard-warning);
+  font-size: 0.8rem;
+
+  button {
+    border: 0;
+    background: none;
+    color: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+    padding: 0;
+  }
 }
 
 .gcodeReviewList {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 6px;
 }
 
 .gcodeReviewFinding {
   display: grid;
-  grid-template-columns: 82px 1fr;
-  gap: 2px 10px;
-  text-align: left;
-  padding: 8px 10px;
-  border: 1px solid var(--dashboard-border-strong);
+  grid-template-columns: 70px 1fr auto;
+  gap: 1px 10px;
+  align-items: center;
+  padding: 5px 8px;
+  border: 1px solid var(--dashboard-border);
+  border-left-width: 3px;
   border-radius: 4px;
-  background: var(--dashboard-surface);
+  background: var(--dashboard-bg);
   color: var(--dashboard-text);
   cursor: pointer;
 
@@ -246,28 +319,74 @@
     background: var(--dashboard-surface-raised);
   }
 
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 1px;
+  }
+
   &.error {
-    border-left: 3px solid var(--dashboard-danger-text);
+    border-left-color: var(--dashboard-danger-text);
   }
 
   &.warning {
-    border-left: 3px solid var(--dashboard-warning);
+    border-left-color: var(--dashboard-warning);
+  }
+
+  // The finding whose line is currently emphasised in the editor.
+  &.selected {
+    border-color: var(--dashboard-accent);
+    border-left-width: 3px;
+    background: var(--dashboard-surface-raised);
+  }
+
+  &.ignored {
+    cursor: default;
+    opacity: 0.6;
+
+    &:hover {
+      background: var(--dashboard-bg);
+    }
   }
 
   .gcodeReviewFindingLine {
     color: var(--dashboard-text-muted);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
   }
 
   .gcodeReviewFindingMessage {
+    font-size: 0.9rem;
     font-weight: 500;
   }
 
+  // The offending source line is already visible, and marked, in the editor
+  // itself - repeating it on every row only costs vertical room in a short
+  // pane, so it expands for the selected finding alone.
   code {
-    grid-column: 1 / -1;
+    display: none;
+    grid-column: 2 / -1;
     color: var(--dashboard-text-subtle);
+    font-size: 0.8rem;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  &.selected code {
+    display: block;
+  }
+}
+
+.gcodeReviewIgnore {
+  padding: 1px 8px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dashboard-text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--dashboard-text-muted);
+    color: var(--dashboard-text);
   }
 }
 
@@ -301,6 +420,33 @@
   // along with the rest of what's already run.
   .cm-currentRunLine.cm-dimmedLine {
     opacity: 1;
+  }
+
+  // Lines flagged by the G-code review (see reviewMarksField): a tinted
+  // background plus a coloured bar at the line's left edge, strong enough to
+  // read on the dark editor and unaffected by the active-line colour.
+  .cm-line.cm-reviewError {
+    box-shadow: inset 3px 0 0 var(--dashboard-danger-text);
+    background-color: rgba(248, 113, 113, 0.18);
+  }
+
+  .cm-line.cm-reviewWarning {
+    box-shadow: inset 3px 0 0 var(--dashboard-warning);
+    background-color: rgba(240, 173, 78, 0.16);
+  }
+
+  // The finding currently selected in the panel.
+  .cm-line.cm-reviewSelected {
+    outline: 1px solid var(--dashboard-text-muted);
+    outline-offset: -1px;
+  }
+
+  .cm-line.cm-reviewSelected.cm-reviewError {
+    background-color: rgba(248, 113, 113, 0.34);
+  }
+
+  .cm-line.cm-reviewSelected.cm-reviewWarning {
+    background-color: rgba(240, 173, 78, 0.32);
   }
 }
 

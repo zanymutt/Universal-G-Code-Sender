@@ -1,12 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { PointerEvent as ReactPointerEvent } from "react";
 import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, DecorationSet, EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { searchKeymap } from "@codemirror/search";
 import { Button, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faFloppyDisk, faFileExport, faForward, faMinus, faPlus } from "@fortawesome/free-solid-svg-icons";
+import {
+  faChevronDown,
+  faChevronUp,
+  faFloppyDisk,
+  faFileExport,
+  faForward,
+  faMinus,
+  faPlus,
+  faRotateRight,
+  faXmark,
+} from "@fortawesome/free-solid-svg-icons";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useEditorFontSize } from "../hooks/useEditorFontSize";
@@ -19,7 +28,10 @@ import { gcodeLanguage, gcodeSyntaxHighlighting } from "./gcodeLanguage";
 import SaveAsModal from "./SaveAsModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { getFileName } from "../utils/getFileName";
-import { GcodeReviewDiagnostic, GcodeReviewResult, reviewGcode } from "../services/gcodeReview";
+import { GcodeReviewResult, reviewGcode } from "../services/gcodeReview";
+import { findingKey, loadIgnoredFindings, saveIgnoredFindings, splitIgnored } from "../utils/gcodeReviewIgnore";
+import { clampReviewHeight, loadReviewHeight, saveReviewHeight } from "../utils/gcodeReviewHeight";
+import { layoutScale } from "../utils/layoutRect";
 import "./GcodeEditor.scss";
 
 // Font-size is deliberately not set here - it's owned entirely by the
@@ -100,6 +112,47 @@ const currentRunLineField = StateField.define<DecorationSet>({
       if (!effect.is(setCurrentRunLine)) continue;
       if (effect.value <= 0 || effect.value > tr.state.doc.lines) return Decoration.none;
       return Decoration.set([currentRunLineMark.range(tr.state.doc.line(effect.value).from)]);
+    }
+    return decorations.map(tr.changes);
+  },
+  provide: (field) => EditorView.decorations.from(field),
+});
+
+// Lines the G-code review flagged, marked in the editor itself so the problem
+// is seen in context rather than only listed in the review panel. Like
+// dimThroughField this maps through edits on its own, so a mark stays on its
+// line as text above it is inserted or deleted.
+type ReviewMark = { line: number; severity: "ERROR" | "WARNING"; selected: boolean };
+const setReviewMarks = StateEffect.define<ReviewMark[]>();
+
+const reviewMarksField = StateField.define<DecorationSet>({
+  create() {
+    return Decoration.none;
+  },
+  update(decorations, tr) {
+    for (const effect of tr.effects) {
+      if (!effect.is(setReviewMarks)) continue;
+      const doc = tr.state.doc;
+      // One decoration per line: an error outranks a warning, and the line
+      // holding the selected finding is "selected" even if another shares it.
+      const byLine = new Map<number, ReviewMark>();
+      for (const mark of effect.value) {
+        if (mark.line < 1 || mark.line > doc.lines) continue;
+        const existing = byLine.get(mark.line);
+        byLine.set(mark.line, {
+          line: mark.line,
+          severity: existing?.severity === "ERROR" || mark.severity === "ERROR" ? "ERROR" : "WARNING",
+          selected: Boolean(existing?.selected) || mark.selected,
+        });
+      }
+      return Decoration.set(
+        Array.from(byLine.values()).map((mark) =>
+          Decoration.line({
+            class: `cm-reviewMark ${mark.severity === "ERROR" ? "cm-reviewError" : "cm-reviewWarning"}${mark.selected ? " cm-reviewSelected" : ""}`,
+          }).range(doc.line(mark.line).from)
+        ),
+        true
+      );
     }
     return decorations.map(tr.changes);
   },
@@ -253,13 +306,27 @@ const GcodeEditor = () => {
   const [review, setReview] = useState<GcodeReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
-  const [reviewOffset, setReviewOffset] = useState({ x: 0, y: 0 });
-  const reviewDragRef = useRef<{
-    startX: number;
-    startY: number;
-    originX: number;
-    originY: number;
-  } | null>(null);
+  // Finding keys the person chose to ignore (persisted - see gcodeReviewIgnore).
+  const [ignoredKeys, setIgnoredKeys] = useState<string[]>(() => loadIgnoredFindings());
+  const [showIgnored, setShowIgnored] = useState(false);
+  // Index into the *active* (non-ignored) findings, or null for none.
+  const [selectedFinding, setSelectedFinding] = useState<number | null>(null);
+  // The text was edited after the review ran, so its line numbers/findings
+  // may no longer match what's on screen.
+  const [reviewStale, setReviewStale] = useState(false);
+  const reviewListRef = useRef<HTMLDivElement | null>(null);
+  // The panel's height once the person has dragged its top edge (null = the
+  // automatic height from CSS). Dragging works in layout pixels - the same
+  // units the height is applied in - so it stays correct at any dashboard zoom.
+  const editorRootRef = useRef<HTMLDivElement | null>(null);
+  const reviewPanelRef = useRef<HTMLDivElement | null>(null);
+  const [reviewHeight, setReviewHeight] = useState<number | null>(() => loadReviewHeight());
+  const reviewResizeRef = useRef<{ startY: number; startHeight: number; scale: number } | null>(null);
+  const ignoredSet = useMemo(() => new Set(ignoredKeys), [ignoredKeys]);
+  const { active: activeFindings, hidden: ignoredFindings } = useMemo(
+    () => splitIgnored(review?.diagnostics ?? [], ignoredSet),
+    [review, ignoredSet]
+  );
 
   // Mirrors isDirty into uiSlice too (see its own comment) - every place that
   // would otherwise call setIsDirty directly goes through this instead, so
@@ -279,6 +346,10 @@ const GcodeEditor = () => {
     setDirty(false);
     setCursorLine(1);
     dispatch(uiActions.setEditorCursorLine(1));
+    // A review belongs to the text it was run on.
+    setShowReview(false);
+    setReview(null);
+    setSelectedFinding(null);
     // Mirrors the backend's own auto-reset-on-open (RunFromService resets to
     // a normal full run whenever a new file is opened) so the job bar's
     // armed-line badge doesn't keep pointing at a line from a previous file.
@@ -305,8 +376,12 @@ const GcodeEditor = () => {
               fontSizeCompartmentRef.current.of(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
               dimThroughField,
               currentRunLineField,
+              reviewMarksField,
               EditorView.updateListener.of((update) => {
-                if (update.docChanged) setDirty(true);
+                if (update.docChanged) {
+                  setDirty(true);
+                  setReviewStale(true);
+                }
                 if (update.selectionSet || update.docChanged) {
                   const line = update.state.doc.lineAt(update.state.selection.main.head).number;
                   setCursorLine(line);
@@ -405,6 +480,31 @@ const GcodeEditor = () => {
     });
   }, [fontSize]);
 
+  // Keeps the editor's line marks in step with the review: shown only while
+  // the panel is open, minus whatever's been ignored, with the selected
+  // finding's line emphasised.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    const marks: ReviewMark[] = showReview
+      ? activeFindings.map((finding, index) => ({
+          line: finding.lineNumber,
+          severity: finding.severity,
+          selected: index === selectedFinding,
+        }))
+      : [];
+    view.dispatch({ effects: setReviewMarks.of(marks) });
+  }, [showReview, activeFindings, selectedFinding]);
+
+  // Keeps the selected finding visible in the panel's own list when stepping
+  // through with the prev/next buttons.
+  useEffect(() => {
+    if (selectedFinding === null) return;
+    reviewListRef.current
+      ?.querySelector(`[data-finding-index="${selectedFinding}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedFinding]);
+
   const doSave = (): Promise<void> => {
     if (!viewRef.current || !fileName) return Promise.reject(new Error("No gcode file is open to save"));
     return saveFileContent(viewRef.current.state.doc.toString()).then(() => {
@@ -477,9 +577,10 @@ const GcodeEditor = () => {
     const content = viewRef.current?.state.doc.toString();
     if (content === undefined) return;
     setShowReview(true);
-    setReviewOffset({ x: 0, y: 0 });
     setReview(null);
     setReviewError(null);
+    setSelectedFinding(null);
+    setReviewStale(false);
     setIsReviewing(true);
     reviewGcode(content)
       .then(setReview)
@@ -487,50 +588,87 @@ const GcodeEditor = () => {
       .finally(() => setIsReviewing(false));
   };
 
-  const jumpToReviewLine = (diagnostic: GcodeReviewDiagnostic) => {
+  // Selecting a finding moves the cursor to its line and scrolls it into view
+  // without taking keyboard focus: focusing the editor would pop the on-screen
+  // keyboard on a tablet while someone is just stepping through problems.
+  const selectFinding = (index: number) => {
+    setSelectedFinding(index);
     const view = viewRef.current;
-    if (!view) return;
-    const lineNumber = Math.max(1, Math.min(diagnostic.lineNumber, view.state.doc.lines));
-    const line = view.state.doc.line(lineNumber);
-    view.dispatch({
-      selection: { anchor: line.from },
-      effects: EditorView.scrollIntoView(line.from, { y: "center", yMargin: 80 }),
-    });
-    view.focus();
-    setCursorLine(lineNumber);
-    dispatch(uiActions.setEditorCursorLine(lineNumber));
+    const finding = activeFindings[index];
+    if (!view || !finding) return;
+    const lineNumber = Math.max(1, Math.min(finding.lineNumber, view.state.doc.lines));
+    view.dispatch({ selection: { anchor: view.state.doc.line(lineNumber).from } });
+    scrollLineIntoView(view, lineNumber, () => viewRef.current === view);
   };
 
-  const startReviewDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("button")) return;
-    reviewDragRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: reviewOffset.x,
-      originY: reviewOffset.y,
-    };
+  const stepFinding = (delta: 1 | -1) => {
+    const count = activeFindings.length;
+    if (count === 0) return;
+    const next = selectedFinding === null ? (delta > 0 ? 0 : count - 1) : (selectedFinding + delta + count) % count;
+    selectFinding(next);
+  };
+
+  const ignoreFinding = (finding: { severity: string; message: string }) => {
+    const key = findingKey(finding);
+    const next = [...ignoredKeys.filter((existing) => existing !== key), key];
+    setIgnoredKeys(next);
+    saveIgnoredFindings(next);
+    setSelectedFinding(null);
+  };
+
+  const restoreFinding = (finding: { severity: string; message: string }) => {
+    const key = findingKey(finding);
+    const next = ignoredKeys.filter((existing) => existing !== key);
+    setIgnoredKeys(next);
+    saveIgnoredFindings(next);
+  };
+
+  const startReviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const panel = reviewPanelRef.current;
+    if (!panel) return;
+    event.preventDefault();
+    reviewResizeRef.current = { startY: event.clientY, startHeight: panel.offsetHeight, scale: layoutScale(panel) };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const moveReviewDrag = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const drag = reviewDragRef.current;
-    if (!drag) return;
-    setReviewOffset({
-      x: drag.originX + event.clientX - drag.startX,
-      y: drag.originY + event.clientY - drag.startY,
-    });
+  const moveReviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = reviewResizeRef.current;
+    const root = editorRootRef.current;
+    if (!drag || !root) return;
+    // Dragging up (smaller clientY) grows the panel, which is docked at the bottom.
+    setReviewHeight(clampReviewHeight(drag.startHeight + (drag.startY - event.clientY) / drag.scale, root.clientHeight));
   };
 
-  const endReviewDrag = () => {
-    reviewDragRef.current = null;
+  const endReviewResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!reviewResizeRef.current) return;
+    reviewResizeRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    if (reviewPanelRef.current) saveReviewHeight(reviewPanelRef.current.offsetHeight);
   };
+
+  const nudgeReviewHeight = (delta: number) => {
+    const panel = reviewPanelRef.current;
+    const root = editorRootRef.current;
+    if (!panel || !root) return;
+    const next = clampReviewHeight((reviewHeight ?? panel.offsetHeight) + delta, root.clientHeight);
+    setReviewHeight(next);
+    saveReviewHeight(next);
+  };
+
+  const resetReviewHeight = () => {
+    setReviewHeight(null);
+    saveReviewHeight(null);
+  };
+
+  const errorCount = activeFindings.filter((item) => item.severity === "ERROR").length;
+  const warningCount = activeFindings.length - errorCount;
 
   if (!fileName) {
     return <div className="gcodeEditorEmpty">No file loaded. Open a file from the Run tab first.</div>;
   }
 
   return (
-    <div className="gcodeEditor">
+    <div className="gcodeEditor" ref={editorRootRef}>
       {showSaveAs && (
         <SaveAsModal
           defaultFileName={fileName}
@@ -553,71 +691,135 @@ const GcodeEditor = () => {
         onCancel={() => setShowRunFromConfirm(false)}
       />
 
-      {showReview && (
-        <div className="gcodeReviewOverlay" role="presentation">
-          <div
-            className="gcodeReviewWindow"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="gcode-review-title"
-            style={{ transform: `translate(${reviewOffset.x}px, ${reviewOffset.y}px)` }}
-          >
-            <div
-              className="gcodeReviewHeader"
-              onPointerDown={startReviewDrag}
-              onPointerMove={moveReviewDrag}
-              onPointerUp={endReviewDrag}
-              onPointerCancel={endReviewDrag}
-            >
-              <h2 id="gcode-review-title">G-code review</h2>
-              <button
-                type="button"
-                className="gcodeReviewClose"
-                onClick={() => setShowReview(false)}
-                aria-label="Close G-code review"
-              >
-                ×
-              </button>
-            </div>
-            <div className="gcodeReviewBody">
-              {isReviewing && <div className="gcodeReviewStatus"><Spinner size="sm" /> Reviewing the current editor buffer...</div>}
-              {reviewError && <div className="gcodeReviewError">{reviewError}</div>}
-              {review && (
-                review.diagnostics.length === 0 ? (
-                  <div className="gcodeReviewSuccess">No parser errors or unknown G/M-codes found in {review.lineCount} lines.</div>
-                ) : (
-                  <div className="gcodeReviewList">
-                    <div className="gcodeReviewSummary">
-                      {review.diagnostics.filter((item) => item.severity === "ERROR").length} error(s), {" "}
-                      {review.diagnostics.filter((item) => item.severity === "WARNING").length} warning(s)
-                    </div>
-                    {review.diagnostics.map((diagnostic, index) => (
-                      <button
-                        type="button"
-                        className={`gcodeReviewFinding ${diagnostic.severity === "ERROR" ? "error" : "warning"}`}
-                        key={`${diagnostic.lineNumber}-${index}`}
-                        onClick={() => jumpToReviewLine(diagnostic)}
-                      >
-                        <span className="gcodeReviewFindingLine">Line {diagnostic.lineNumber}</span>
-                        <span className="gcodeReviewFindingMessage">{diagnostic.message}</span>
-                        <code>{diagnostic.source}</code>
-                      </button>
-                    ))}
-                  </div>
-                )
-              )}
-            </div>
-            <div className="gcodeReviewFooter">
-              <Button variant="secondary" onClick={() => setShowReview(false)}>Close</Button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="gcodeEditorContent">
         {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
         <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
       </div>
+
+      {showReview && (
+        <div
+          className={"gcodeReviewPanel" + (reviewHeight !== null ? " custom" : "")}
+          style={reviewHeight !== null ? { height: reviewHeight } : undefined}
+          ref={reviewPanelRef}
+          role="region"
+          aria-label="G-code review"
+        >
+          {/* Drag up to show more findings at once; arrow keys nudge it and a
+              double-click goes back to the automatic height. */}
+          <div
+            className="gcodeReviewResizer"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="Resize review panel"
+            title="Drag to resize (double-click to reset)"
+            tabIndex={0}
+            onPointerDown={startReviewResize}
+            onPointerMove={moveReviewResize}
+            onPointerUp={endReviewResize}
+            onPointerCancel={endReviewResize}
+            onDoubleClick={resetReviewHeight}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowUp") {
+                event.preventDefault();
+                nudgeReviewHeight(event.shiftKey ? 96 : 24);
+              } else if (event.key === "ArrowDown") {
+                event.preventDefault();
+                nudgeReviewHeight(event.shiftKey ? -96 : -24);
+              }
+            }}
+          />
+          <div className="gcodeReviewPanelHeader">
+            <span className="gcodeReviewPanelTitle">Review</span>
+            <span className="gcodeReviewSummary">
+              {isReviewing && <><Spinner size="sm" /> Reviewing…</>}
+              {!isReviewing && reviewError && <span className="gcodeReviewErrorText">{reviewError}</span>}
+              {!isReviewing && !reviewError && review && (
+                activeFindings.length === 0
+                  ? ignoredFindings.length === 0
+                    ? <span className="gcodeReviewOk">No parser errors or unknown G/M-codes in {review.lineCount} lines.</span>
+                    : <span className="gcodeReviewOk">Nothing left to review - {ignoredFindings.length} ignored.</span>
+                  : <>
+                      {errorCount > 0 && <span className="gcodeReviewCount error">{errorCount} error{errorCount === 1 ? "" : "s"}</span>}
+                      {warningCount > 0 && <span className="gcodeReviewCount warning">{warningCount} warning{warningCount === 1 ? "" : "s"}</span>}
+                    </>
+              )}
+            </span>
+            <div className="gcodeReviewPanelActions">
+              {ignoredFindings.length > 0 && (
+                <label className="gcodeReviewShowIgnored">
+                  <input type="checkbox" checked={showIgnored} onChange={(event) => setShowIgnored(event.target.checked)} />
+                  Ignored ({ignoredFindings.length})
+                </label>
+              )}
+              <button type="button" onClick={() => stepFinding(-1)} disabled={activeFindings.length === 0}
+                aria-label="Previous finding" title="Previous finding">
+                <FontAwesomeIcon icon={faChevronUp} />
+              </button>
+              <button type="button" onClick={() => stepFinding(1)} disabled={activeFindings.length === 0}
+                aria-label="Next finding" title="Next finding">
+                <FontAwesomeIcon icon={faChevronDown} />
+              </button>
+              <button type="button" onClick={handleReview} disabled={isReviewing}
+                aria-label="Review again" title="Review the current editor text again">
+                <FontAwesomeIcon icon={faRotateRight} />
+              </button>
+              <button type="button" onClick={() => setShowReview(false)} aria-label="Close review" title="Close review">
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
+            </div>
+          </div>
+          {reviewStale && review && !isReviewing && (
+            <div className="gcodeReviewStale">
+              The text has changed since this review.{" "}
+              <button type="button" onClick={handleReview}>Review again</button>
+            </div>
+          )}
+          <div className="gcodeReviewList" ref={reviewListRef}>
+            {activeFindings.map((finding, index) => (
+              <div
+                role="button"
+                tabIndex={0}
+                data-finding-index={index}
+                className={`gcodeReviewFinding ${finding.severity === "ERROR" ? "error" : "warning"}${index === selectedFinding ? " selected" : ""}`}
+                key={`${finding.lineNumber}-${index}`}
+                onClick={() => selectFinding(index)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    selectFinding(index);
+                  }
+                }}
+              >
+                <span className="gcodeReviewFindingLine">Line {finding.lineNumber}</span>
+                <span className="gcodeReviewFindingMessage">{finding.message}</span>
+                <button
+                  type="button"
+                  className="gcodeReviewIgnore"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    ignoreFinding(finding);
+                  }}
+                  title="Hide this finding from future reviews"
+                >
+                  Ignore
+                </button>
+                <code>{finding.source}</code>
+              </div>
+            ))}
+            {showIgnored && ignoredFindings.map((finding, index) => (
+              <div className="gcodeReviewFinding ignored" key={`ignored-${finding.lineNumber}-${index}`}>
+                <span className="gcodeReviewFindingLine">Line {finding.lineNumber}</span>
+                <span className="gcodeReviewFindingMessage">{finding.message}</span>
+                <button type="button" className="gcodeReviewIgnore" onClick={() => restoreFinding(finding)}
+                  title="Show this finding in reviews again">
+                  Restore
+                </button>
+                <code>{finding.source}</code>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="gcodeEditorToolbar">
         <span className="gcodeEditorFileName">{fileName}</span>
