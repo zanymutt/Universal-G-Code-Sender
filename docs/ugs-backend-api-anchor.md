@@ -86,6 +86,14 @@ Thin REST wrappers, one file per backend resource, all `fetch("/api/v1/...")`.
 - Example plugins committed in-repo: `ugs-pendant/examples/{batch-runner,job-inspector}/`.
 - Full prose API reference (already written, don't duplicate): `ugs-pendant/PLUGIN_API.md`.
 
-## Center panel plugin-hosting note (not yet built)
+## Plugin docking into center panes
 
-Plugins today only ever open as floating popup windows (`PluginWindow.tsx`), never docked into a `CenterPanel.tsx` tab/slot. If that gets built, and a plugin can move between panel slots the way `GcodeEditor` moves between the top pane and bottom panel, it must NOT reuse a naive `createPortal(children, activeSlot)` swap — see `feedback_react_portal_container_swap_unmounts` memory / the fix in `CenterPanel.tsx` (`editorHostRef` + `useLayoutEffect` + `appendChild`) for why and the correct pattern, doubly important for an iframe since remounting one fully reloads it.
+Plugins open floating by default (right-rail click), and can be docked into a center-layout pane or floated again. The layout is the source of truth; plugin windows are reconciled to it.
+
+- A pane's `content` is a built-in (`visualize|edit|macros|probe|console`) or `"plugin:<id>"` — `PaneContent` in `components/CenterPaneLayoutDemo.tsx`. Helpers, events and the reconcile planner (`planPluginDocking`) live in `src/utils/pluginPanes.ts`.
+- `CenterPaneLayoutDemo` runs an idempotent effect: panes naming a plugin get it opened and docked (`openDocked`), docked windows whose pane shows something else are parked (`park` = minimized, still running, restorable from the tray). Pane bodies showing a plugin carry `data-plugin-dock-slot="pane-<id>"`.
+- `store/pluginWindows.ts` entries have `dockSlot: string|null`; actions `dock`/`openDocked`/`float`/`park`. One window per plugin unless `allowMultipleInstances`.
+- **Never re-parent the iframe** (moving it reloads the plugin). `PluginWindow.tsx` stays mounted at one place and, when docked, is laid over the slot's box measured by `hooks/useDockRect.ts` (zoom-corrected via `utils/layoutRect.ts`; z-index 10, under the pane dividers at 20 and floating windows at 40/41). A non-front floating window gets `.pluginWindowActivateShield` because clicks inside the iframe never reach the parent.
+- UI: a native `<select>` "Plugins" in each pane header (an optgroup in the narrow single select), Float/Close buttons on docked panes, and a Dock `<select>` in a floating window's title bar. Events: `ugs-pane-set-content` (dock request), `ugs-pane-plugin-closed` (a docked plugin closed -> pane reverts).
+- The current pane layout is not restored on page load (existing behaviour); saved presets are, via `ugs-pane-layout-apply`.
+- Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see `feedback_react_portal_container_swap_unmounts` / `CenterPanel.tsx` (`editorHostRef` + `appendChild`).
