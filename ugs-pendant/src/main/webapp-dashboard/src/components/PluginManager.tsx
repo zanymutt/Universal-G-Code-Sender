@@ -2,7 +2,8 @@ import { createContext, ReactNode, useContext, useEffect, useMemo, useReducer, u
 import { listPlugins, PluginInfo } from "../services/plugins";
 import PluginWindow from "./PluginWindow";
 import PluginTray from "./PluginTray";
-import { initialPluginWindows, pluginWindowsReducer } from "../store/pluginWindows";
+import { initialPluginWindows, pluginWindowsReducer, PluginWindowsState } from "../store/pluginWindows";
+import { PANE_PLUGIN_CLOSED_EVENT, PANE_SET_CONTENT_EVENT, paneContentLabel, pluginContent } from "../utils/pluginPanes";
 
 // Staggers each newly opened window a bit further down/right than the last
 // so opening several plugins in a row doesn't stack them in an identical
@@ -11,8 +12,25 @@ import { initialPluginWindows, pluginWindowsReducer } from "../store/pluginWindo
 const STAGGER_STEP = 28;
 const STAGGER_MAX_STEPS = 10;
 
+// A center-layout pane a floating plugin window can be docked into, as
+// published by CenterPaneLayoutDemo (empty whenever that layout isn't mounted).
+export type DockTarget = { id: number; content: string };
+
 type PluginManagerValue = {
   plugins: PluginInfo[];
+  // False until the first plugin list fetch has settled, so a layout that
+  // names a plugin doesn't call it "not installed" just because it's early.
+  pluginsLoaded: boolean;
+  windows: PluginWindowsState["windows"];
+  // Layout-driven docking (see utils/pluginPanes planPluginDocking).
+  dockInto: (plugin: PluginInfo, slot: string) => void;
+  parkWindow: (key: number) => void;
+  floatWindow: (key: number) => void;
+  closeWindow: (key: number) => void;
+  dockTargets: DockTarget[];
+  setDockTargets: (targets: DockTarget[]) => void;
+  // Ask the layout to show this plugin in that pane.
+  requestDock: (pluginId: string, paneId: number) => void;
   refreshPlugins: () => void;
   openPlugin: (plugin: PluginInfo) => void;
   // Per plugin id: "open" if any of its windows is showing, "minimized" if it
@@ -46,16 +64,24 @@ type Props = { children: ReactNode };
 // showing RightRail.
 const PluginManagerProvider = ({ children }: Props) => {
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [pluginsLoaded, setPluginsLoaded] = useState(false);
+  const [dockTargets, setDockTargets] = useState<DockTarget[]>([]);
   const [windowState, dispatchWindow] = useReducer(pluginWindowsReducer, initialPluginWindows);
 
   const refreshPlugins = () => {
     listPlugins()
-      .then(setPlugins)
+      .then((list) => {
+        setPlugins(list);
+        setPluginsLoaded(true);
+      })
       // A failed fetch (e.g. before the backend's finished starting) just
       // leaves the list empty rather than being surfaced as an error -
       // there's nothing actionable for the person to do about it beyond
       // pressing refresh again.
-      .catch(() => setPlugins([]));
+      .catch(() => {
+        setPlugins([]);
+        setPluginsLoaded(true);
+      });
   };
 
   useEffect(refreshPlugins, []);
@@ -65,8 +91,28 @@ const PluginManagerProvider = ({ children }: Props) => {
   };
 
   const closeWindow = (key: number) => {
+    const closing = windowState.windows.find((w) => w.key === key);
+    // A docked plugin is what a pane is showing: tell the layout it's gone so
+    // that pane picks something else, instead of reopening it on the spot.
+    if (closing?.dockSlot) {
+      window.dispatchEvent(new CustomEvent(PANE_PLUGIN_CLOSED_EVENT, { detail: { pluginId: closing.plugin.id } }));
+    }
     dispatchWindow({ type: "close", key });
   };
+
+  const dockInto = (plugin: PluginInfo, slot: string) => dispatchWindow({ type: "openDocked", plugin, slot });
+  const parkWindow = (key: number) => dispatchWindow({ type: "park", key });
+  const floatWindow = (key: number) => dispatchWindow({ type: "float", key });
+  const requestDock = (pluginId: string, paneId: number) => {
+    window.dispatchEvent(new CustomEvent(PANE_SET_CONTENT_EVENT, { detail: { paneId, content: pluginContent(pluginId) } }));
+  };
+
+  // What a floating window's Dock control offers: one entry per pane of the
+  // center layout, named by position and what it's showing right now.
+  const dockOptions = dockTargets.map((target, index) => ({
+    id: target.id,
+    label: `Pane ${index + 1}: ${paneContentLabel(target.content, plugins.find((p) => `plugin:${p.id}` === target.content)?.name)}`,
+  }));
 
   const pluginStates = useMemo(() => {
     const states: Record<string, "open" | "minimized"> = {};
@@ -78,7 +124,11 @@ const PluginManagerProvider = ({ children }: Props) => {
   }, [windowState.windows]);
 
   return (
-    <PluginManagerContext.Provider value={{ plugins, refreshPlugins, openPlugin, pluginStates }}>
+    <PluginManagerContext.Provider value={{
+      plugins, pluginsLoaded, refreshPlugins, openPlugin, pluginStates,
+      windows: windowState.windows, dockInto, parkWindow, floatWindow, closeWindow,
+      dockTargets, setDockTargets, requestDock,
+    }}>
       {children}
 
       {windowState.windows.map((openWindow, index) => (
@@ -88,6 +138,8 @@ const PluginManagerProvider = ({ children }: Props) => {
           isFront={windowState.frontKey === openWindow.key}
           focusRequest={openWindow.focusRequest}
           dockSlot={openWindow.dockSlot}
+          dockOptions={dockOptions}
+          onDock={(paneId) => requestDock(openWindow.plugin.id, paneId)}
           onActivate={() => dispatchWindow({ type: "activate", key: openWindow.key })}
           initialOffset={{
             x: 80 + STAGGER_STEP * (index % STAGGER_MAX_STEPS),

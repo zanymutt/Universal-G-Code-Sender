@@ -138,3 +138,43 @@ test("a parked plugin restored from the tray comes back floating", () => {
   assert.equal(restored.windows[0].dockSlot, null);
   assert.equal(restored.windows[0].minimized, false);
 });
+
+test("openDocked creates a window already docked, and reuses an existing one wherever it is", () => {
+  const created = reduce(initial, { type: "openDocked", plugin, slot: "pane-1" });
+  assert.equal(created.windows.length, 1);
+  assert.equal(created.windows[0].dockSlot, "pane-1");
+  assert.equal(created.windows[0].minimized, false);
+  // already there: no change at all (what keeps the reconcile effect from looping)
+  assert.equal(reduce(created, { type: "openDocked", plugin, slot: "pane-1" }), created);
+  // floating elsewhere: the same window is docked, not duplicated
+  const floating = open(initial);
+  const moved = reduce(floating, { type: "openDocked", plugin, slot: "pane-2" });
+  assert.equal(moved.windows.length, 1);
+  assert.equal(moved.windows[0].key, floating.windows[0].key);
+  assert.equal(moved.windows[0].dockSlot, "pane-2");
+});
+test("openDocked over an occupied slot parks the occupant", () => {
+  const a = reduce(initial, { type: "openDocked", plugin, slot: "pane-1" });
+  const b = reduce(a, { type: "openDocked", plugin: { ...plugin, id: "other" }, slot: "pane-1" });
+  assert.equal(b.windows.length, 2);
+  assert.equal(b.windows[0].dockSlot, null);
+  assert.equal(b.windows[0].minimized, true);
+  assert.equal(b.windows[1].dockSlot, "pane-1");
+});
+test("a multi-instance plugin gets a new window per slot instead of pulling a floating one", () => {
+  const p = { ...plugin, allowMultipleInstances: true };
+  const floating = open(initial, p);
+  const docked = reduce(floating, { type: "openDocked", plugin: p, slot: "pane-1" });
+  assert.equal(docked.windows.length, 2);
+  assert.equal(docked.windows[0].dockSlot, null);
+  assert.equal(docked.windows[1].dockSlot, "pane-1");
+});
+test("park hides a docked window without closing it, and is a no-op when already parked", () => {
+  const docked = reduce(initial, { type: "openDocked", plugin, slot: "pane-1" });
+  const parked = reduce(docked, { type: "park", key: docked.windows[0].key });
+  assert.equal(parked.windows.length, 1);
+  assert.equal(parked.windows[0].dockSlot, null);
+  assert.equal(parked.windows[0].minimized, true);
+  assert.equal(parked.frontKey, null);
+  assert.equal(reduce(parked, { type: "park", key: docked.windows[0].key }), parked);
+});

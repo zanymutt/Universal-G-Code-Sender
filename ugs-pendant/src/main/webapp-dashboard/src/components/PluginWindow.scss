@@ -178,3 +178,23 @@
     cursor: default;
   }
 }
+
+// The header's "Dock" menu: a native <select> (its popup is drawn by the
+// browser, above any plugin iframe) dressed like the header buttons.
+.pluginWindowDock {
+  flex-shrink: 0;
+  height: 26px;
+  max-width: 7rem;
+  padding: 0 4px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dashboard-text-subtle);
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--dashboard-border-strong);
+    color: var(--dashboard-text);
+  }
+}

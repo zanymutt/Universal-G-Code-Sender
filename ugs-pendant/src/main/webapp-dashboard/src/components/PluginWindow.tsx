@@ -40,6 +40,10 @@ type Props = {
   // than floating. Same iframe, same component instance - only the box it's
   // laid out in changes, so nothing reloads when it docks or floats.
   dockSlot?: string | null;
+  // Panes this window can be docked into (empty when there's no center
+  // layout), and the callback that docks it into one.
+  dockOptions?: { id: number; label: string }[];
+  onDock?: (paneId: number) => void;
 };
 
 type SubscribableEvent = "status" | "line" | "theme";
@@ -86,7 +90,7 @@ type PickFileRequest = {
   reject: (error: Error) => void;
 };
 
-const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate, dockSlot = null }: Props) => {
+const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate, dockSlot = null, dockOptions = [], onDock }: Props) => {
   const dispatch = useAppDispatch();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const windowRef = useRef<HTMLDivElement>(null);
@@ -267,7 +271,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
   const handleHeaderPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     // Not the close button - that has its own onClick and shouldn't also
     // start a drag underneath it.
-    if ((e.target as HTMLElement).closest("button")) return;
+    if ((e.target as HTMLElement).closest("button, select")) return;
     if (maximizedRef.current) return;
     dragRef.current = { startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -571,11 +575,13 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
       // Docked: laid over the slot's measured box (no box yet, or the slot is
       // hidden, means hidden - the same visibility trick, so it keeps its
       // last size). z-index sits under floating windows (40/41) so a floating
-      // plugin can still be dragged over a docked one.
+      // plugin can still be dragged over a docked one, and under the pane
+      // dividers (20): their grab area extends a few px into the pane body,
+      // which this window would otherwise cover.
       style={docked
         ? {
             ...(dockRect && { left: dockRect.left, top: dockRect.top, width: dockRect.width, height: dockRect.height }),
-            zIndex: 30,
+            zIndex: 10,
             visibility: minimized || !dockRect ? "hidden" : "visible",
           }
         : {
@@ -592,11 +598,28 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         onPointerUp={endHeaderDrag}
         onPointerCancel={endHeaderDrag}
         onDoubleClick={(e) => {
-          if (!(e.target as HTMLElement).closest("button")) setMaximized((value) => !value);
+          if (!(e.target as HTMLElement).closest("button, select")) setMaximized((value) => !value);
         }}
       >
         {plugin.iconUrl && <img src={plugin.iconUrl} alt="" className="pluginWindowIcon" />}
         <span className="pluginWindowTitle">{plugin.name}</span>
+        {dockOptions.length > 0 && onDock && (
+          // A native <select> acting as a menu button: always reads "Dock",
+          // and choosing a pane docks this plugin there (the window then
+          // becomes that pane's content, via the layout).
+          <select
+            className="pluginWindowDock"
+            value=""
+            aria-label="Dock this plugin into a pane"
+            title="Dock into a pane"
+            onChange={(e) => e.target.value !== "" && onDock(Number(e.target.value))}
+          >
+            <option value="" disabled>Dock</option>
+            {dockOptions.map((option) => (
+              <option key={option.id} value={option.id}>{option.label}</option>
+            ))}
+          </select>
+        )}
         <button type="button" className="pluginWindowMinimize" onClick={onMinimize} aria-label="Minimize plugin" title="Minimize">
           <FontAwesomeIcon icon={faMinus} />
         </button>

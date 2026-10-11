@@ -4,10 +4,25 @@ import GcodeEditor from "./GcodeEditor";
 import ConsolePanel from "./ConsolePanel";
 import MacroEditor from "./MacroEditor";
 import ProbePanel from "./ProbePanel";
+import { usePluginManager } from "./PluginManager";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faWindowRestore, faXmark } from "@fortawesome/free-solid-svg-icons";
 import { persistCurrentPaneLayout, PANE_LAYOUT_APPLY_EVENT } from "../hooks/usePaneLayoutPresets";
+import type { PluginInfo } from "../services/plugins";
+import {
+  PANE_PLUGIN_CLOSED_EVENT,
+  PANE_SET_CONTENT_EVENT,
+  paneDockSlot,
+  pluginContent,
+  pluginIdFromContent,
+  planPluginDocking,
+} from "../utils/pluginPanes";
 import "./CenterPaneLayoutDemo.scss";
 
-export type PaneContent = "visualize" | "edit" | "macros" | "probe" | "console";
+export type BuiltInPaneContent = "visualize" | "edit" | "macros" | "probe" | "console";
+// A pane shows one of the built-in views or an installed plugin
+// ("plugin:<id>" - see utils/pluginPanes).
+export type PaneContent = BuiltInPaneContent | `plugin:${string}`;
 
 // Lets something outside this component (RightRail's "Edit macros" pencil,
 // today) force a specific content type into view without needing to know
@@ -22,7 +37,7 @@ export type RestoreRecord = { panes: Pane[]; originId: number; spine: Orientatio
 export type Pane = { id: number; content: PaneContent; rect: Rect; restore?: Partial<Record<Orientation, RestoreRecord>> };
 export type LayoutState = { panes: Pane[]; spine: Orientation | null; sizes: SegmentSizes };
 
-const CONTENT: { value: PaneContent; label: string }[] = [
+const CONTENT: { value: BuiltInPaneContent; label: string }[] = [
   { value: "visualize", label: "Visualize" },
   { value: "edit", label: "Edit" },
   { value: "macros", label: "Macros" },
@@ -55,7 +70,7 @@ const mergeGroup = (panes: Pane[], pane: Pane, orientation: Orientation): Pane[]
   return group.length > 1 && group.reduce((sum, candidate) => sum + area(candidate.rect), 0) === area(target) ? group : [];
 };
 
-const nextContent = (panes: Pane[], current: PaneContent): PaneContent => {
+const nextContent = (panes: Pane[], current: PaneContent): BuiltInPaneContent => {
   const used = new Set(panes.map(pane => pane.content));
   return CONTENT.find(item => item.value !== current && !used.has(item.value))?.value ?? "console";
 };
@@ -86,9 +101,19 @@ type PaneHeaderProps = {
   content: PaneContent;
   onChange: (content: PaneContent) => void;
   splitButtons: ReactNode;
+  plugins: PluginInfo[];
+  // Float / close, only while the pane is showing a plugin.
+  pluginControls: ReactNode;
 };
 
-const PaneHeader = ({ content, onChange, splitButtons }: PaneHeaderProps) => {
+const PaneHeader = ({ content, onChange, splitButtons, plugins, pluginControls }: PaneHeaderProps) => {
+  const shownPluginId = pluginIdFromContent(content);
+  // A pane can name a plugin that isn't installed (a saved layout moved to
+  // another machine) - keep it selectable so the <select> never has a value
+  // with no matching option.
+  const missingPluginId = shownPluginId !== null && !plugins.some(plugin => plugin.id === shownPluginId)
+    ? shownPluginId : null;
+  const hasPlugins = plugins.length > 0 || missingPluginId !== null;
   const headerRef = useRef<HTMLElement | null>(null);
   const measureRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -110,15 +135,32 @@ const PaneHeader = ({ content, onChange, splitButtons }: PaneHeaderProps) => {
   return <header className="centerPaneLayoutLeafHeader" ref={headerRef}>
     <div className="centerPaneLayoutTabsMeasure" ref={measureRef} aria-hidden="true">
       {CONTENT.map(item => <span key={item.value}>{item.label}</span>)}
+      {hasPlugins && <span className="centerPaneLayoutPluginMeasure">Plugins</span>}
     </div>
     {compact ? <select className="centerPaneLayoutContentSelect" value={content}
       onChange={event => onChange(event.target.value as PaneContent)} aria-label="Pane content">
       {CONTENT.map(item => <option key={item.value} value={item.value}>{item.label}</option>)}
-    </select> : <nav className="centerPaneLayoutTabs" aria-label="Pane content">
-      {CONTENT.map(item => <button type="button" key={item.value} className={item.value === content ? "active" : ""}
-        onClick={() => onChange(item.value)}>{item.label}</button>)}
-    </nav>}
-    <div className="centerPaneLayoutSplitControls" ref={controlsRef}>{splitButtons}</div>
+      {hasPlugins && <optgroup label="Plugins">
+        {plugins.map(plugin => <option key={plugin.id} value={pluginContent(plugin.id)}>{plugin.name}</option>)}
+        {missingPluginId !== null && <option value={content}>{missingPluginId} (not installed)</option>}
+      </optgroup>}
+    </select> : <>
+      <nav className="centerPaneLayoutTabs" aria-label="Pane content">
+        {CONTENT.map(item => <button type="button" key={item.value} className={item.value === content ? "active" : ""}
+          onClick={() => onChange(item.value)}>{item.label}</button>)}
+      </nav>
+      {/* A native <select> rather than a custom menu: its popup is drawn by the
+          browser above everything (a docked plugin sits over the pane body),
+          and it's already touch-friendly. Reads "Plugins" until one is shown. */}
+      {hasPlugins && <select className={"centerPaneLayoutPluginSelect" + (shownPluginId !== null ? " active" : "")}
+        value={shownPluginId !== null ? content : ""} aria-label="Show a plugin in this pane"
+        onChange={event => onChange(event.target.value as PaneContent)}>
+        <option value="" disabled>Plugins</option>
+        {plugins.map(plugin => <option key={plugin.id} value={pluginContent(plugin.id)}>{plugin.name}</option>)}
+        {missingPluginId !== null && <option value={content}>{missingPluginId} (not installed)</option>}
+      </select>}
+    </>}
+    <div className="centerPaneLayoutSplitControls" ref={controlsRef}>{pluginControls}{splitButtons}</div>
   </header>;
 };
 
@@ -126,11 +168,36 @@ const CenterPaneLayoutDemo = () => {
   const [layout, setLayout] = useState<LayoutState>(() => initialLayout());
   const nextId = useRef(3);
   const consoleRestore = useRef<{ id: number; content: PaneContent } | null>(null);
+  // The built-in view each pane showed before a plugin replaced it, so Float
+  // / Close can put it back instead of guessing.
+  const lastBuiltIn = useRef<Record<number, BuiltInPaneContent>>({});
   const { panes } = layout;
+  const { plugins, pluginsLoaded, windows, dockInto, parkWindow, floatWindow, closeWindow, setDockTargets } = usePluginManager();
 
   useEffect(() => {
     persistCurrentPaneLayout(layout);
   }, [layout]);
+
+  // The floating windows' Dock control lists these.
+  useEffect(() => {
+    setDockTargets(panes.map(pane => ({ id: pane.id, content: pane.content })));
+  }, [panes, setDockTargets]);
+  useEffect(() => () => setDockTargets([]), [setDockTargets]);
+
+  // Keeps plugin windows in line with what the panes say: a pane naming a
+  // plugin gets it opened and docked (also how a saved layout brings its
+  // plugins back after a reload), and a docked plugin whose pane now shows
+  // something else is parked - hidden but still running - rather than closed.
+  // Idempotent, so it's safe to run on every change (see planPluginDocking).
+  useEffect(() => {
+    if (!pluginsLoaded) return;
+    const plan = planPluginDocking(panes, plugins, windows);
+    plan.dock.forEach(({ plugin, slot }) => dockInto(plugin, slot));
+    plan.park.forEach(key => parkWindow(key));
+    // dockInto/parkWindow are recreated every render; the plan above is the
+    // only thing that should re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panes, plugins, pluginsLoaded, windows]);
 
   useEffect(() => {
     const onApply = (event: Event) => {
@@ -245,15 +312,84 @@ const CenterPaneLayoutDemo = () => {
     };
   });
 
+  // What a pane goes back to when its plugin leaves: the view it showed
+  // before, or else the first built-in view no other pane is using.
+  const fallbackContent = (all: Pane[], paneId: number): BuiltInPaneContent => {
+    const used = new Set(all.filter(pane => pane.id !== paneId).map(pane => pane.content));
+    const remembered = lastBuiltIn.current[paneId];
+    if (remembered && !used.has(remembered)) return remembered;
+    return CONTENT.find(item => !used.has(item.value))?.value ?? "console";
+  };
+
   const changeContent = (id: number, content: PaneContent) => setLayout(current => {
     const next = clone(current);
     const target = next.panes.find(pane => pane.id === id);
     if (!target || target.content === content) return current;
+    if (pluginIdFromContent(target.content) === null) lastBuiltIn.current[id] = target.content as BuiltInPaneContent;
     const other = next.panes.find(pane => pane.id !== id && pane.content === content);
-    if (other) other.content = target.content;
+    if (other) {
+      if (pluginIdFromContent(target.content) === null) lastBuiltIn.current[other.id] = target.content as BuiltInPaneContent;
+      other.content = target.content;
+    }
     target.content = content;
     return next;
   });
+
+  // Pane showing a plugin goes back to a built-in view (the plugin itself is
+  // dealt with by the caller, or by the reconcile effect above).
+  const releasePane = (paneId: number) => setLayout(current => {
+    const next = clone(current);
+    const target = next.panes.find(pane => pane.id === paneId);
+    if (!target || pluginIdFromContent(target.content) === null) return current;
+    target.content = fallbackContent(next.panes, paneId);
+    return next;
+  });
+
+  const floatPanePlugin = (paneId: number) => {
+    const docked = windows.find(w => w.dockSlot === paneDockSlot(paneId));
+    // Float first: the window is already undocked by the time the pane's
+    // content changes, so the reconcile effect has nothing to park.
+    if (docked) floatWindow(docked.key);
+    releasePane(paneId);
+  };
+
+  const closePanePlugin = (paneId: number) => {
+    const docked = windows.find(w => w.dockSlot === paneDockSlot(paneId));
+    // closeWindow tells the layout via PANE_PLUGIN_CLOSED_EVENT (handled
+    // below); with no window (not installed yet) just release the pane.
+    if (docked) closeWindow(docked.key);
+    else releasePane(paneId);
+  };
+
+  useEffect(() => {
+    const onSetContent = (event: Event) => {
+      const detail = (event as CustomEvent<{ paneId?: number; content?: PaneContent }>).detail;
+      if (typeof detail?.paneId === "number" && detail.content) changeContent(detail.paneId, detail.content);
+    };
+    const onPluginClosed = (event: Event) => {
+      const pluginId = (event as CustomEvent<{ pluginId?: string }>).detail?.pluginId;
+      if (!pluginId) return;
+      setLayout(current => {
+        const next = clone(current);
+        let changed = false;
+        for (const pane of next.panes) {
+          if (pane.content !== pluginContent(pluginId)) continue;
+          pane.content = fallbackContent(next.panes, pane.id);
+          changed = true;
+        }
+        return changed ? next : current;
+      });
+    };
+    window.addEventListener(PANE_SET_CONTENT_EVENT, onSetContent);
+    window.addEventListener(PANE_PLUGIN_CLOSED_EVENT, onPluginClosed);
+    return () => {
+      window.removeEventListener(PANE_SET_CONTENT_EVENT, onSetContent);
+      window.removeEventListener(PANE_PLUGIN_CLOSED_EVENT, onPluginClosed);
+    };
+    // Handlers only touch refs and functional setLayout updates, so the
+    // listeners registered once stay correct.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     const onConsoleShortcut = (event: Event) => {
@@ -334,8 +470,25 @@ const CenterPaneLayoutDemo = () => {
     ? pane.rect.x1 - pane.rect.x0 === 2
     : pane.rect.y1 - pane.rect.y0 === 2);
 
-  const renderContent = (content: PaneContent) => {
-    switch (content) {
+  // A plugin pane's real content is the plugin's own window, laid over this
+  // pane's body by PluginWindow (see useDockRect) - this only fills in while
+  // that isn't the case yet, or can't be.
+  const renderPluginPane = (pane: Pane, pluginId: string) => {
+    const docked = windows.some(w => w.plugin.id === pluginId && w.dockSlot === paneDockSlot(pane.id));
+    if (docked) return <div />;
+    const installed = plugins.some(plugin => plugin.id === pluginId);
+    const claimedElsewhere = panes.find(p => p.content === pane.content)?.id !== pane.id;
+    let message = "Opening plugin…";
+    if (!pluginsLoaded) message = "Loading plugins…";
+    else if (!installed) message = `The plugin "${pluginId}" isn't installed on this computer.`;
+    else if (claimedElsewhere) message = "This plugin is already shown in another pane.";
+    return <div className="centerPaneLayoutPluginMessage">{message}</div>;
+  };
+
+  const renderContent = (pane: Pane) => {
+    const pluginId = pluginIdFromContent(pane.content);
+    if (pluginId !== null) return renderPluginPane(pane, pluginId);
+    switch (pane.content) {
       case "visualize": return <Visualizer3D />;
       case "edit": return <GcodeEditor />;
       case "console": return <ConsolePanel />;
@@ -343,6 +496,17 @@ const CenterPaneLayoutDemo = () => {
       case "probe": return <ProbePanel compact />;
     }
   };
+
+  const pluginPaneControls = (pane: Pane) => pluginIdFromContent(pane.content) === null ? null : <>
+    <button type="button" className="centerPaneLayoutSplitButton" onClick={() => floatPanePlugin(pane.id)}
+      aria-label="Float plugin in its own window" title="Float in its own window">
+      <FontAwesomeIcon icon={faWindowRestore} />
+    </button>
+    <button type="button" className="centerPaneLayoutSplitButton" onClick={() => closePanePlugin(pane.id)}
+      aria-label="Close plugin" title="Close plugin">
+      <FontAwesomeIcon icon={faXmark} />
+    </button>
+  </>;
 
   const renderSplitButton = (pane: Pane, orientation: Orientation) => {
     const active = mergeGroup(panes, pane, orientation).length > 0;
@@ -386,11 +550,15 @@ const CenterPaneLayoutDemo = () => {
   return <div className="centerPaneLayoutDemo">
     {panes.map(pane => <section className="centerPaneLayoutLeaf" style={paneStyle(pane.rect)}
       data-layout-rect={`${pane.rect.x0}${pane.rect.x1}${pane.rect.y0}${pane.rect.y1}`} key={pane.id}>
-      <PaneHeader content={pane.content} onChange={content => changeContent(pane.id, content)} splitButtons={<>
+      <PaneHeader content={pane.content} onChange={content => changeContent(pane.id, content)}
+        plugins={plugins} pluginControls={pluginPaneControls(pane)} splitButtons={<>
           {renderSplitButton(pane, "horizontal")}
           {renderSplitButton(pane, "vertical")}
         </>} />
-      <div className="centerPaneLayoutLeafBody">{renderContent(pane.content)}</div>
+      <div className="centerPaneLayoutLeafBody"
+        data-plugin-dock-slot={pluginIdFromContent(pane.content) !== null ? paneDockSlot(pane.id) : undefined}>
+        {renderContent(pane)}
+      </div>
     </section>)}
 
     {dividerSegments.vertical.map(([start, end]) => <div key={`v-${start}-${end}`} className="centerPaneLayoutResizer vertical"

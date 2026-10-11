@@ -23,7 +23,11 @@ type Action =
   | { type: "minimize"; key: number }
   | { type: "restore"; key: number }
   | { type: "dock"; key: number; slot: string }
+  // Open a plugin straight into a slot (reusing its window if it has one).
+  | { type: "openDocked"; plugin: PluginInfo; slot: string }
   | { type: "float"; key: number }
+  // Hide a docked window without closing it: it keeps running, minimized.
+  | { type: "park"; key: number }
   | { type: "close"; key: number };
 
 // The window that should take the front after `key` stops being visible
@@ -32,6 +36,25 @@ const nextFrontKey = (state: PluginWindowsState, windows: PluginWindowEntry[], l
   state.frontKey === leavingKey
     ? windows.filter(w => !w.minimized && w.key !== leavingKey).pop()?.key ?? null
     : state.frontKey;
+
+// Docks window `key` into `slot`. A slot shows one plugin at a time, so
+// whatever was docked there before is parked - minimized, floating, still
+// running - not closed, so a batch job it was in the middle of keeps going and
+// it can be restored later.
+function dockInto(
+  state: PluginWindowsState,
+  windows: PluginWindowEntry[],
+  key: number,
+  slot: string,
+): PluginWindowsState {
+  const parked = windows.filter(w => w.key !== key && w.dockSlot === slot).map(w => w.key);
+  const next = windows.map(w => {
+    if (w.key === key) return { ...w, dockSlot: slot, minimized: false, focusRequest: w.focusRequest + 1 };
+    if (parked.includes(w.key)) return { ...w, dockSlot: null, minimized: true };
+    return w;
+  });
+  return { ...state, windows: next, frontKey: state.frontKey !== null && parked.includes(state.frontKey) ? key : state.frontKey };
+}
 
 // Keep DOM order stable: moving an iframe in the DOM can reload its document.
 // A reducer also handles multiple launches in one React render without duplicate keys.
@@ -71,16 +94,26 @@ export function pluginWindowsReducer(state: PluginWindowsState, action: Action):
   if (action.type === "dock") {
     const target = state.windows.find(w => w.key === action.key);
     if (!target || (target.dockSlot === action.slot && !target.minimized)) return state;
-    // A slot shows one plugin at a time. Whatever was docked there before is
-    // parked - minimized, floating, still running - not closed, so a batch
-    // job it was in the middle of keeps going and it can be restored later.
-    const windows = state.windows.map(w => {
-      if (w.key === action.key) return { ...w, dockSlot: action.slot, minimized: false, focusRequest: w.focusRequest + 1 };
-      if (w.dockSlot === action.slot) return { ...w, dockSlot: null, minimized: true };
-      return w;
-    });
-    const parked = state.windows.filter(w => w.key !== action.key && w.dockSlot === action.slot).map(w => w.key);
-    return { ...state, windows, frontKey: parked.includes(state.frontKey ?? -1) ? action.key : state.frontKey };
+    return dockInto(state, state.windows, action.key, action.slot);
+  }
+  if (action.type === "openDocked") {
+    // One window per plugin, so reuse it wherever it is; a plugin that allows
+    // several windows gets a fresh one rather than having one it already has
+    // floating pulled out from under whoever is using it.
+    const reusable = state.windows.find(w => w.plugin.id === action.plugin.id
+      && (action.plugin.allowMultipleInstances !== true || w.dockSlot === action.slot));
+    if (reusable) {
+      if (reusable.dockSlot === action.slot && !reusable.minimized) return state;
+      return dockInto(state, state.windows, reusable.key, action.slot);
+    }
+    const entry: PluginWindowEntry = { key: state.nextKey, plugin: action.plugin, focusRequest: 0, minimized: false, dockSlot: null };
+    return dockInto({ ...state, nextKey: state.nextKey + 1 }, [...state.windows, entry], entry.key, action.slot);
+  }
+  if (action.type === "park") {
+    const target = state.windows.find(w => w.key === action.key);
+    if (!target || (target.dockSlot === null && target.minimized)) return state;
+    const windows = state.windows.map(w => w.key === action.key ? { ...w, dockSlot: null, minimized: true } : w);
+    return { ...state, windows, frontKey: nextFrontKey(state, windows, action.key) };
   }
   if (action.type === "float") {
     const target = state.windows.find(w => w.key === action.key);

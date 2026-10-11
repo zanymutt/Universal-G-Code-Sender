@@ -3,19 +3,12 @@ import { Button, Form, Modal } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBookmark, faCheck, faTrash } from "@fortawesome/free-solid-svg-icons";
 import { applyPaneLayout, usePaneLayoutPresets } from "../hooks/usePaneLayoutPresets";
-import type { LayoutState, PaneContent } from "./CenterPaneLayoutDemo";
+import type { LayoutState } from "./CenterPaneLayoutDemo";
+import { paneContentLabel } from "../utils/pluginPanes";
 import LayoutBackupControls from "./LayoutBackupControls";
 
-const LABELS: Record<PaneContent, string> = {
-  visualize: "Visualize",
-  edit: "Edit",
-  macros: "Macros",
-  probe: "Probe",
-  console: "Console",
-};
-
 const summary = (layout: LayoutState) => {
-  const contents = layout.panes.map(pane => LABELS[pane.content]).join(" · ");
+  const contents = layout.panes.map(pane => paneContentLabel(pane.content)).join(" · ");
   const shape = layout.panes.length === 1 ? "Single pane" : `${layout.panes.length} panes · ${layout.spine === "vertical" ? "vertical" : "horizontal"} spine`;
   return `${shape} — ${contents}`;
 };
