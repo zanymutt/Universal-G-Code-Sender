@@ -12,6 +12,10 @@ export type ToolpathSegment = {
   // them, and the simulation then falls back to a uniform made-up clock.
   feedRate?: number;
   inches?: boolean;
+  // The modal S word (laser/plasma power, spindle rpm) in effect for the
+  // segment. Optional for the same reason: the stock-removal view treats a
+  // missing value as "always at full power".
+  spindleSpeed?: number;
 };
 
 export const getToolpath = (): Promise<ToolpathSegment[]> => {

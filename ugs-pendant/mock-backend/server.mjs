@@ -139,6 +139,8 @@ function gcodeToSegments(text, armedFromCommand = 0) {
   // toolpath simulation derives its playback timing from it. Real files here
   // are all metric, so inches is always false.
   let feed = 0;
+  // The modal S word, stamped onto every segment as spindleSpeed (laser power).
+  let spindle = 0;
 
   const pushSegment = (segment) => {
     if (segment.lineNumber < armedFromCommand) return;
@@ -152,10 +154,11 @@ function gcodeToSegments(text, armedFromCommand = 0) {
         lineNumber: segment.lineNumber,
         feedRate: feed,
         inches: false,
+        spindleSpeed: spindle,
       });
       plungeInserted = true;
     }
-    segments.push({ ...segment, feedRate: feed, inches: false });
+    segments.push({ ...segment, feedRate: feed, inches: false, spindleSpeed: spindle });
   };
 
   const getNum = (line, letter) => {
@@ -170,6 +173,8 @@ function gcodeToSegments(text, armedFromCommand = 0) {
 
     const nf = getNum(line, "F");
     if (nf !== null) feed = nf;
+    const ns = getNum(line, "S");
+    if (ns !== null) spindle = ns;
 
     const gMatch = line.match(/G(\d+)/);
     const g = gMatch ? parseInt(gMatch[1], 10) : lastG;

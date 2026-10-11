@@ -1,0 +1,57 @@
+// Placed inline by StockSettings.tsx (left/top/width/max-height), fixed inside
+// .app. Above the plugin windows (40/41) and their tray (42), like the
+// simulation settings popover.
+.stockSettings {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overscroll-behavior: contain;
+
+  .form-label {
+    margin-bottom: 4px;
+    color: var(--dashboard-text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .stockSettingsHeading {
+    margin-top: 4px;
+    padding-top: 8px;
+    border-top: 1px solid var(--dashboard-border);
+    color: var(--dashboard-text-muted);
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .stockSettingsHint {
+    margin-top: 4px;
+    color: var(--dashboard-text-subtle);
+    font-size: 0.78rem;
+    line-height: 1.3;
+  }
+}
+
+// Top right of the viewport, left of the zoom control.
+.visualizer3DStockStatus {
+  position: absolute;
+  right: 64px;
+  top: 12px;
+  z-index: 5;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: var(--dashboard-hud-bg);
+  border: 1px solid var(--dashboard-hud-border);
+  color: var(--dashboard-hud-text);
+  font-size: 0.8rem;
+  pointer-events: none;
+}

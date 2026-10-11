@@ -3,7 +3,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Button, ButtonGroup } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faBroom, faListOl, faPlay, faStop, faObjectGroup } from "@fortawesome/free-solid-svg-icons";
+import { faBroom, faCube, faListOl, faPlay, faStop, faObjectGroup } from "@fortawesome/free-solid-svg-icons";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { uiActions } from "../store/uiSlice";
@@ -15,7 +15,10 @@ import {
   SimulationColorFn,
   ToolpathSimulation,
 } from "../utils/toolpathSimulation";
+import { StockModel, StockStatus, IDLE_STOCK_STATUS } from "../utils/stockModel";
+import { readStockProfiles, StockProfiles, writeStockProfiles } from "../utils/stockSettingsStore";
 import SimulationBar from "./SimulationBar";
+import StockSettings from "./StockSettings";
 import ViewCubeIcon from "./ViewCubeIcon";
 import VisualizerReadout from "./VisualizerReadout";
 import VisualizerZoomControl from "./VisualizerZoomControl";
@@ -302,6 +305,18 @@ const Visualizer3D = () => {
   const cleanViewRef = useRef(false);
   cleanViewRef.current = cleanView;
   const applyGridVisibilityRef = useRef(() => {});
+  // Stock-removal view: the block of material with the cut taken out of it,
+  // computed in a worker (utils/stockSimEngine.ts) and drawn in the scene.
+  const stockRef = useRef<StockModel | null>(null);
+  const [stockOn, setStockOn] = useState(false);
+  const stockOnRef = useRef(false);
+  stockOnRef.current = stockOn;
+  const [stockProfiles, setStockProfiles] = useState<StockProfiles>(readStockProfiles);
+  const [stockStatus, setStockStatus] = useState<StockStatus>(IDLE_STOCK_STATUS);
+  // The stock view hides the toolpath lines unless asked, so the carved result shows.
+  const pathVisible = !stockOn || stockProfiles.showPath;
+  const pathVisibleRef = useRef(true);
+  pathVisibleRef.current = pathVisible;
   const [rapidRate, setRapidRate] = useState(readStoredRapidRate);
   const rapidRateRef = useRef(rapidRate);
   rapidRateRef.current = rapidRate;
@@ -410,7 +425,7 @@ const Visualizer3D = () => {
     const toolpathLines = new THREE.LineSegments(geometry, material);
     // The simulation draws its own copy of the toolpath (solid + ghost) while
     // it's active - this one would only show through it.
-    toolpathLines.visible = !simRef.current?.isActive();
+    toolpathLines.visible = !simRef.current?.isActive() && pathVisibleRef.current;
     scene.add(toolpathLines);
     toolpathLinesRef.current = toolpathLines;
   };
@@ -455,12 +470,52 @@ const Visualizer3D = () => {
     }
   }, [rapidRate]);
 
+  const stockSettings = stockProfiles.settings[stockProfiles.process];
+
+  useEffect(() => {
+    writeStockProfiles(stockProfiles);
+  }, [stockProfiles]);
+
+  // (Re)starts the stock simulation when it's switched on, its cutter/stock
+  // settings change, or a different toolpath has loaded (bounds is set once
+  // per fetch). Off, it stops the worker and frees its memory.
+  useEffect(() => {
+    const stock = stockRef.current;
+    if (!stock) return;
+    stock.setEnabled(stockOn);
+    if (stockOn) stock.load(segmentsRef.current, stockSettings);
+    else setStockStatus(IDLE_STOCK_STATUS);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockOn, stockSettings, bounds]);
+
+  // Which point in the job the material is shown at: the simulation's
+  // playhead while it's up, the last completed line during a real run, and
+  // the finished part otherwise.
+  const stockSimSegments = simUi.active ? (simRef.current?.getCompletedSegments() ?? 0) : -1;
+  // How far into the segment being cut the playhead is, in tenths so the
+  // texture isn't re-uploaded for every pixel of motion along a long cut.
+  const stockSimFraction = simUi.active ? Math.floor((simRef.current?.getSegmentFraction() ?? 0) * 10) / 10 : 0;
+  useEffect(() => {
+    const stock = stockRef.current;
+    if (!stock || !stockOn) return;
+    const segments = segmentsRef.current;
+    let count = segments.length;
+    if (stockSimSegments >= 0) {
+      count = stockSimSegments;
+    } else if (isJobActive) {
+      count = 0;
+      while (count < segments.length && segments[count].lineNumber <= lastCompletedLineNumber) count++;
+    }
+    stock.setProgress(count, stockSimSegments >= 0 ? stockSimFraction : 0);
+  }, [stockOn, stockSimSegments, stockSimFraction, isJobActive, lastCompletedLineNumber, bounds, stockStatus.state]);
+
   // While the simulation is up, the machine's own tool marker and the live
   // toolpath step aside so only one "tool" and one toolpath are on screen.
   useEffect(() => {
     if (toolMarkerRef.current) toolMarkerRef.current.visible = !simUi.active;
-    if (toolpathLinesRef.current) toolpathLinesRef.current.visible = !simUi.active;
-  }, [simUi.active]);
+    if (toolpathLinesRef.current) toolpathLinesRef.current.visible = !simUi.active && pathVisible;
+    simRef.current?.setPathVisible(pathVisible);
+  }, [simUi.active, pathVisible]);
 
   // A real job starting takes over the visualizer (live gray-out, live tool
   // position, the editor's running-line highlight) - the simulation would just
@@ -864,6 +919,10 @@ const Visualizer3D = () => {
     simulation.setShowRapids(!cleanViewRef.current);
     simRef.current = simulation;
 
+    const stock = new StockModel(scene, setStockStatus);
+    stock.setEnabled(stockOnRef.current);
+    stockRef.current = stock;
+
     const applyFrustum = () => {
       const { clientWidth, clientHeight } = container;
       if (clientWidth === 0 || clientHeight === 0) return;
@@ -918,6 +977,8 @@ const Visualizer3D = () => {
       controlsRef.current?.dispose();
       simulation.dispose();
       simRef.current = null;
+      stock.dispose();
+      stockRef.current = null;
       renderer.dispose();
       toolpathLinesRef.current?.geometry.dispose();
       gridRef.current?.dispose();
@@ -1086,6 +1147,17 @@ const Visualizer3D = () => {
             <span className="visualizer3DButtonLabel">Simulate</span>
           </Button>
           <Button
+            variant={stockOn ? "primary" : "outline-primary"}
+            disabled={!bounds}
+            onClick={() => setStockOn(!stockOn)}
+            title="Show the block of material with the cut removed, for the cutter set in the settings (router, laser or plasma)"
+            aria-label="Stock"
+          >
+            <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faCube} /></span>
+            <span className="visualizer3DButtonLabel">Stock</span>
+          </Button>
+          {stockOn && <StockSettings profiles={stockProfiles} status={stockStatus} onChange={setStockProfiles} />}
+          <Button
             variant={colorByOrder ? "primary" : "outline-primary"}
             disabled={!bounds}
             onClick={() => setColorByOrder(!colorByOrder)}
@@ -1144,6 +1216,13 @@ const Visualizer3D = () => {
               ]}
             />
           )
+        )}
+        {stockOn && stockStatus.state !== "idle" && stockStatus.state !== "ready" && (
+          <div className="visualizer3DStockStatus" role="status">
+            {stockStatus.state === "computing" && `Calculating stock… ${Math.round(stockStatus.progress * 100)}%`}
+            {stockStatus.state === "empty" && "Nothing in this toolpath cuts the stock."}
+            {stockStatus.state === "error" && "Couldn't start the stock simulation."}
+          </div>
         )}
         {colorByOrder && (
           <div className="visualizer3DOrderLegend" title="First move to last move">

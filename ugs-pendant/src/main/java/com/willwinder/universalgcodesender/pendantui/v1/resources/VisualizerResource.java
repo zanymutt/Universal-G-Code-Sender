@@ -79,9 +79,13 @@ public class VisualizerResource {
         }
 
         List<LineSegment> lineSegments = parseToolpath(gcodeFile);
+        // A flat (2D) file - laser, plasma, drag knife - never has a Z word, so Z stays NaN for
+        // every segment and the whole file would be dropped below. Such a file sits at Z 0.
+        boolean flat = lineSegments.stream()
+                .noneMatch(segment -> Double.isFinite(segment.getStart().z) || Double.isFinite(segment.getEnd().z));
         return lineSegments.stream()
-                .filter(VisualizerResource::hasFinitePositions)
-                .map(VisualizerResource::toToolpathSegment)
+                .filter(segment -> hasFinitePositions(segment, flat))
+                .map(segment -> toToolpathSegment(segment, flat))
                 .collect(Collectors.toList());
     }
 
@@ -101,22 +105,23 @@ public class VisualizerResource {
      * Jackson serializes a NaN double as the string "NaN", which would silently corrupt a
      * numeric consumer like a WebGL vertex buffer - so these segments are dropped instead.
      */
-    private static boolean hasFinitePositions(LineSegment lineSegment) {
-        return isFinite(lineSegment.getStart()) && isFinite(lineSegment.getEnd());
+    private static boolean hasFinitePositions(LineSegment lineSegment, boolean ignoreZ) {
+        return isFinite(lineSegment.getStart(), ignoreZ) && isFinite(lineSegment.getEnd(), ignoreZ);
     }
 
-    private static boolean isFinite(Position position) {
-        return Double.isFinite(position.x) && Double.isFinite(position.y) && Double.isFinite(position.z);
+    private static boolean isFinite(Position position, boolean ignoreZ) {
+        return Double.isFinite(position.x) && Double.isFinite(position.y) && (ignoreZ || Double.isFinite(position.z));
     }
 
-    private static ToolpathSegment toToolpathSegment(LineSegment lineSegment) {
+    private static ToolpathSegment toToolpathSegment(LineSegment lineSegment, boolean flat) {
         return new ToolpathSegment(
-                new ToolpathPoint(lineSegment.getStart().x, lineSegment.getStart().y, lineSegment.getStart().z),
-                new ToolpathPoint(lineSegment.getEnd().x, lineSegment.getEnd().y, lineSegment.getEnd().z),
+                new ToolpathPoint(lineSegment.getStart().x, lineSegment.getStart().y, flat ? 0 : lineSegment.getStart().z),
+                new ToolpathPoint(lineSegment.getEnd().x, lineSegment.getEnd().y, flat ? 0 : lineSegment.getEnd().z),
                 lineSegment.isFastTraverse(),
                 lineSegment.isArc(),
                 lineSegment.getLineNumber(),
                 lineSegment.getFeedRate(),
-                lineSegment.getStart().getUnits() == UnitUtils.Units.INCH);
+                lineSegment.getStart().getUnits() == UnitUtils.Units.INCH,
+                lineSegment.getSpindleSpeed());
     }
 }

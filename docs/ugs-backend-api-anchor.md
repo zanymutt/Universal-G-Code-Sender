@@ -38,7 +38,7 @@ All `@Path`-relative to `/api/v1`.
 - `FileStatus.java` `record(fileName, rowCount, completedRowCount, remainingRowCount, sendDuration, sendRemainingDuration, lastCompletedLineNumber, sendState)`.
 - `Macro.java` — id/name/description/gcode/color/icon/keypress etc. (class, not record).
 - `ProbeSettings.java`, `ProbeRunRequest.java`, `ProbeResult.java`, `ProbeOperation.java` (enum).
-- `ToolpathSegment.java` `record(start: ToolpathPoint, end: ToolpathPoint, rapid, arc, lineNumber)`; `ToolpathPoint.java` `record(x,y,z)`.
+- `ToolpathSegment.java` `record(start: ToolpathPoint, end: ToolpathPoint, rapid, arc, lineNumber, feedRate, inches, spindleSpeed)` (`spindleSpeed` = the modal S word; feeds laser engraving depth in the Stock view); `ToolpathPoint.java` `record(x,y,z)`.
 - `WorkspaceFileEntry.java`, `WorkspaceFileList.java` — file browser tree nodes.
 - `Settings.java` — app settings blob (units, etc.).
 - `PluginManifest.java` `record(name, description, version, entry, icon, allowMultipleInstances)` — maps to `plugin.json`, `@JsonIgnoreProperties(ignoreUnknown=true)`, `entryOrDefault()` defaults to `"index.html"`.
@@ -97,3 +97,14 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - UI: a native `<select>` "Plugins" in each pane header (an optgroup in the narrow single select), Float/Close buttons on docked panes, and a Dock `<select>` in a floating window's title bar. Events: `ugs-pane-set-content` (dock request), `ugs-pane-plugin-closed` (a docked plugin closed -> pane reverts).
 - The current pane layout is not restored on page load (existing behaviour); saved presets are, via `ugs-pane-layout-apply`.
 - Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see `feedback_react_portal_container_swap_unmounts` / `CenterPanel.tsx` (`editorHostRef` + `appendChild`).
+
+## Stock view (material removal)
+
+A "Stock" toggle in the 3D visualizer toolbar shows the block of material with the cut taken out of it, for a router (flat/ball/V cutter), laser (depth from S power) or plasma (through-cut, kerf width). Heightfield (2.5D) model: no undercuts or 4th/5th axis.
+
+- `utils/stockSimEngine.ts` — pure, DOM-free: `StockSettings`, `packToolpath`, `planStockGrid`, `StockSimulator` (stamps the cutter footprint per segment; seeks forward incrementally, backward via snapshots). Tested by `tests/stockSimEngine.test.cjs`.
+- `utils/stockSim.worker.ts` — runs the simulator off the UI thread; only ever works toward the newest `seek`. Messages: `load`/`seek` in; `ready`/`heights`/`progress`/`empty` out.
+- `utils/stockModel.ts` — `StockModel` owns the worker and the three.js objects: one static grid mesh displaced by a height `DataTexture` in a vertex shader (normals and burn shading in the fragment shader), so a new result is one texture upload. Through-cuts `discard` and show the background.
+- `components/StockSettings.tsx` (+ `utils/stockSettingsStore.ts`, localStorage `ugs.dashboard.stockSimulation`) — popover with per-process cutter/stock settings. All lengths are mm in settings and converted to the file's units in the engine.
+- `Visualizer3D.tsx` drives it: loads on toggle/settings/new toolpath; position follows the simulation playhead (`ToolpathSimulation.getCompletedSegments()`), the last completed line during a real job, else the finished part. Toolpath lines are hidden over the stock unless "Show toolpath over the stock" is on.
+- Cell size `0` = auto (`autoCellSize`: laser/plasma kerf / 2, router diameter / 10). The grid is capped at `StockSettings.maxCells` (default 2M, user-selectable 1M-8M in the popover); finer requested cell sizes are coarsened automatically and reported via `StockStatus.coarsened`.

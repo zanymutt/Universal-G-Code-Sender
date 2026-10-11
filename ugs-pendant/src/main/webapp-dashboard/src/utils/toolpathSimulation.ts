@@ -66,6 +66,9 @@ export class ToolpathSimulation {
   private realTiming = false;
   private rapidRate = DEFAULT_RAPID_RATE_MM_PER_MIN;
   private showRapids = true;
+  // Whether the ghost/solid toolpath lines are drawn at all - the stock view
+  // hides them by default so the carved result isn't buried under them.
+  private pathVisible = true;
   private active = false;
   private playing = false;
   private time = 0;
@@ -137,6 +140,23 @@ export class ToolpathSimulation {
     return completed === 0 ? this.segments[0].start : this.segments[completed - 1].end;
   }
 
+  // How many segments the playhead has fully drawn, so a stock-removal view
+  // can show the material as it is at this point in the job.
+  getCompletedSegments() {
+    return this.completedCount();
+  }
+
+  // How far through the segment now being drawn the playhead is (0..1), so a
+  // stock-removal view can show the cut up to the tool rather than a whole
+  // segment behind it. 0 when between segments or on a rapid.
+  getSegmentFraction() {
+    const completed = this.completedCount();
+    if (completed >= this.segments.length || this.segments[completed].rapid) return 0;
+    const span = this.cumulative[completed + 1] - this.cumulative[completed];
+    if (!(span > 0) || this.time <= this.cumulative[completed]) return 0;
+    return Math.min(1, (this.time - this.cumulative[completed]) / span);
+  }
+
   // Whether the file's coordinates are inches (else millimetres).
   isInches() {
     return this.segments.length > 0 && this.segments[0].inches === true;
@@ -197,6 +217,12 @@ export class ToolpathSimulation {
     if (showRapids === this.showRapids) return;
     this.showRapids = showRapids;
     this.markDirty();
+  }
+
+  setPathVisible(visible: boolean) {
+    this.pathVisible = visible;
+    if (this.ghost) this.ghost.visible = visible;
+    if (this.done) this.done.visible = visible;
   }
 
   setActive(active: boolean) {
@@ -421,6 +447,8 @@ export class ToolpathSimulation {
       new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: GHOST_OPACITY, depthWrite: false })
     );
     this.done = new THREE.LineSegments(doneGeometry, new THREE.LineBasicMaterial({ vertexColors: true }));
+    this.ghost.visible = this.pathVisible;
+    this.done.visible = this.pathVisible;
     this.group.add(this.ghost, this.done);
   }
 
