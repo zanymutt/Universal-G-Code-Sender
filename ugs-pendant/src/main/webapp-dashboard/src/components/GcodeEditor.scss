@@ -9,7 +9,10 @@
 .gcodeEditorToolbar {
   display: flex;
   align-items: center;
-  gap: 12px;
+  // A last resort: if it ever really can't fit, wrap onto a second row
+  // rather than clipping a button off the edge.
+  flex-wrap: wrap;
+  gap: 6px 12px;
   // Establishes the reference size for the @container rule below - this
   // toolbar can end up full-width, half of a top split, or half of the
   // (narrower still) console split, so a viewport media query can't tell
@@ -17,7 +20,15 @@
   // keyed to this element can.
   container-type: inline-size;
 
+  // The one flexible item: a long name is cut with an ellipsis instead of
+  // pushing the buttons off the end.
   .gcodeEditorFileName {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     font-weight: 600;
   }
 
@@ -42,7 +53,8 @@
     font-size: 0.8rem;
   }
 
-  .gcodeEditorReview {
+  .gcodeEditorReview,
+  .gcodeEditorFind {
     white-space: nowrap;
   }
 
@@ -73,6 +85,8 @@
   // and it'll pick these up as its resting color automatically without a
   // second, competing override here of equal specificity.
   .gcodeEditorRunFrom,
+  .gcodeEditorFind,
+  .gcodeEditorReview,
   .gcodeEditorSave.btn-outline-secondary {
     --bs-btn-color: var(--dashboard-text-muted);
     --bs-btn-border-color: var(--dashboard-text-disabled);
@@ -118,16 +132,21 @@
     }
   }
 
-  // Below this, "Run from line"/"Save as"/"Save" collapse to icon-only
-  // (Run from keeps its line number - just the word label goes) rather than
-  // wrapping mid-button. Picked generously (wider than the buttons actually
-  // need at their narrowest) so this kicks in before that ever happens,
-  // not right at the edge of it.
-  @container (max-width: 640px) {
+  // Below this, the button labels (Find, Review, Run from line, Save as,
+  // Save) drop to icon-only - Run from keeps its line number - rather than
+  // clipping or wrapping mid-button. With every label showing the row needs
+  // about 800px (measured: filename + Find + Review + Run from + Save as +
+  // Save + text-size controls + gaps), plus room for a longer filename, so
+  // this has to kick in well above that. It was 640px before Find and Review
+  // joined the row, which left a band of widths where Save was cut off.
+  @container (max-width: 920px) {
     .gcodeEditorButtonLabel {
       display: none;
     }
+  }
 
+  // Narrower still: the +/- text-size buttons give way to a slider.
+  @container (max-width: 640px) {
     .gcodeEditorFontSize .gcodeEditorFontSizeButtons {
       display: none;
     }
@@ -422,6 +441,163 @@
     opacity: 1;
   }
 
+  // Find / replace: CodeMirror's own panel, themed to match the dashboard and
+  // sized for fingers. Matches are tinted amber, the current one green.
+  .cm-panels {
+    background: var(--dashboard-bg);
+    color: var(--dashboard-text);
+    border-color: var(--dashboard-border-strong);
+  }
+
+  .cm-search {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    padding: 8px 10px;
+
+    // Find controls on the first row, replace controls on the second.
+    // CodeMirror separates them with a <br>, which a flex container ignores,
+    // so the break is made explicit: everything defaults to order 1, the
+    // replace field/buttons are order 5, and the full-width ::after at order 4
+    // sits between them.
+    > * {
+      order: 1;
+    }
+
+    input[name="replace"],
+    button[name="replace"],
+    button[name="replaceAll"] {
+      order: 5;
+    }
+
+    br {
+      display: none;
+    }
+
+    &::after {
+      content: "";
+      order: 4;
+      flex-basis: 100%;
+      height: 0;
+    }
+
+    .cm-textfield {
+      flex: 1 1 150px;
+      min-width: 120px;
+      min-height: 34px;
+      margin: 0;
+      padding: 4px 8px;
+      border: 1px solid var(--dashboard-border-strong);
+      border-radius: 4px;
+      background: var(--dashboard-surface);
+      color: var(--dashboard-text);
+      font: inherit;
+
+      &:focus {
+        outline: 2px solid var(--dashboard-accent);
+        outline-offset: 0;
+      }
+    }
+
+    .cm-button {
+      min-height: 34px;
+      margin: 0;
+      padding: 4px 12px;
+      border: 1px solid var(--dashboard-border-strong);
+      border-radius: 4px;
+      background: var(--dashboard-surface-raised);
+      background-image: none;
+      color: var(--dashboard-text);
+      text-transform: none;
+      cursor: pointer;
+
+      &:hover {
+        border-color: var(--dashboard-text-muted);
+      }
+    }
+
+    label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin: 0;
+      color: var(--dashboard-text-muted);
+      font-size: 0.85rem;
+      white-space: nowrap;
+      cursor: pointer;
+    }
+
+    // Sits at the end of the find row as a normal flex item. It used to be
+    // absolutely positioned in the corner, where the last checkbox label
+    // ("Whole word") ran underneath it. Qualified with .cm-panel because
+    // CodeMirror's own rule for this button is more specific than a plain
+    // .cm-search one and would otherwise win.
+    &.cm-panel button[name="close"] {
+      position: static;
+      order: 1;
+      flex: 0 0 auto;
+      margin: 0 0 0 auto;
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--dashboard-border-strong);
+      border-radius: 4px;
+      background: var(--dashboard-surface-raised);
+      color: var(--dashboard-text);
+      font-size: 1.25rem;
+      line-height: 1;
+      cursor: pointer;
+
+      &:hover {
+        border-color: var(--dashboard-text-muted);
+      }
+    }
+  }
+
+  // "12/345" (see searchCountPlugin in GcodeEditor.tsx)
+  .cm-searchCount {
+    flex: 0 0 auto;
+    min-width: 6ch;
+    color: var(--dashboard-text-muted);
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    white-space: nowrap;
+
+    &[data-state="none"],
+    &[data-state="invalid"] {
+      color: var(--dashboard-danger-text);
+    }
+  }
+
+  .cm-searchMatch {
+    background-color: rgba(240, 173, 78, 0.3);
+    outline: 1px solid rgba(240, 173, 78, 0.55);
+  }
+
+  .cm-searchMatch.cm-searchMatch-selected {
+    background-color: rgba(74, 222, 128, 0.35);
+    outline-color: var(--dashboard-accent);
+  }
+
+  @media (any-pointer: coarse) {
+    .cm-search .cm-textfield,
+    .cm-search .cm-button {
+      min-height: 44px;
+    }
+
+    .cm-search.cm-panel button[name="close"] {
+      width: 44px;
+      height: 44px;
+    }
+
+    .cm-search input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+    }
+  }
+
   // Lines flagged by the G-code review (see reviewMarksField): a tinted
   // background plus a coloured bar at the line's left edge, strong enough to
   // read on the dark editor and unaffected by the active-line colour.
@@ -447,6 +623,31 @@
 
   .cm-line.cm-reviewSelected.cm-reviewWarning {
     background-color: rgba(240, 173, 78, 0.32);
+  }
+}
+
+// Shown only while following is paused (see followRunLine in GcodeEditor.tsx).
+.gcodeEditorFollow {
+  position: absolute;
+  right: 20px;
+  bottom: 14px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--dashboard-accent);
+  border-radius: 999px;
+  background: var(--dashboard-bg);
+  color: var(--dashboard-accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+
+  @media (any-pointer: coarse) {
+    min-height: 44px;
+    padding: 8px 16px;
   }
 }
 

@@ -114,6 +114,15 @@ const PaneHeader = ({ content, onChange, splitButtons, plugins, pluginControls }
   const missingPluginId = shownPluginId !== null && !plugins.some(plugin => plugin.id === shownPluginId)
     ? shownPluginId : null;
   const hasPlugins = plugins.length > 0 || missingPluginId !== null;
+  // What the Plugins select is showing right now: "Plugins" until one is in
+  // the pane, then that plugin's name. The width is set from this text (a
+  // native select otherwise sizes itself to its *longest* option) and the
+  // same text is measured below, so the tabs only give way to the compact
+  // menu when the select genuinely won't fit beside them.
+  const shownPlugin = shownPluginId !== null ? plugins.find(plugin => plugin.id === shownPluginId) : undefined;
+  const pluginLabel = shownPluginId === null ? "Plugins"
+    : shownPlugin?.name ?? `${shownPluginId} (not installed)`;
+  const pluginSelectWidth = `calc(${Math.min(pluginLabel.length, 24) + 1}ch + 38px)`;
   const headerRef = useRef<HTMLElement | null>(null);
   const measureRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef<HTMLDivElement | null>(null);
@@ -135,7 +144,7 @@ const PaneHeader = ({ content, onChange, splitButtons, plugins, pluginControls }
   return <header className="centerPaneLayoutLeafHeader" ref={headerRef}>
     <div className="centerPaneLayoutTabsMeasure" ref={measureRef} aria-hidden="true">
       {CONTENT.map(item => <span key={item.value}>{item.label}</span>)}
-      {hasPlugins && <span className="centerPaneLayoutPluginMeasure">Plugins</span>}
+      {hasPlugins && <span className="centerPaneLayoutPluginMeasure" style={{ maxWidth: "11rem", overflow: "hidden", whiteSpace: "nowrap" }}>{pluginLabel}</span>}
     </div>
     {compact ? <select className="centerPaneLayoutContentSelect" value={content}
       onChange={event => onChange(event.target.value as PaneContent)} aria-label="Pane content">
@@ -153,6 +162,7 @@ const PaneHeader = ({ content, onChange, splitButtons, plugins, pluginControls }
           browser above everything (a docked plugin sits over the pane body),
           and it's already touch-friendly. Reads "Plugins" until one is shown. */}
       {hasPlugins && <select className={"centerPaneLayoutPluginSelect" + (shownPluginId !== null ? " active" : "")}
+        style={{ width: pluginSelectWidth }}
         value={shownPluginId !== null ? content : ""} aria-label="Show a plugin in this pane"
         onChange={event => onChange(event.target.value as PaneContent)}>
         <option value="" disabled>Plugins</option>

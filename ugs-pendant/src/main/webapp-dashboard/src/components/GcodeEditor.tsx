@@ -1,16 +1,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Compartment, EditorState, StateEffect, StateField } from "@codemirror/state";
-import { Decoration, DecorationSet, EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
+import {
+  Decoration,
+  DecorationSet,
+  EditorView,
+  ViewPlugin,
+  ViewUpdate,
+  keymap,
+  lineNumbers,
+  highlightActiveLine,
+} from "@codemirror/view";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+import {
+  getSearchQuery,
+  openSearchPanel,
+  search,
+  searchKeymap,
+  searchPanelOpen,
+  setSearchQuery,
+} from "@codemirror/search";
 import { Button, Spinner } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronDown,
   faChevronUp,
+  faCrosshairs,
   faFloppyDisk,
   faFileExport,
   faForward,
+  faListCheck,
+  faMagnifyingGlass,
   faMinus,
   faPlus,
   faRotateRight,
@@ -32,6 +51,7 @@ import { GcodeReviewResult, reviewGcode } from "../services/gcodeReview";
 import { findingKey, loadIgnoredFindings, saveIgnoredFindings, splitIgnored } from "../utils/gcodeReviewIgnore";
 import { clampReviewHeight, loadReviewHeight, saveReviewHeight } from "../utils/gcodeReviewHeight";
 import { layoutScale } from "../utils/layoutRect";
+import { countMatches, formatMatchCount } from "../utils/searchMatchCount";
 import "./GcodeEditor.scss";
 
 // Font-size is deliberately not set here - it's owned entirely by the
@@ -117,6 +137,79 @@ const currentRunLineField = StateField.define<DecorationSet>({
   },
   provide: (field) => EditorView.decorations.from(field),
 });
+
+// Font size AND line height, together. The line height is a whole number of
+// pixels on purpose: with the default 1.4 multiple it is fractional (19.6px at
+// 14px), the browser lays lines out at 19.59375px, and CodeMirror's estimate
+// for the lines it hasn't drawn yet is 19.6px. Every time it then measures
+// real lines it corrects the document height by a hair and compensates by
+// writing scrollTop - and a script scroll in the middle of a native
+// scrollbar-thumb drag makes Chrome re-baseline the drag and swallow the next
+// pointer move. On a long file that was every other move, so the thumb fell
+// further and further behind the mouse. With an integer height the estimate
+// is exact, CodeMirror never has to correct anything, and the thumb tracks the
+// pointer 1:1.
+const editorSizeTheme = (fontSize: number) =>
+  EditorView.theme({
+    "&": { fontSize: `${fontSize}px` },
+    ".cm-scroller": { lineHeight: `${Math.round(fontSize * 1.4)}px` },
+  });
+
+// "12/345" in the find panel. CodeMirror's panel has no match counter, so this
+// adds one next to the find field. It re-counts (a little after the change, so
+// typing stays snappy) when the query, the selection or the document changes,
+// or the panel opens - and renders straight into the panel's DOM, since the
+// panel itself isn't ours to template.
+function* matchRanges(cursor: Iterator<{ from: number; to: number }>) {
+  for (let result = cursor.next(); !result.done; result = cursor.next()) yield result.value;
+}
+
+const searchCountPlugin = ViewPlugin.fromClass(
+  class {
+    private timer: number | undefined;
+
+    constructor(private readonly view: EditorView) {
+      this.schedule();
+    }
+
+    update(update: ViewUpdate) {
+      const panelToggled = searchPanelOpen(update.state) !== searchPanelOpen(update.startState);
+      const queryChanged = update.transactions.some((tr) => tr.effects.some((effect) => effect.is(setSearchQuery)));
+      if (panelToggled || queryChanged || update.docChanged || update.selectionSet) this.schedule();
+    }
+
+    private schedule() {
+      window.clearTimeout(this.timer);
+      this.timer = window.setTimeout(() => this.render(), 40);
+    }
+
+    private render() {
+      const panel = this.view.dom.querySelector<HTMLElement>(".cm-search");
+      if (!panel) return;
+      let element = panel.querySelector<HTMLElement>(".cm-searchCount");
+      if (!element) {
+        element = document.createElement("span");
+        element.className = "cm-searchCount";
+        element.setAttribute("aria-live", "polite");
+        panel.querySelector('[name="search"]')?.after(element);
+      }
+      const state = this.view.state;
+      const query = getSearchQuery(state);
+      const count =
+        query.search && query.valid
+          ? countMatches(matchRanges(query.getCursor(state)), state.selection.main)
+          : null;
+      const label = formatMatchCount(count, query.valid);
+      element.textContent = label.text;
+      element.dataset.state = label.state;
+      element.title = label.state === "found" ? "Current match / total matches" : "";
+    }
+
+    destroy() {
+      window.clearTimeout(this.timer);
+    }
+  }
+);
 
 // Lines the G-code review flagged, marked in the editor itself so the problem
 // is seen in context rather than only listed in the review panel. Like
@@ -315,6 +408,16 @@ const GcodeEditor = () => {
   // may no longer match what's on screen.
   const [reviewStale, setReviewStale] = useState(false);
   const reviewListRef = useRef<HTMLDivElement | null>(null);
+  // Whether the editor is following the running line (a live job, or the
+  // visualizer's simulation). Following re-scrolls on every completed command -
+  // fine until someone drags the scrollbar away, when it would yank the view
+  // back each time. So it pauses the moment the person scrolls by hand, and
+  // the "Follow run" button (or the next run) resumes it. A ref mirrors the
+  // state because the scroll listeners and retry loops registered once need
+  // the current value, not the one from when they were created.
+  const [followRunLine, setFollowRunLine] = useState(true);
+  const followRef = useRef(true);
+  followRef.current = followRunLine;
   // The panel's height once the person has dragged its top edge (null = the
   // automatic height from CSS). Dragging works in layout pixels - the same
   // units the height is applied in - so it stays correct at any dashboard zoom.
@@ -369,11 +472,26 @@ const GcodeEditor = () => {
               highlightActiveLine(),
               history(),
               keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+              // Find / replace (Ctrl+F, or the toolbar's Find button). On top so
+              // it doesn't fight the review panel and run controls below.
+              search({ top: true }),
+              searchCountPlugin,
+              EditorState.phrases.of({
+                next: "Next",
+                previous: "Previous",
+                all: "All",
+                "match case": "Match case",
+                regexp: "Regex",
+                "by word": "Whole word",
+                replace: "Replace",
+                "replace all": "Replace all",
+                close: "Close",
+              }),
               gcodeLanguage,
               gcodeSyntaxHighlighting,
               editorTheme,
-              editableCompartmentRef.current.of(EditorView.editable.of(isEditable)),
-              fontSizeCompartmentRef.current.of(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
+              editableCompartmentRef.current.of([EditorView.editable.of(isEditable), EditorState.readOnly.of(!isEditable)]),
+              fontSizeCompartmentRef.current.of(editorSizeTheme(fontSize)),
               dimThroughField,
               currentRunLineField,
               reviewMarksField,
@@ -391,6 +509,29 @@ const GcodeEditor = () => {
             ],
           }),
           parent: editorContainerRef.current,
+        });
+
+        // Hand scrolling pauses following (see followRunLine). Only real user
+        // input counts - a scroll event on its own can't tell us who moved
+        // it, and CodeMirror also corrects scrollTop itself as it measures
+        // lines, which must not be mistaken for the person scrolling.
+        const scroller = viewRef.current.scrollDOM;
+        const pauseFollow = () => {
+          if (!followRef.current) return;
+          followRef.current = false;
+          setFollowRunLine(false);
+        };
+        scroller.addEventListener("wheel", pauseFollow, { passive: true });
+        scroller.addEventListener("touchstart", pauseFollow, { passive: true });
+        scroller.addEventListener("pointerdown", (event) => {
+          // A press on the scroller element itself, past its content box, is
+          // on its scrollbar (the thumb, track or arrows).
+          if (event.target === scroller && (event.offsetX >= scroller.clientWidth || event.offsetY >= scroller.clientHeight)) {
+            pauseFollow();
+          }
+        });
+        scroller.addEventListener("keydown", (event) => {
+          if (["PageUp", "PageDown", "Home", "End"].includes(event.key)) pauseFollow();
         });
 
         // See dimThroughLineRef/currentRunLineRef's own comment above -
@@ -446,7 +587,10 @@ const GcodeEditor = () => {
   // even once the machine settled into IDLE.
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: editableCompartmentRef.current.reconfigure(EditorView.editable.of(isEditable)),
+      effects: editableCompartmentRef.current.reconfigure([
+        EditorView.editable.of(isEditable),
+        EditorState.readOnly.of(!isEditable),
+      ]),
     });
   }, [isEditable]);
 
@@ -465,18 +609,41 @@ const GcodeEditor = () => {
     if (!view) return;
 
     view.dispatch({ effects: setCurrentRunLine.of(currentRunLine) });
-    if (currentRunLine > 0 && currentRunLine <= view.state.doc.lines) {
+    if (followRef.current && currentRunLine > 0 && currentRunLine <= view.state.doc.lines) {
       scrollLineIntoView(
         view,
         currentRunLine,
-        () => viewRef.current === view && currentRunLineRef.current === currentRunLine
+        () => viewRef.current === view && currentRunLineRef.current === currentRunLine && followRef.current
       );
     }
   }, [currentRunLine]);
 
+  // Nothing running any more: the next run starts out followed again.
+  useEffect(() => {
+    if (currentRunLine === 0) {
+      followRef.current = true;
+      setFollowRunLine(true);
+    }
+  }, [currentRunLine]);
+
+  const resumeFollow = () => {
+    followRef.current = true;
+    setFollowRunLine(true);
+    const view = viewRef.current;
+    if (view && currentRunLine > 0 && currentRunLine <= view.state.doc.lines) {
+      scrollLineIntoView(view, currentRunLine, () => viewRef.current === view && followRef.current);
+    }
+  };
+
+  const handleFind = () => {
+    const view = viewRef.current;
+    if (!view) return;
+    openSearchPanel(view);
+  };
+
   useEffect(() => {
     viewRef.current?.dispatch({
-      effects: fontSizeCompartmentRef.current.reconfigure(EditorView.theme({ "&": { fontSize: `${fontSize}px` } })),
+      effects: fontSizeCompartmentRef.current.reconfigure(editorSizeTheme(fontSize)),
     });
   }, [fontSize]);
 
@@ -694,6 +861,16 @@ const GcodeEditor = () => {
       <div className="gcodeEditorContent">
         {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
         <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
+        {!followRunLine && currentRunLine > 0 && (
+          <button
+            type="button"
+            className="gcodeEditorFollow"
+            onClick={resumeFollow}
+            title="Scroll back to the running line and keep following it"
+          >
+            <FontAwesomeIcon icon={faCrosshairs} /> Follow run
+          </button>
+        )}
       </div>
 
       {showReview && (
@@ -826,12 +1003,20 @@ const GcodeEditor = () => {
         {!isEditable && <span className="gcodeEditorLocked">Read-only while a job is running</span>}
         {error && <span className="gcodeEditorError">{error}</span>}
         <Button
+          className="gcodeEditorFind"
+          variant="outline-secondary"
+          onClick={handleFind}
+          title="Find and replace (Ctrl+F)"
+        >
+          <FontAwesomeIcon icon={faMagnifyingGlass} /> <span className="gcodeEditorButtonLabel">Find</span>
+        </Button>
+        <Button
           className="gcodeEditorReview"
           variant="outline-secondary"
           onClick={handleReview}
           title="Review the current editor contents for parser findings"
         >
-          Review
+          <FontAwesomeIcon icon={faListCheck} /> <span className="gcodeEditorButtonLabel">Review</span>
         </Button>
         <Button
           className="gcodeEditorRunFrom"
