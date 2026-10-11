@@ -41,27 +41,32 @@
   // the real cause (the rounding above) was found, so it was removed for
   // simplicity, not because it was confirmed to cause the next problem.
   //
-  // padding-bottom reserves a strip of *this* box's own background below
-  // the iframe (see .pluginWindowFrame - it's flex:1, so it shrinks to
-  // leave this padding visible rather than covering it) so the native
-  // resize grip has somewhere to be hit-tested. Before the border-radius
-  // removal above, the rounded corner clipped the iframe's own square
-  // corner inward just enough to
-  // leave a tiny sliver of this box's background exposed there, which
-  // happened to be enough for the grip to still work; squaring the corner
-  // let the iframe's flush corner fully cover it instead, and a sandboxed
-  // iframe swallows the mousedown rather than letting it reach the
-  // browser's native resize handling. Confirmed live (2026-09-17): with
-  // the corner square and nothing reserved, dragging it did nothing.
-  padding-bottom: 16px;
+  // The window is a thin frame around the iframe. The resize handles (see
+  // .pluginWindowResize) live in that frame band, not over the plugin: a
+  // sandboxed iframe swallows pointer events, so a handle laid over it would
+  // both fail to receive them reliably and steal the plugin's own scrollbar.
+  // Sizes below grow on touch devices (Apple's guidance is ~44px targets).
+  --plugin-frame-edge: 6px;
+  --plugin-frame-corner: 24px;
+  --plugin-header-height: 36px;
+  padding: 0 var(--plugin-frame-edge) var(--plugin-frame-edge);
+}
+
+@media (any-pointer: coarse) {
+  .pluginWindow {
+    --plugin-frame-edge: 14px;
+    --plugin-frame-corner: 44px;
+    --plugin-header-height: 44px;
+  }
 }
 
 .pluginWindowHeader {
   display: flex;
   align-items: center;
   gap: 8px;
-  height: 36px;
+  height: var(--plugin-header-height);
   flex-shrink: 0;
+  margin: 0 calc(-1 * var(--plugin-frame-edge));
   padding: 0 8px 0 12px;
   background: var(--dashboard-surface-sunken);
   border-bottom: 1px solid var(--dashboard-border-strong);
@@ -109,6 +114,16 @@
   }
 }
 
+@media (any-pointer: coarse) {
+  .pluginWindowMinimize,
+  .pluginWindowMaximize,
+  .pluginWindowClose {
+    width: 38px;
+    height: 38px;
+    font-size: 1.05rem;
+  }
+}
+
 .pluginWindowFrame {
   flex: 1;
   min-height: 0;
@@ -125,7 +140,7 @@
 // only to catch the click that raises a window stacked behind another.
 .pluginWindowActivateShield {
   position: absolute;
-  top: 36px;
+  top: var(--plugin-header-height);
   right: 0;
   bottom: 0;
   left: 0;
@@ -133,21 +148,65 @@
   cursor: pointer;
 }
 
-.pluginWindowResizeGrip {
+// Resize handles: the two sides, the bottom, and the two bottom corners. Each
+// is a transparent strip in the frame band (the corners are bigger squares, and
+// the south-east one draws a visible grip). touch-action: none stops the
+// browser claiming the gesture for scrolling/zooming, and the user-select /
+// callout rules stop iPadOS selecting text or showing a loupe on long-press.
+.pluginWindowResize {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 24px;
-  height: 24px;
   z-index: 2;
-  cursor: nwse-resize;
   touch-action: none;
-  // A small diagonal grip remains visible against both the dark window and
-  // the plugin frame, while leaving most of the corner easy to grab.
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.pluginWindowResize-e,
+.pluginWindowResize-w {
+  top: var(--plugin-header-height);
+  bottom: var(--plugin-frame-corner);
+  width: var(--plugin-frame-edge);
+  cursor: ew-resize;
+}
+.pluginWindowResize-e { right: 0; }
+.pluginWindowResize-w { left: 0; }
+
+.pluginWindowResize-s {
+  left: var(--plugin-frame-corner);
+  right: var(--plugin-frame-corner);
+  bottom: 0;
+  height: var(--plugin-frame-edge);
+  cursor: ns-resize;
+}
+
+.pluginWindowResize-se,
+.pluginWindowResize-sw {
+  bottom: 0;
+  width: var(--plugin-frame-corner);
+  height: var(--plugin-frame-corner);
+}
+.pluginWindowResize-se { right: 0; cursor: nwse-resize; }
+.pluginWindowResize-sw { left: 0; cursor: nesw-resize; }
+
+// The visible grip, in the corner most people reach for first.
+.pluginWindowResize-se::after {
+  content: "";
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  width: calc(var(--plugin-frame-corner) * 0.6);
+  height: calc(var(--plugin-frame-corner) * 0.6);
   background: linear-gradient(135deg, transparent 52%, var(--dashboard-text-disabled) 53%, var(--dashboard-text-disabled) 60%, transparent 61%);
   opacity: 0.8;
+}
+.pluginWindowResize-se:hover::after { opacity: 1; }
 
-  &:hover { opacity: 1; }
+// While moving or resizing, the plugin's iframe must not receive the
+// pointer: touch browsers otherwise hand the gesture to the frame as soon as
+// the finger crosses it, even with pointer capture on the handle.
+.pluginWindowInteracting .pluginWindowFrame {
+  pointer-events: none;
 }
 
 // Laid over a layout slot (a pane body) - PluginWindow.tsx sets
@@ -161,7 +220,7 @@
   min-height: 0;
   max-width: none;
   max-height: none;
-  padding-bottom: 0;
+  padding: 0;
   border: none;
   box-shadow: none;
 }
@@ -172,10 +231,11 @@
 .pluginWindowMaximized {
   max-width: none;
   max-height: none;
-  padding-bottom: 0;
+  padding: 0;
 
   .pluginWindowHeader {
     cursor: default;
+    margin: 0;
   }
 }
 
@@ -196,5 +256,12 @@
   &:hover {
     background: var(--dashboard-border-strong);
     color: var(--dashboard-text);
+  }
+}
+
+@media (any-pointer: coarse) {
+  .pluginWindowDock {
+    height: 38px;
+    font-size: 0.9rem;
   }
 }

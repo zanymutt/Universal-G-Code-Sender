@@ -5,6 +5,8 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useLayoutRect } from "../hooks/useLayoutRect";
 import { useDockRect } from "../hooks/useDockRect";
+import { layoutScale } from "../utils/layoutRect";
+import { Box, ResizeDirection, moveBox, resizeBox } from "../utils/pluginWindowGeometry";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
 import {
@@ -47,6 +49,8 @@ type Props = {
 };
 
 type SubscribableEvent = "status" | "line" | "theme";
+
+const RESIZE_HANDLES: ResizeDirection[] = ["e", "w", "s", "se", "sw"];
 
 // The shape handed to a plugin's getStatus()/'status' event - a flattened,
 // FigUI-shaped view of Dashboard's own richer Status model, since a plugin
@@ -198,61 +202,73 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     iframeRef.current?.contentWindow?.postMessage(payload, "*");
   }, []);
 
-  // --- Drag handling (header bar only) -------------------------------
-  // Resizing is deliberately just native CSS `resize: both` on the window
-  // element (see PluginWindow.scss) rather than a second hand-rolled drag
-  // handler - the browser already does this correctly, including touch
-  // support, for free.
+  // --- Moving and resizing ------------------------------------------------
+  // Both use Pointer Capture on the element being dragged (the header, or one
+  // of the resize handles) rather than window-level pointermove/pointerup
+  // listeners. The header and handles sit directly above the plugin's
+  // <iframe> - a separate browsing context - and the moment the pointer
+  // crosses into it mid-drag, window-level listeners stop receiving events
+  // (they're delivered to the iframe's own document instead). Release over the
+  // iframe and the pointerup never arrives, so the drag never ends. Capture
+  // redirects all of this pointer's events to the dragged element regardless of
+  // what's under it.
   //
-  // Uses Pointer Capture (setPointerCapture on the header itself) rather
-  // than window-level pointermove/pointerup listeners. Without it, the
-  // header sits directly above the plugin's <iframe> - a separate browsing
-  // context - and the moment the cursor crosses into it mid-drag, the
-  // window's listeners stop receiving events entirely (they get delivered
-  // to the iframe's own document instead, or nowhere). Release the button
-  // while over the iframe and the window's pointerup never fires, so the
-  // drag never actually ends: dragRef stays armed, and the next pointermove
-  // anywhere on the page - even one unrelated to dragging - snaps the
-  // window to the cursor with no way to let go of it. Pointer Capture
-  // redirects all of this pointer's events to the header regardless of
-  // what's visually underneath it, iframe included, so the drag behaves
-  // exactly like clicking-and-holding any normal element.
-  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  // Pointer deltas are in screen pixels but the window is positioned in layout
+  // pixels (the dashboard zoom scales .app with a transform), so every delta is
+  // divided by the window's layoutScale first. Without that a drag drifts away
+  // from the finger whenever zoom isn't exactly 100%.
+  //
+  // While a drag is active the window gets .pluginWindowInteracting, which
+  // turns off pointer events on its iframe: touch browsers (iPadOS Safari
+  // especially) otherwise hand the gesture to the frame as soon as the finger
+  // passes over it, even with capture.
+  const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number; scale: number } | null>(null);
+  const resizeRef = useRef<{
+    direction: ResizeDirection;
+    startX: number;
+    startY: number;
+    box: Box;
+    scale: number;
+  } | null>(null);
 
-  // CSS `resize: both` supplies this affordance on desktop browsers, but the
-  // native corner is not reliably hit-testable in an iPad Home Screen web app.
-  // Keep the same behavior with an explicit pointer-driven grip so touch and
-  // mouse resizing use one path everywhere.
-  const resizeRef = useRef<{ startX: number; startY: number; width: number; height: number } | null>(null);
+  const setInteracting = (active: boolean) => {
+    windowRef.current?.classList.toggle("pluginWindowInteracting", active);
+  };
 
-  const handleResizePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+  const startResize = (direction: ResizeDirection) => (e: React.PointerEvent<HTMLDivElement>) => {
     if (maximizedRef.current) return;
     const element = windowRef.current;
     if (!element) return;
     e.preventDefault();
     e.stopPropagation();
     resizeRef.current = {
+      direction,
       startX: e.clientX,
       startY: e.clientY,
-      width: element.getBoundingClientRect().width,
-      height: element.getBoundingClientRect().height,
+      box: { left: position.x, top: position.y, width: element.offsetWidth, height: element.offsetHeight },
+      scale: layoutScale(element),
     };
+    setInteracting(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
-  const handleResizePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+  const moveResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const resize = resizeRef.current;
     const element = windowRef.current;
     if (!resize || !element) return;
-    const maxWidth = window.innerWidth * 0.96;
-    const maxHeight = window.innerHeight * 0.9;
-    const width = Math.min(maxWidth, Math.max(220, resize.width + e.clientX - resize.startX));
-    const height = Math.min(maxHeight, Math.max(160, resize.height + e.clientY - resize.startY));
+    const next = resizeBox(
+      resize.box,
+      resize.direction,
+      (e.clientX - resize.startX) / resize.scale,
+      (e.clientY - resize.startY) / resize.scale,
+      { width: window.innerWidth / resize.scale, height: window.innerHeight / resize.scale }
+    );
     // Keep React's next render from restoring the pre-drag inline size while
     // the pointer is still moving. The final size is persisted on release.
-    sizeRef.current = { width, height };
-    element.style.width = `${width}px`;
-    element.style.height = `${height}px`;
+    sizeRef.current = { width: next.width, height: next.height };
+    element.style.width = `${next.width}px`;
+    element.style.height = `${next.height}px`;
+    setPosition((current) => (current.x === next.left && current.y === next.top ? current : { x: next.left, y: next.top }));
   };
 
   const endResize = (e: React.PointerEvent<HTMLDivElement>) => {
@@ -263,6 +279,7 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
       savePluginWindowSize(plugin.id, size);
     }
     resizeRef.current = null;
+    setInteracting(false);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -273,21 +290,36 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
     // start a drag underneath it.
     if ((e.target as HTMLElement).closest("button, select")) return;
     if (maximizedRef.current) return;
-    dragRef.current = { startX: e.clientX, startY: e.clientY, originX: position.x, originY: position.y };
+    const element = windowRef.current;
+    if (!element) return;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: position.x,
+      originY: position.y,
+      scale: layoutScale(element),
+    };
+    setInteracting(true);
     e.currentTarget.setPointerCapture(e.pointerId);
   };
 
   const handleHeaderPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     const drag = dragRef.current;
-    if (!drag) return;
-    setPosition({
-      x: drag.originX + (e.clientX - drag.startX),
-      y: drag.originY + (e.clientY - drag.startY),
-    });
+    const element = windowRef.current;
+    if (!drag || !element) return;
+    const next = moveBox(
+      { left: drag.originX, top: drag.originY },
+      { width: element.offsetWidth },
+      (e.clientX - drag.startX) / drag.scale,
+      (e.clientY - drag.startY) / drag.scale,
+      { width: window.innerWidth / drag.scale, height: window.innerHeight / drag.scale }
+    );
+    setPosition({ x: next.left, y: next.top });
   };
 
   const endHeaderDrag = (e: React.PointerEvent<HTMLDivElement>) => {
     dragRef.current = null;
+    setInteracting(false);
     if (e.currentTarget.hasPointerCapture(e.pointerId)) {
       e.currentTarget.releasePointerCapture(e.pointerId);
     }
@@ -662,15 +694,21 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
         className="pluginWindowActivateShield"
         onPointerDown={onActivate}
       />}
-      {!maximized && !docked && <div
-        className="pluginWindowResizeGrip"
-        role="separator"
-        aria-label="Resize plugin window"
-        onPointerDown={handleResizePointerDown}
-        onPointerMove={handleResizePointerMove}
-        onPointerUp={endResize}
-        onPointerCancel={endResize}
-      />}
+      {/* Resize handles live in the frame band around the iframe (see the
+          .pluginWindowResize rules): out of the plugin's way, and sized up on
+          touch devices. Edges and the two bottom corners only - the top edge is
+          the header, which moves the window. */}
+      {!maximized && !docked && RESIZE_HANDLES.map((direction) => (
+        <div
+          key={direction}
+          className={`pluginWindowResize pluginWindowResize-${direction}`}
+          aria-hidden="true"
+          onPointerDown={startResize(direction)}
+          onPointerMove={moveResize}
+          onPointerUp={endResize}
+          onPointerCancel={endResize}
+        />
+      ))}
     </div>
     </>
   );
