@@ -15,8 +15,22 @@ then open **THC Control Panel** from Plugins.
 
 - **Link** - enter the THC address, **Connect**. The window jumps to Operate
   once frames arrive. Diagnostics and the raw last frame live here too.
-- **Operate** - voltages, mode / test run, status pills, jog and calibrate,
-  interlock state, datalog recording.
+- **Operate** - voltages, mode / test run, datalog recording, status pills, jog
+  and calibrate, interlock state. While recording, a red **REC** bar with the
+  row count stays pinned under the tabs on every page; tap it to stop.
+- **Calibrate** - the *Current voltage* tile is a second Calibrate button (same
+  command; the firmware refuses it during an arc, cut or test run).
+- **Setpoint** - tap the *Setpoint voltage* tile to edit it in place: type a
+  value or nudge with -1 / -0.1 / +0.1 / +1, then **Set**. Nothing is sent until
+  **Set**; the tile shows the THC's own value, with a "waiting" note until the
+  THC echoes the new one. Allowed during a cut (the firmware only interlocks
+  jog and calibrate).
+- **Test run window averages** - under the *Test run avg voltage* tile, every
+  finished averaging window of a test run is listed (grouped by run, with the
+  sample count), so the values no longer overwrite each other. **Use** on a row,
+  or **Use mean as setpoint**, sends that voltage as the THC setpoint;
+  **Save CSV** exports the list; **Clear** empties it. Derived from the live
+  telemetry only; kept in memory until cleared or the window is closed.
 - **Settings** - presets (read and write the same `settings.csv` the Sunton's
   SD card uses) and every live setting, with the speed-curve preview and the
   3 s rolling voltage graph.

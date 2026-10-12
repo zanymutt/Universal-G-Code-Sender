@@ -19,6 +19,7 @@
         <button type="button" role="tab" id="navLink" data-view="link" aria-selected="true" title="Link / connection"><span class="dot" id="linkDot"></span><span class="navIcon" aria-hidden="true">&#8644;</span><span class="navLabel">Link</span></button>
       </nav>
     </header>
+    <button type="button" class="recBadge" id="recBadge" hidden title="Stop recording"></button>
     <div class="liveStrip" id="liveStrip" aria-label="Live readout">
       <span title="Current voltage"><span class="k">Current</span><span class="v vRed" id="stripV">--</span></span>
       <span title="Setpoint voltage"><span class="k">Setpoint</span><span class="v vGreen" id="stripSp">--</span></span>
@@ -40,8 +41,26 @@
            inventing a new "sub-section within one big card" convention). -->
       <div class="card">
         <div class="cardBody voltGrid">
-          <div class="stat statBig statRed"><span class="statLabel">Current voltage</span><span class="statValue" id="rPlasma">--</span></div>
-          <div class="stat statBig statGreen"><span class="statLabel">Setpoint voltage</span><span class="statValue" id="rSetpoint">--</span></div>
+          <div class="stat statBig statRed currentTile" id="currentTile" role="button" tabindex="0" title="Tap to calibrate - same as the Calibrate button"><span class="statLabel">Current voltage</span><span class="statValue" id="rPlasma">--</span></div>
+          <div class="stat statBig statGreen setpointTile" id="setpointTile" role="button" tabindex="0" title="Tap to change the setpoint">
+            <span class="statLabel">Setpoint voltage <span class="editHint" aria-hidden="true">&#9998;</span></span>
+            <span class="statValue" id="rSetpoint">--</span>
+            <span class="spPending" id="spPending" hidden></span>
+            <div class="spEdit" id="spEdit" hidden>
+              <div class="spRow"><input id="spInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="Setpoint voltage in volts"><span class="spUnit">V</span></div>
+              <div class="spDelta" id="spDelta"></div>
+              <div class="spNudge">
+                <button type="button" data-nudge="-1">&minus;1</button>
+                <button type="button" data-nudge="-0.1">&minus;0.1</button>
+                <button type="button" data-nudge="0.1">+0.1</button>
+                <button type="button" data-nudge="1">+1</button>
+              </div>
+              <div class="spActions">
+                <button type="button" id="spOk" class="primary">&#10003; Set</button>
+                <button type="button" id="spCancel">&#10005; Cancel</button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -54,6 +73,17 @@
             <button type="button" class="modeBtn modePreset" id="modePresetBtn">PRE-SET</button>
           </div>
           <button type="button" id="testRunBtn" class="toggleBtn" style="width:100%; margin-top:6px;">Test run: OFF</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <header class="cardHeader"><h2>Datalog</h2></header>
+        <div class="cardBody">
+          <div class="row datalogActions">
+            <button id="recordBtn">Start recording</button>
+            <button id="downloadLogBtn">Save CSV</button>
+          </div>
+          <p class="hint">Rows recorded: <span id="recCount">0</span>. Samples are buffered on the THC and arrive in batches, independent of the live sync rate.</p>
         </div>
       </div>
 
@@ -78,6 +108,21 @@
       <div class="card">
         <div class="cardBody">
           <div class="stat"><span class="statLabel">Test run avg voltage</span><span class="statValue" id="rTestVoltage">--</span></div>
+          <div class="avgList">
+            <div class="avgHead">
+              <span class="k">Window averages</span>
+              <span class="muted" id="avgSummary">No windows yet - start a test run.</span>
+            </div>
+            <div class="avgScroll" id="avgScroll">
+              <table class="avgTable"><tbody id="avgBody"></tbody></table>
+            </div>
+            <p class="hint" id="avgWarn" hidden></p>
+            <div class="avgActions">
+              <button type="button" id="avgUseMeanBtn" disabled>Use mean as setpoint</button>
+              <button type="button" id="avgSaveBtn" disabled>Save CSV</button>
+              <button type="button" id="avgClearBtn" disabled>Clear</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -102,17 +147,6 @@
         </div>
       </div>
 
-      <div class="card">
-        <header class="cardHeader"><h2>Datalog</h2></header>
-        <div class="cardBody">
-          <p class="hint" style="margin-top:0">The THC buffers samples internally and sends them in small batches, independent of the live sync rate - recorded rows aren't limited by how often the stat tiles above refresh.</p>
-          <div class="row">
-            <button id="recordBtn">Start recording</button>
-            <button id="downloadLogBtn">Save CSV</button>
-          </div>
-          <p class="hint">Rows recorded: <span id="recCount">0</span></p>
-        </div>
-      </div>
     </div>
   </section>
 
@@ -133,7 +167,7 @@
             <input type="file" id="settingsFile" accept=".csv">
             <div class="presetControls">
               <button id="prevPresetBtn" disabled>&#9664;</button>
-              <select id="presetSelect" disabled><option>(load a file first)</option></select>
+              <select id="presetSelect" size="4" disabled><option>(load a file first)</option></select>
               <button id="nextPresetBtn" disabled>&#9654;</button>
             </div>
             <div class="presetActions">

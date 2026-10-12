@@ -105,6 +105,7 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: va
 .pill { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; font-size: 12px; border: 1px solid var(--plugin-border-strong); background: var(--plugin-surface); color: var(--plugin-text-muted); }
 .pill.on { border-color: var(--plugin-accent); background: var(--plugin-accent-soft); color: var(--plugin-text); }
 .pill.bad { border-color: var(--plugin-danger); color: var(--plugin-danger); }
+.pill.warn { border-color: var(--plugin-warn); background: var(--plugin-warn-soft); color: var(--plugin-warn); }
 
 .col { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 
@@ -138,6 +139,8 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: va
    (already tuned per-theme), not a single fixed hex. */
 .voltGrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 9px; margin-bottom: 9px; }
 .statBig .statValue { font-size: 30px; }
+.currentTile { cursor: pointer; }
+.currentTile:active { border-color: var(--plugin-text); }
 .statRed { border-color: var(--plugin-danger); background: var(--plugin-danger-soft); }
 .statRed .statValue { color: var(--plugin-danger); }
 .statGreen { border-color: var(--plugin-good); background: var(--plugin-good-soft); }
@@ -207,7 +210,7 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: va
 .tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 7px; border-bottom: 1px solid var(--plugin-border-strong); background: var(--plugin-surface-raised); }
 .tabs button { min-height: 30px; flex: 1 1 auto; padding: 5px 6px; border-color: transparent; background: transparent; font-size: 12.5px; }
 .tabs button[aria-selected=true] { border-color: var(--plugin-accent); background: var(--plugin-surface); color: var(--plugin-text); }
-.settingsBody { padding: 11px; }
+.settingsBody { padding: 11px; container-type: inline-size; }
 
 table.fieldTable { width: 100%; border-collapse: collapse; }
 table.fieldTable th, table.fieldTable td { text-align: left; padding: 6px 6px; border-bottom: 1px solid var(--plugin-border); font-size: 14px; vertical-align: middle; }
@@ -230,6 +233,13 @@ table.fieldTable .setbtn:active:not(:disabled) { border-color: var(--plugin-acce
 
 .presetControls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .presetControls select { flex: 1 1 100px; }
+/* Segmented control (replaces native selects, whose pop-ups misplace when the
+   dashboard is zoomed). */
+.seg { display: inline-flex; flex: 1 1 auto; min-width: 0; max-width: 190px; border: 1px solid var(--plugin-border-strong); border-radius: 6px; overflow: hidden; }
+.segBtn { flex: 1 1 auto; min-width: 0; min-height: 30px; padding: 4px 6px; border: 0; border-radius: 0; background: var(--plugin-surface); color: var(--plugin-text-muted); font-size: 13px; white-space: nowrap; }
+.segBtn + .segBtn { border-left: 1px solid var(--plugin-border-strong); }
+.segBtn.on { background: var(--plugin-accent); color: #07121a; font-weight: 700; }
+:root[data-theme="light"] .segBtn.on { color: #fff; }
 .presetActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .presetActions button { flex: 1 1 auto; font-size: 12.5px; }
 
@@ -343,6 +353,76 @@ body[data-view=link] .view[data-view=link] { display: block; }
   .nav button .navIcon { font-size: 18px; }
   .app { padding: 8px; }
 }
+/* Setpoint tile: tap to edit in place (the tile takes the full row while
+   editing so the controls aren't squeezed into half a card). */
+.setpointTile { cursor: pointer; }
+.setpointTile .editHint { margin-left: 4px; opacity: .75; }
+.setpointTile.editing { grid-column: 1 / -1; cursor: default; }
+.setpointTile.editing .statValue, .setpointTile.editing .editHint { display: none; }
+.spPending { font-size: 12.5px; color: var(--plugin-text-muted); }
+.spPending.warn { color: var(--plugin-warn); font-weight: 600; }
+.spEdit { display: flex; flex-direction: column; gap: 6px; }
+.spEdit[hidden] { display: none; }
+.spRow { display: flex; align-items: center; gap: 8px; }
+.spRow input { min-height: 46px; font-size: 26px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.spUnit { font-size: 22px; font-weight: 700; color: var(--plugin-good); }
+.spDelta { min-height: 1.4em; font-size: 12.5px; color: var(--plugin-text-muted); }
+.spDelta.bad { color: var(--plugin-danger); font-weight: 600; }
+.spNudge { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.spNudge button { min-height: 40px; padding: 2px; font-weight: 700; }
+.spActions { display: flex; gap: 6px; }
+.spActions button { flex: 1 1 auto; min-height: 42px; }
+
+/* Movement / Voltage pages: when the settings panel itself is wide (a wide or
+   floating window - measured on the panel, not the viewport, so it also holds
+   at any zoom) the chart sits to the right of the entry table instead of below
+   it. The table then lives in a half-width column, so it uses the same stacked
+   rows as a narrow window. */
+@container (min-width: 640px) {
+  .tabPanel[data-panel="movement"]:not([hidden]),
+  .tabPanel[data-panel="voltage"]:not([hidden]) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 14px;
+    align-items: start;
+  }
+  .tabPanel[data-panel="movement"] > table, .tabPanel[data-panel="voltage"] > table,
+  .tabPanel[data-panel="movement"] > .hint { grid-column: 1; }
+  .tabPanel[data-panel="movement"] > .card, .tabPanel[data-panel="voltage"] > .card { grid-column: 2; grid-row: 1 / span 2; margin-top: 0 !important; }
+  .tabPanel[data-panel="movement"] table.fieldTable, .tabPanel[data-panel="voltage"] table.fieldTable,
+  .tabPanel[data-panel="movement"] table.fieldTable tbody, .tabPanel[data-panel="voltage"] table.fieldTable tbody { display: block; }
+  .tabPanel[data-panel="movement"] table.fieldTable tr:first-child, .tabPanel[data-panel="voltage"] table.fieldTable tr:first-child { display: none; }
+  .tabPanel[data-panel="movement"] table.fieldTable tr, .tabPanel[data-panel="voltage"] table.fieldTable tr {
+    display: grid; grid-template-columns: 108px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center;
+    padding: 8px 0; border-bottom: 1px solid var(--plugin-border);
+  }
+  .tabPanel[data-panel="movement"] table.fieldTable td, .tabPanel[data-panel="voltage"] table.fieldTable td { display: block; padding: 0; border: 0; min-width: 0; }
+  .tabPanel[data-panel="movement"] table.fieldTable td:nth-child(1), .tabPanel[data-panel="voltage"] table.fieldTable td:nth-child(1) { grid-column: 1 / -1; grid-row: 1; }
+  .tabPanel[data-panel="movement"] table.fieldTable td:nth-child(2), .tabPanel[data-panel="voltage"] table.fieldTable td:nth-child(2) { grid-column: 1; grid-row: 2; text-align: left; }
+  .tabPanel[data-panel="movement"] table.fieldTable td:nth-child(3), .tabPanel[data-panel="voltage"] table.fieldTable td:nth-child(3) { grid-column: 2; grid-row: 2; display: flex; }
+  .tabPanel[data-panel="movement"] table.fieldTable td:nth-child(4), .tabPanel[data-panel="voltage"] table.fieldTable td:nth-child(4) { grid-column: 3; grid-row: 2; }
+}
+
+/* Test-run window averages: one row per finished averaging window, grouped by
+   run, newest at the bottom (the list stays scrolled to it). */
+.avgList { margin-top: 9px; }
+.avgHead { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 10px; margin-bottom: 6px; }
+.avgHead .k { color: var(--plugin-text-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .03em; }
+.avgScroll { max-height: 190px; overflow-y: auto; border: 1px solid var(--plugin-border); border-radius: 6px; background: var(--plugin-surface); }
+.avgTable { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+.avgTable td, .avgTable th { padding: 4px 6px; border-bottom: 1px solid var(--plugin-border); text-align: left; white-space: nowrap; }
+.avgTable td:last-child { text-align: right; }
+.avgTable .runRow th { position: sticky; top: 0; background: var(--plugin-surface-raised); color: var(--plugin-text-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; }
+.avgVal { color: var(--plugin-accent); font-weight: 700; }
+.useBtn { min-height: 24px; padding: 1px 8px; font-size: 12px; }
+/* Datalog buttons: big enough to hit with a glove at the machine. */
+.datalogActions button { min-height: 58px; font-size: 17px; font-weight: 600; }
+.recBadge { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 6px; min-height: 38px; border: 2px solid var(--plugin-danger); border-radius: 8px; background: var(--plugin-danger-soft); color: var(--plugin-danger); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
+.recBadge[hidden] { display: none; }
+.datalogActions button.recording { background: var(--plugin-danger); border-color: var(--plugin-danger); color: rgba(0, 0, 0, .78); }
+.avgActions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.avgActions button { flex: 1 1 auto; font-size: 12.5px; }
+
 /* ---- Very narrow widths (an embedded plugin window can be ~220px) ----------
    Everything below is progressive: each block only kicks in once the layout
    above it would start clipping. Checked down to 220px with no horizontal
@@ -373,6 +453,7 @@ body[data-view=link] .view[data-view=link] { display: block; }
   .liveStrip { gap: 4px 8px; padding: 5px 8px; font-size: 12px; }
   body[data-view=settings] .liveStrip { display: grid; grid-template-columns: 1fr 1fr; }
   .liveStrip .k { display: none; }
+  .avgTable .colN { display: none; }
 }
 @media (max-width: 300px) {
   .nav button { min-width: 38px; padding: 4px 6px; }
