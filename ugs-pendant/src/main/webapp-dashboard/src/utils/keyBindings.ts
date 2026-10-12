@@ -12,6 +12,9 @@ export type KeyBindingSettings = {
   // Off until the person turns it on - nothing should jog the machine because
   // a key was pressed on a shared tablet.
   enabled: boolean;
+  // Holding a jog key keeps the machine moving until it is released (a tap is
+  // still one step). Off by default so keys behave exactly as before.
+  holdToJog: boolean;
   // Action id -> combos. An action id mapped to [] is deliberately unbound.
   bindings: KeyBindings;
 };
@@ -26,6 +29,7 @@ export const defaultBindings = (): KeyBindings => {
 
 export const defaultKeyBindingSettings = (): KeyBindingSettings => ({
   enabled: false,
+  holdToJog: false,
   bindings: defaultBindings(),
 });
 
@@ -111,8 +115,9 @@ const isValidCombo = (value: unknown): value is string =>
 export const sanitizeKeyBindingSettings = (raw: unknown): KeyBindingSettings => {
   const result = defaultKeyBindingSettings();
   if (!raw || typeof raw !== "object") return result;
-  const input = raw as { enabled?: unknown; bindings?: unknown };
+  const input = raw as { enabled?: unknown; holdToJog?: unknown; bindings?: unknown };
   result.enabled = input.enabled === true;
+  result.holdToJog = input.holdToJog === true;
   if (!input.bindings || typeof input.bindings !== "object") return result;
 
   const stored = input.bindings as Record<string, unknown>;

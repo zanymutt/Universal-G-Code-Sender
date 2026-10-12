@@ -94,6 +94,13 @@ test("sanitize: bad input falls back to defaults, off", () => {
   }
 });
 
+test("hold-to-jog is off by default and only an explicit true turns it on", () => {
+  assert.equal(kb.defaultKeyBindingSettings().holdToJog, false);
+  assert.equal(kb.sanitizeKeyBindingSettings({ holdToJog: true }).holdToJog, true);
+  assert.equal(kb.sanitizeKeyBindingSettings({ holdToJog: "yes" }).holdToJog, false);
+  assert.equal(kb.sanitizeKeyBindingSettings({ enabled: true, bindings: {} }).holdToJog, false);
+});
+
 test("sanitize: keeps valid entries, drops unknown actions, bad combos and duplicates", () => {
   const s = kb.sanitizeKeyBindingSettings({
     enabled: true,

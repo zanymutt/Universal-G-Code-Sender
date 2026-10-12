@@ -59,11 +59,15 @@ public class AppV1Config extends ResourceConfig {
         register(ObjectMapperProvider.class);
         register(CustomOpenApiResource.class);
 
+        // One controller (and so one jog worker and watchdog) for the whole server.
+        final ContinuousJogController continuousJogController = new ContinuousJogController(backendAPI, jogService);
+
         register(new AbstractBinder() {
             @Override
             protected void configure() {
                 bind(backendAPI).to(BackendAPI.class);
                 bind(jogService).to(JogService.class);
+                bind(continuousJogController).to(ContinuousJogController.class);
             }
         });
     }

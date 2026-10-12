@@ -35,6 +35,10 @@ const keyBindingsSlice = createSlice({
       state.enabled = action.payload;
       persist(state);
     },
+    setHoldToJog: (state, action: PayloadAction<boolean>) => {
+      state.holdToJog = action.payload;
+      persist(state);
+    },
     assign: (state, action: PayloadAction<{ actionId: string; combo: string }>) => {
       state.bindings = assignCombo(state.bindings, action.payload.actionId, action.payload.combo).bindings;
       persist(state);

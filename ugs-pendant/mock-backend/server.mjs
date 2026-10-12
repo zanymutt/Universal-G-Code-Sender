@@ -271,6 +271,8 @@ const listMockPlugins = () =>
     });
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png" };
 
+const jogLog = [];
+
 function json(res, data, status_ = 200) {
   res.writeHead(status_, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
   res.end(JSON.stringify(data));
@@ -367,6 +369,22 @@ const server = createServer((req, res) => {
     });
     return;
   }
+  // Records continuous-jog updates so the dashboard's hold-to-jog stream can be inspected
+  // (GET /__jog-log); it does not move anything.
+  if (p === "/api/v1/machine/jogContinuous" && req.method === "POST") {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      let body = {};
+      try { body = JSON.parse(raw || "{}"); } catch { /* ignore */ }
+      jogLog.push({ at: Date.now(), x: Number(body.x) || 0, y: Number(body.y) || 0, z: Number(body.z) || 0 });
+      if (jogLog.length > 500) jogLog.shift();
+      const stopped = !body.x && !body.y && !body.z;
+      json(res, { active: !stopped, reason: null });
+    });
+    return;
+  }
+  if (p === "/__jog-log") return json(res, jogLog);
   if (p === "/api/v1/machine/sendOverride" && req.method === "POST") {
     const command = url.searchParams.get("command");
     const clamp = (value) => Math.min(200, Math.max(10, value));

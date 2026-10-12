@@ -390,6 +390,7 @@ const enqueue = (kind: Activity, motions: Motion[]) => {
 };
 
 const stopMotion = () => {
+  stopContinuousJog(false);
   queue = [];
   if (tickTimer !== undefined) {
     window.clearInterval(tickTimer);
@@ -480,6 +481,36 @@ const jogMotion = (delta: Vec): Motion => {
     target: { x: from.x + delta.x, y: from.y + delta.y, z: from.z + delta.z },
     rapid: false, feed: settings.jogFeedRate, overridable: false, dwell: 0, line: 0, lastOfLine: false,
   };
+};
+
+// Continuous jog. The real backend streams short controller-acknowledged
+// segments while the dashboard keeps sending a direction, and cancels the jog by
+// itself if those updates stop for half a second; this does the same on the
+// simulated machine so holding a key behaves as it does on hardware.
+const CONTINUOUS_JOG_TIMEOUT_MS = 500;
+const CONTINUOUS_JOG_SEGMENT_S = 0.05;
+let continuousJog: { dir: Vec; expiresAt: number; timer: number } | null = null;
+
+const stopContinuousJog = (cancelMotion: boolean) => {
+  if (!continuousJog) return;
+  window.clearInterval(continuousJog.timer);
+  continuousJog = null;
+  if (cancelMotion && activity === "jog") stopMotion();
+};
+
+const continuousJogTick = () => {
+  if (!continuousJog) return;
+  const canJog = status.state === "IDLE" || status.state === "JOG";
+  if (performance.now() > continuousJog.expiresAt || !canJog) {
+    stopContinuousJog(true);
+    return;
+  }
+  // Keep a couple of segments queued, as the acknowledgement-driven worker does.
+  if (queue.length < 2) {
+    const distance = (settings.jogFeedRate / 60) * CONTINUOUS_JOG_SEGMENT_S;
+    const { dir } = continuousJog;
+    enqueue("jog", [jogMotion({ x: dir.x * distance, y: dir.y * distance, z: dir.z * distance })]);
+  }
 };
 
 // Runs console/macro G-code text. Returns once it's queued; `done` fires when
@@ -739,6 +770,31 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       const stepZ = settings.useZStepSize ? settings.jogStepSizeZ : stepXY;
       enqueue("jog", [jogMotion({ x: dx * stepXY, y: dy * stepXY, z: dz * stepZ })]);
       return ok();
+    }
+    case "/api/v1/machine/jogContinuous": {
+      const body = parseBody();
+      const clamp = (value: unknown) => Math.max(-1, Math.min(1, Number(value) || 0));
+      let dir = { x: clamp(body.x), y: clamp(body.y), z: clamp(body.z) };
+      if (dir.x === 0 && dir.y === 0 && dir.z === 0) {
+        stopContinuousJog(true);
+        return json({ active: false, reason: null });
+      }
+      if (status.state === "DISCONNECTED") return json({ active: false, reason: "NOT_CONNECTED" });
+      if (status.state !== "IDLE" && status.state !== "JOG") {
+        stopContinuousJog(false);
+        return json({ active: false, reason: "CANNOT_JOG" });
+      }
+      const length = Math.hypot(dir.x, dir.y, dir.z);
+      if (length > 1) dir = { x: dir.x / length, y: dir.y / length, z: dir.z / length };
+      const expiresAt = performance.now() + CONTINUOUS_JOG_TIMEOUT_MS;
+      if (continuousJog) {
+        continuousJog.dir = dir;
+        continuousJog.expiresAt = expiresAt;
+      } else {
+        continuousJog = { dir, expiresAt, timer: window.setInterval(continuousJogTick, 25) };
+      }
+      continuousJogTick();
+      return json({ active: true, reason: null });
     }
     case "/api/v1/machine/homeMachine":
       if (activity === "idle") goHome();

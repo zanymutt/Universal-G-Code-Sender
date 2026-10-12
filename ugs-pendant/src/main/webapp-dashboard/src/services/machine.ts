@@ -72,6 +72,27 @@ export const jog = (x: number, y: number, z: number): Promise<void> => {
   return fetch(`/api/v1/machine/jog?x=${x}&y=${y}&z=${z}`).then();
 };
 
+export type ContinuousJogResult = { active: boolean; reason?: string | null };
+
+// One continuous-jog update: a direction (each -1..1) and also the heartbeat -
+// the backend cancels the jog by itself if these stop for about half a second.
+// All zeros stops. Resolves `active: false` when the backend won't jog (not
+// connected, a job running, alarm) rather than rejecting.
+export const jogContinuous = (x: number, y: number, z: number): Promise<ContinuousJogResult> => {
+  return fetch("/api/v1/machine/jogContinuous", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ x, y, z }),
+    // A request that hangs must not hold up the "stop" queued behind it.
+    signal: AbortSignal.timeout(1500),
+  }).then((response) => {
+    if (!response.ok) {
+      throw new Error(`Couldn't jog (${response.status})`);
+    }
+    return response.json() as Promise<ContinuousJogResult>;
+  });
+};
+
 export const resetToZero = (
   axis?: "A" | "B" | "C" | "X" | "Y" | "Z"
 ): Promise<void> => {

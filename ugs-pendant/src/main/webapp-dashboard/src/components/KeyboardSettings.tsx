@@ -16,7 +16,7 @@ type Row = { id: string; label: string };
 
 const KeyboardSettings = () => {
   const dispatch = useAppDispatch();
-  const { enabled, bindings } = useAppSelector((state) => state.keyBindings);
+  const { enabled, holdToJog, bindings } = useAppSelector((state) => state.keyBindings);
   const macros = useAppSelector((state) => state.macros.macros);
   const macrosLoaded = useAppSelector((state) => state.macros.loaded);
   // The action currently waiting for a key press, and a one-line result.
@@ -122,6 +122,19 @@ const KeyboardSettings = () => {
         checked={enabled}
         onChange={(event) => dispatch(keyBindingsActions.setEnabled(event.target.checked))}
       />
+      <Form.Check
+        type="switch"
+        id="keyboard-hold-to-jog"
+        className="keyboardEnable"
+        label="Holding a jog key keeps jogging until it is released"
+        checked={holdToJog}
+        onChange={(event) => dispatch(keyBindingsActions.setHoldToJog(event.target.checked))}
+      />
+      <p className="settingsFieldHint">
+        A tap is still one step. Held for a quarter of a second it moves continuously at the jog feed rate set on
+        the dashboard, and stops when you let go, switch away from this window, or the link to UGS drops. Speed
+        over Wi-Fi depends on the machine's own connection, not the tablet's.
+      </p>
       <p className="settingsFieldHint">
         Active only on the dashboard page, never while typing in a field or the editor, and not while a dialog is open.
         Holding a key does not repeat. Jog keys move the machine - keep the area clear. Keys pressed while a plugin

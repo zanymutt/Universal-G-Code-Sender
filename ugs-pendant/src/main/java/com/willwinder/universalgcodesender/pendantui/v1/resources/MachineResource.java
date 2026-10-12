@@ -28,7 +28,10 @@ import com.willwinder.universalgcodesender.model.Axis;
 import com.willwinder.universalgcodesender.model.BackendAPI;
 import com.willwinder.universalgcodesender.model.BaudRateEnum;
 import com.willwinder.universalgcodesender.model.Overrides;
+import com.willwinder.universalgcodesender.pendantui.v1.ContinuousJogController;
 import com.willwinder.universalgcodesender.pendantui.v1.model.GcodeCommands;
+import com.willwinder.universalgcodesender.pendantui.v1.model.JogContinuousRequest;
+import com.willwinder.universalgcodesender.pendantui.v1.model.JogContinuousResponse;
 import com.willwinder.universalgcodesender.services.JogService;
 import com.willwinder.universalgcodesender.utils.FirmwareUtils;
 import com.willwinder.universalgcodesender.utils.Settings;
@@ -63,6 +66,9 @@ public class MachineResource {
 
     @Inject
     private JogService jogService;
+
+    @Inject
+    private ContinuousJogController continuousJogController;
 
     @GET
     @Path("connect")
@@ -232,5 +238,24 @@ public class MachineResource {
     public void jog(@QueryParam("x") int x, @QueryParam("y") int y, @QueryParam("z") int z) {
         jogService.adjustManualLocationXY(x, y);
         jogService.adjustManualLocationZ(z);
+    }
+
+    @POST
+    @Path("jogContinuous")
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Produces(MediaType.APPLICATION_JSON)
+    @Operation(summary = "Jog continuously in a direction until told to stop",
+            description = "x, y and z are -1..1; the jog runs at the jog feed rate scaled by the vector length. " +
+                    "The client must repeat the request (about every 150 ms) to keep the jog alive: if updates stop " +
+                    "for half a second the jog is cancelled. All zeros stops it. A direction that can't be jogged " +
+                    "(not connected, job running, alarm) is answered with active=false and a reason, not an error.")
+    public JogContinuousResponse jogContinuous(JogContinuousRequest request) {
+        if (request == null) {
+            throw new BadRequestException("Missing jog direction");
+        }
+        ContinuousJogController.Result result =
+                continuousJogController.update(request.getX(), request.getY(), request.getZ());
+        return new JogContinuousResponse(result.active(),
+                result.reason() == ContinuousJogController.Reason.NONE ? null : result.reason().name());
     }
 }
