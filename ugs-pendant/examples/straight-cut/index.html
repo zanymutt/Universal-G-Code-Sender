@@ -69,8 +69,17 @@
         </div>
 
         <div class="group">
-          <h3>Torch</h3>
+          <h3>Torch &amp; spindle</h3>
           <div class="fieldGrid">
+            <label>Spindle command
+              <select id="spindleMode">
+                <option value="M3" title="Clockwise">M3 (CW)</option>
+                <option value="M4" title="Counter-clockwise">M4 (CCW)</option>
+              </select>
+            </label>
+            <label><span>Spindle speed <span class="unitHint">S value</span></span>
+              <input id="spindleSpeed" type="number" min="0" step="any" value="1000">
+            </label>
             <label><span>Pierce delay <span class="unitHint">seconds</span></span>
               <input id="pierceDelay" type="number" min="0" step="any" value="1">
             </label>

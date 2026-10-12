@@ -99,7 +99,7 @@ test("matches the exact sequence a THC-enabled X+ cut previously produced, plus 
     "G21",
     "G0 X0 Y0 Z25",
     "G0 Z3",
-    "M3",
+    "M3 S1000",
     "G4 P3",
     "G0 Z1.5",
     "M8",
@@ -111,4 +111,47 @@ test("matches the exact sequence a THC-enabled X+ cut previously produced, plus 
     "",
   ].join("\n");
   assert.equal(generate({ ...BASE, thc: true }), expected);
+});
+
+const spindleLine = (text) => text.split("\n").find((l) => /^M[34]\b/.test(l));
+
+test("spindle defaults to M3 S1000 when the options don't mention it (older callers, older saved forms)", () => {
+  assert.equal(spindleLine(generate({ ...BASE })), "M3 S1000");
+});
+
+test("M4 and a custom S value land on the one spindle line", () => {
+  assert.equal(spindleLine(generate({ ...BASE, spindleMode: "M4", spindleSpeed: 12000 })), "M4 S12000");
+  assert.equal(spindleLine(generate({ ...BASE, spindleMode: "M3", spindleSpeed: "750.5" })), "M3 S750.5");
+});
+
+test("the spindle mode is case-insensitive and only M3 or M4 are accepted", () => {
+  assert.equal(spindleLine(generate({ ...BASE, spindleMode: "m4" })), "M4 S1000");
+  for (const bad of ["M5", "M2", "", "clockwise"]) {
+    assert.throws(() => generate({ ...BASE, spindleMode: bad }), /M3 or M4/, JSON.stringify(bad));
+  }
+});
+
+test("a bad S value is an error, never silently replaced - including a cleared field", () => {
+  assert.throws(() => generate({ ...BASE, spindleSpeed: "" }), /Spindle speed must be a number/);
+  assert.throws(() => generate({ ...BASE, spindleSpeed: "   " }), /Spindle speed must be a number/);
+  assert.throws(() => generate({ ...BASE, spindleSpeed: "abc" }), /Spindle speed must be a number/);
+  assert.throws(() => generate({ ...BASE, spindleSpeed: -100 }), /Spindle speed cannot be negative/);
+});
+
+test("S0 is allowed (some setups use it deliberately)", () => {
+  assert.equal(spindleLine(generate({ ...BASE, spindleSpeed: 0 })), "M3 S0");
+});
+
+test("the spindle still stops with M5 after the cut, and comes on exactly once, before the pierce delay", () => {
+  const lines = generate({ ...BASE, spindleMode: "M4", spindleSpeed: 500 }).split("\n");
+  assert.equal(lines.filter((l) => /^M[34]\b/.test(l)).length, 1);
+  assert.ok(lines.indexOf("M4 S500") < lines.findIndex((l) => l.startsWith("G4 P")));
+  assert.ok(lines.indexOf("M5") > lines.findIndex((l) => l.startsWith("G1 ")));
+});
+
+test("the generated spindle line passes the same F/S/T validation the probe code is held to", () => {
+  // Dashboard's parser rejects a file where a line has a repeated or
+  // non-numeric S/F/T word; the line this plugin writes must never be one.
+  const line = spindleLine(generate({ ...BASE, spindleMode: "M4", spindleSpeed: 24000.5 }));
+  assert.match(line, /^M4 S\d+(\.\d+)?$/);
 });

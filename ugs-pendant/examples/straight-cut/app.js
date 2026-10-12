@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const fieldIds = ['direction', 'units', 'distance', 'cutSpeed', 'safeHeight', 'pierceHeight', 'cutHeight', 'pierceDelay', 'thc', 'probeCode'];
+  const fieldIds = ['direction', 'units', 'distance', 'cutSpeed', 'safeHeight', 'pierceHeight', 'cutHeight', 'pierceDelay', 'spindleMode', 'spindleSpeed', 'thc', 'probeCode'];
   let requestId = 0;
   let pending = new Map();
   let settings = {};

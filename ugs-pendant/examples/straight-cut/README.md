@@ -2,8 +2,9 @@
 
 Generates one absolute-coordinate straight cut from the active work origin in
 the `-X`, `+X`, `-Y`, or `+Y` direction. It supports millimeters or inches,
-custom probe code, safe/pierce/cut heights, pierce delay, cut speed, and
-optional THC control using `M8`/`M9`.
+custom probe code, safe/pierce/cut heights, pierce delay, cut speed,
+spindle direction (`M3` clockwise or `M4` counter-clockwise) with an `S` speed
+(default `M3 S1000`), and optional THC control using `M8`/`M9`.
 
 The generated sequence is:
 
@@ -14,7 +15,7 @@ G0 X0 Y0 Z[safe height]
 [custom probe code, if provided]
 G0 X0 Y0           ; after custom probe code, if provided
 G0 Z[pierce height]
-M3
+M3 S[spindle speed]    ; or M4 S[spindle speed]
 G4 P[pierce delay]
 G0 Z[cut height]
 M8                  ; if THC enabled

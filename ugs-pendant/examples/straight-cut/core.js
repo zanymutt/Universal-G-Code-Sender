@@ -125,6 +125,24 @@
     const probe = String(options.probeCode || '').replace(/\r\n?/g, '\n').trim();
     const thc = Boolean(options.thc);
 
+    // Spindle on: M3 (clockwise) or M4 (counter-clockwise), with an S speed.
+    // Both are optional *to the caller* - an options object that predates them
+    // (or a saved form that never had the fields) gets M3 at S1000 - but a
+    // field that is present and wrong is an error, never silently replaced:
+    // Number('') is 0, so a cleared Spindle speed box would otherwise quietly
+    // become "S0".
+    const spindleCommand = options.spindleMode === undefined
+      ? 'M3'
+      : String(options.spindleMode).trim().toUpperCase();
+    if (spindleCommand !== 'M3' && spindleCommand !== 'M4') {
+      throw new Error('Choose M3 or M4 for the spindle direction.');
+    }
+    let spindleSpeed = 1000;
+    if (options.spindleSpeed !== undefined) {
+      if (String(options.spindleSpeed).trim() === '') throw new Error('Spindle speed must be a number.');
+      spindleSpeed = nonNegative(options.spindleSpeed, 'Spindle speed');
+    }
+
     if (probe) {
       const unsafe = findUnsafeProbeLine(probe);
       if (unsafe) {
@@ -165,7 +183,7 @@
 
     lines.push(
       `G0 Z${format(pierceHeight)}`,
-      'M3',
+      `${spindleCommand} S${format(spindleSpeed)}`,
       `G4 P${format(pierceDelay)}`,
       `G0 Z${format(cutHeight)}`,
     );
