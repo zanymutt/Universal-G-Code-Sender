@@ -15,6 +15,16 @@
     flex-wrap: wrap;
   }
 
+  // Shown only where the row has room for them next to everything else.
+  .topBarQuickLayouts {
+    display: none;
+    flex-wrap: nowrap;
+  }
+
+  @media (min-width: 1180px) {
+    .topBarQuickLayouts { display: flex; }
+  }
+
   .topBarZoomLevel {
     // Brighter and a touch bigger than the original var(--dashboard-text-subtle)/0.8rem - low
     // contrast enough against the dark top bar to be hard to read at a

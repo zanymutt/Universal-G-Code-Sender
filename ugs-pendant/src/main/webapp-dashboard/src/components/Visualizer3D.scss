@@ -33,8 +33,10 @@
 
   // Below this the text labels no longer fit on one row, so every button
   // drops to an icon (title/aria-label still name it). Sized just above the
-  // full-label row's natural width (~650px), with a little headroom.
-  @container (max-width: 670px) {
+  // full-label row's natural width: measured 762px, or 808px once Stock is on
+  // and its settings button joins the row, plus headroom for a wider font.
+  // Re-measure whenever a button is added to the toolbar.
+  @container (max-width: 850px) {
     .visualizer3DButtonLabel {
       display: none;
     }

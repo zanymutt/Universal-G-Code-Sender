@@ -134,6 +134,13 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - `utils/jogPresets.ts` - the step-size/feed-rate preset ladders shared with `StepSize`/`FeedRate`, and `stepPreset`.
 - Keys never reach the dashboard while a plugin iframe has focus. With `holdToJog` on, a jog key held >= `HOLD_TO_JOG_MS` (250 ms) feeds the shared continuous-jog stream (below); released sooner it is a normal `GET /machine/jog` step.
 
+## Quick layouts (top bar)
+
+- `utils/quickLayouts.ts` - pure: four slots `{color, sizing, zoom, panes|null}` (snapshots, not references to named presets), `parseQuickSlots` (always 4 entries; a bad slot is dropped alone), `quickSlotMatches` (marks the active slot), 8 colours. `hooks/useQuickLayouts.ts` persists them (localStorage `ugs-dashboard-quick-layouts`). `components/QuickLayouts.tsx`: tap recalls, empty tap / hold 600 ms / right click opens the editor (colour, Save current here, Clear).
+- Recall = `setSizing` + `applyZoom` + `applyPaneLayout(slot.panes)` (the existing `ugs-pane-layout-apply` event). `useDashboardSizing()` is now owned by `TopBar` and passed to `DashboardSizing` (it used to be called inside it), so the slots and the Layout dialog share one sizing state.
+- `utils/paneLayoutShape.ts` holds `isPaneLayout` (re-exported from `hooks/usePaneLayoutPresets.ts`) so it can be used and tested without React.
+- The visualizer toolbar's icons-only switch is a container query keyed to its measured natural width (762px; 808px with Stock on); re-measure when adding a button.
+
 ## Game controller input
 
 - `utils/gamepadInput.ts` - pure: `PadSnapshot` -> held inputs named `Pad.B<n>`, `Pad.A<n>+/-`, `Pad.HatN/E/S/W`. `GamepadInputState` judges an axis by its movement from its resting value (first reading per controller; `recalibrate()`), with press 0.5 / release 0.3 hysteresis, ignores non-finite/out-of-range axis values, and decodes a hat on axis 9 of a 10+ axis pad with no `standard` mapping (8 positions at `i*2/7-1`; neutral is a ~1.2e9 sentinel). `describeInput` is the label.

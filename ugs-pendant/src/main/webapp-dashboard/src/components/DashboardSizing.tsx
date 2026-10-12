@@ -1,14 +1,20 @@
 import { useState } from "react";
 import { Button, Form, Modal } from "react-bootstrap";
-import { DEFAULT_SIZING, useDashboardSizing } from "../hooks/useDashboardSizing";
+import { DEFAULT_SIZING, type DashboardSizing as Sizing } from "../hooks/useDashboardSizing";
 import "./DashboardSizing.scss";
 import { useLayoutPresets } from "../hooks/useLayoutPresets";
 import LayoutBackupControls from "./LayoutBackupControls";
 
-type Props = { zoom: number; resetZoom: () => void; applyZoom: (value: number) => void };
-export default function DashboardSizing({ zoom, resetZoom, applyZoom }: Props) {
+type Props = {
+  zoom: number;
+  resetZoom: () => void;
+  applyZoom: (value: number) => void;
+  // Owned by the top bar, which also needs it for the quick layout slots.
+  sizing: Sizing;
+  setSizing: (value: Sizing | ((current: Sizing) => Sizing)) => void;
+};
+export default function DashboardSizing({ zoom, resetZoom, applyZoom, sizing, setSizing }: Props) {
   const [show, setShow] = useState(false);
-  const { sizing, setSizing } = useDashboardSizing();
   const { presets, save, error } = useLayoutPresets();
   const [selected, setSelected] = useState("");
   const [name, setName] = useState("");

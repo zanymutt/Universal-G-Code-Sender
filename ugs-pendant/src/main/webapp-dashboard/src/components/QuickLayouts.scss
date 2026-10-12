@@ -1,0 +1,104 @@
+.quickLayouts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.quickLayoutSlot {
+  position: relative;
+}
+
+.quickLayoutButton {
+  --quick-color: var(--dashboard-border-strong);
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: 2px solid var(--dashboard-border-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dashboard-text-muted);
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  // A press and hold must not select the digit or pop the text-selection UI.
+  user-select: none;
+  -webkit-touch-callout: none;
+
+  &:hover { color: var(--dashboard-text); }
+
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 2px;
+  }
+
+  // Empty slots are a quiet outline; a filled one carries its colour.
+  &.quickLayoutFilled {
+    border-color: var(--quick-color);
+    color: var(--quick-color);
+    background: color-mix(in srgb, var(--quick-color) 14%, transparent);
+  }
+
+  // The slot whose layout is showing right now.
+  &.quickLayoutActive {
+    background: var(--quick-color);
+    color: #fff;
+    box-shadow: 0 0 0 2px var(--dashboard-surface-raised), 0 0 0 4px var(--quick-color);
+  }
+}
+
+.quickLayoutEditor {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  width: 250px;
+  padding: 12px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 10px;
+  background: var(--dashboard-surface);
+  box-shadow: var(--dashboard-shadow);
+  color: var(--dashboard-text);
+}
+
+.quickLayoutEditorTitle { font-weight: 700; margin-bottom: 8px; }
+
+.quickLayoutSwatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.quickLayoutSwatch {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+
+  &.quickLayoutSwatchOn {
+    border-color: var(--dashboard-text);
+    box-shadow: 0 0 0 2px var(--dashboard-surface);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 2px;
+  }
+}
+
+.quickLayoutEditorHint {
+  margin: 10px 0;
+  font-size: 0.8rem;
+  color: var(--dashboard-text-muted);
+}
+
+.quickLayoutEditorButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+@media (any-pointer: coarse) {
+  .quickLayoutButton { width: 44px; height: 44px; }
+  .quickLayoutSwatch { width: 36px; height: 36px; }
+}

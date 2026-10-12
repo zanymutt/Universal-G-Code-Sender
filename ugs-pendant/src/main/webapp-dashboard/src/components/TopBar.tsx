@@ -11,6 +11,8 @@ import {
 import { Button } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useFullscreen } from "../hooks/useFullscreen";
+import { useDashboardSizing } from "../hooks/useDashboardSizing";
+import { applyPaneLayout } from "../hooks/usePaneLayoutPresets";
 import { useZoomLevel } from "../hooks/useZoomLevel";
 import { disconnect, softReset } from "../services/machine";
 import { useAppDispatch } from "../hooks/useAppDispatch";
@@ -20,6 +22,7 @@ import ConnectionWidget from "./ConnectionWidget";
 import ConnectionHealth from "./ConnectionHealth";
 import DashboardSizing from "./DashboardSizing";
 import PaneLayoutPresets from "./PaneLayoutPresets";
+import QuickLayouts from "./QuickLayouts";
 import "./TopBar.scss";
 
 const TopBar = () => {
@@ -29,6 +32,7 @@ const TopBar = () => {
   const isDisconnected = status.state === "DISCONNECTED";
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const { zoom, zoomIn, zoomOut, resetZoom, applyZoom, canZoomIn, canZoomOut } = useZoomLevel();
+  const { sizing, setSizing } = useDashboardSizing();
 
   return (
     <div className={"topBar" + (isDisconnected ? " topBarDisconnected" : "")}>
@@ -40,8 +44,22 @@ const TopBar = () => {
         {status?.pins?.door && <AccessoryState title="Door">D</AccessoryState>}
       </div>
 
+      {/* Four one-tap layouts. Hidden below a width where they would only crowd
+          the row; the Layout and Panes dialogs still hold every saved layout. */}
+      <div className="topBarSection topBarQuickLayouts">
+        <QuickLayouts
+          sizing={sizing}
+          zoom={zoom}
+          onRecall={(slot) => {
+            setSizing(slot.sizing);
+            applyZoom(slot.zoom);
+            if (slot.panes) applyPaneLayout(slot.panes);
+          }}
+        />
+      </div>
+
       <div className="topBarSection">
-        <DashboardSizing zoom={zoom} resetZoom={resetZoom} applyZoom={applyZoom} />
+        <DashboardSizing zoom={zoom} resetZoom={resetZoom} applyZoom={applyZoom} sizing={sizing} setSizing={setSizing} />
         <PaneLayoutPresets />
         <Button variant="secondary" disabled={!canZoomOut} onClick={zoomOut} title="Zoom out">
           <FontAwesomeIcon icon={faMagnifyingGlassMinus} />
