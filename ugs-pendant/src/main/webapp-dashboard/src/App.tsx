@@ -1,14 +1,19 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useDispatch } from "react-redux";
 import { useAppSelector } from "./hooks/useAppSelector";
 import "./App.scss";
 import WaitingPage from "./pages/WaitingPage";
 import Dashboard from "./pages/Dashboard";
+import ReconnectOverlay from "./components/ReconnectOverlay";
 import { socketActions } from "./store/socketSlice";
 import { ACCENT_PRESETS } from "./theme/accentPresets";
+import { RECONNECT_INTERVAL_MS } from "./utils/reconnect";
 
 function App() {
   const isConnected = useAppSelector((state) => state.socket.isConnected);
+  const hasConnected = useAppSelector((state) => state.socket.hasConnected);
+  const isEstablishingConnection = useAppSelector((state) => state.socket.isEstablishingConnection);
+  const appRef = useRef<HTMLDivElement | null>(null);
   const theme = useAppSelector((state) => state.theme.theme);
   const accent = useAppSelector((state) => state.accent.accent);
   const dispatch = useDispatch();
@@ -16,6 +21,25 @@ function App() {
   useEffect(() => {
     dispatch(socketActions.connect());
   }, [dispatch]);
+
+  // While there's no connection (before the first one, or after losing it),
+  // keep trying. Re-armed whenever a connect attempt starts or ends, so each
+  // failed attempt is followed by another one RECONNECT_INTERVAL_MS later.
+  useEffect(() => {
+    if (isConnected) return;
+    const timer = setTimeout(() => dispatch(socketActions.connect()), RECONNECT_INTERVAL_MS);
+    return () => clearTimeout(timer);
+  }, [dispatch, isConnected, isEstablishingConnection]);
+
+  // Once connected the dashboard stays mounted for good. A drop covers it with
+  // the reconnect overlay and makes it inert (no clicks, no Tab into it), but
+  // unmounting it would throw away the pane layout, every open plugin (their
+  // iframes reload) and unsaved editor text - for a Wi-Fi blip as much as a UGS
+  // restart. inert is set through the DOM because React 18 has no prop for it.
+  const showReconnect = hasConnected && !isConnected;
+  useEffect(() => {
+    appRef.current?.toggleAttribute("inert", showReconnect);
+  }, [showReconnect]);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -46,10 +70,18 @@ function App() {
     root.setProperty("--dashboard-hud-accent", ACCENT_PRESETS[accent].dark.accent);
   }, [accent, theme]);
 
-  // The dashboard itself now shows connection state and a way to connect right in
-  // the top bar, so there's no separate full-page "disconnected" screen to get
-  // stuck on - once the websocket is up, the dashboard is always what you see.
-  return <div className="app">{isConnected ? <Dashboard /> : <WaitingPage />}</div>;
+  // The dashboard itself shows machine connection state and a way to connect
+  // right in the top bar, so there's no separate full-page "disconnected"
+  // screen to get stuck on. The only full-page wait is the very first
+  // connection; after that the dashboard stays put (see above).
+  return (
+    <>
+      <div className="app" ref={appRef}>
+        {hasConnected || isConnected ? <Dashboard /> : <WaitingPage />}
+      </div>
+      {showReconnect && <ReconnectOverlay onRetry={() => dispatch(socketActions.connect())} />}
+    </>
+  );
 }
 
 export default App;

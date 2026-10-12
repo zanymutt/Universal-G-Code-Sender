@@ -1,23 +1,9 @@
-import { useEffect } from "react";
 import { Container, Spinner } from "react-bootstrap";
-import { useAppSelector } from "../hooks/useAppSelector";
-import { useDispatch } from "react-redux";
-import { socketActions } from "../store/socketSlice";
 
+// Shown only until the very first connection of a page load. Retrying is
+// driven by App.tsx (the same loop also serves the reconnect overlay), so
+// this is just the picture.
 const WaitingPage = () => {
-  const dispatch = useDispatch();
-  const { isConnected, isEstablishingConnection } = useAppSelector(
-    (state) => state.socket
-  );
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      dispatch(socketActions.connect());
-    }, 4000);
-
-    return () => clearTimeout(timer);
-  }, [dispatch, isConnected, isEstablishingConnection]);
-
   return (
     <Container style={{marginTop: "24px"}}>
       <h1>Establishing connection</h1>

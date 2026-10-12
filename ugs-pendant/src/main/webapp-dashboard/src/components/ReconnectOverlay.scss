@@ -1,0 +1,62 @@
+// Above everything the dashboard can show: floating plugin windows (40/41),
+// bootstrap modals (1050+) and the plugin tray.
+.reconnectOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 11, 12, 0.62);
+}
+
+.reconnectCard {
+  width: min(520px, 100%);
+  padding: 22px 24px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 10px;
+  background: var(--dashboard-bg);
+  color: var(--dashboard-text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  h2 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 12px;
+    font-size: 1.3rem;
+  }
+
+  p {
+    margin: 0 0 10px;
+    color: var(--dashboard-text-muted);
+  }
+
+  .reconnectKept {
+    color: var(--dashboard-text);
+    font-weight: 500;
+  }
+}
+
+.reconnectFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.reconnectElapsed {
+  color: var(--dashboard-text-subtle);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (any-pointer: coarse) {
+  .reconnectFooter .btn {
+    min-height: 44px;
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+}

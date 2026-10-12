@@ -61,9 +61,19 @@ export const socketMiddleware: ThunkMiddleware<RootState, Action, void> =
             return next(action);
         }
 
+        // Only one socket is ever live. Reconnect attempts are made on a timer
+        // (App.tsx), and one that hangs (a network black hole rather than a
+        // refused connection) would otherwise sit there while the next attempt
+        // starts - and if the network then comes back, every one of them opens,
+        // each delivering every event again. The previous one is closed here,
+        // and the handlers below ignore events from any socket that is no
+        // longer the active one, so a late close from the old socket can't
+        // flip a healthy new connection back to "closed".
+        const previousSocket = activeSocket;
         const socket = new Socket();
         activeSocket = socket;
         socket.connect("ws://" + location.host + "/ws/v1/events");
+        previousSocket?.disconnect();
         // The very first fetchStatus() below (dispatched the instant the socket
         // opens) can race the controller's own connection handshake - if it
         // lands before the controller has a real ControllerStatus yet,
@@ -78,9 +88,15 @@ export const socketMiddleware: ThunkMiddleware<RootState, Action, void> =
         let hasRefetchedStatusAfterConnect = false;
 
         socket.on("open", () => {
+            if (activeSocket !== socket) return;
             console.log("Established connection");
             store.dispatch(socketActions.connectionEstablished());
             store.dispatch(getSettings());
+            // The page may have been up through a UGS restart or a network
+            // drop (it stays mounted - see App.tsx), so what it knows about the
+            // loaded file can be stale. getFileStatus drives the editor and
+            // visualizer reloading if the file actually changed.
+            store.dispatch(fetchFileStatus());
             // Without this, a freshly loaded page starts from the default redux
             // state (state: "DISCONNECTED") and only corrects itself once the
             // backend happens to push a status change - so reloading while
@@ -106,11 +122,13 @@ export const socketMiddleware: ThunkMiddleware<RootState, Action, void> =
         });
 
         socket.on("close", () => {
+            if (activeSocket !== socket) return;
             console.log("Closing websocket");
             store.dispatch(socketActions.connectionClosed());
         });
 
         socket.onMessage((messageEvent: MessageEvent) => {
+            if (activeSocket !== socket) return;
             const ugsEvent = JSON.parse(messageEvent.data) as UGSEvent;
             store.dispatch(socketActions.messageReceived());
             if (ugsEvent.eventType === "ControllerStatusEvent") {
