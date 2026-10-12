@@ -135,6 +135,7 @@ const KeyboardSettings = () => {
         <span className="keyBindingsNotice" role="status">{notice}</span>
       </div>
 
+      <div className="keyBindingGroups">
       {ACTION_GROUPS.map((group) => (
         <div className="keyBindingGroup" key={group}>
           <h3>{group}</h3>
@@ -148,6 +149,7 @@ const KeyboardSettings = () => {
         <h3>Macros</h3>
         {macros.length === 0 && <p className="keyBindingNone">No macros configured in UGS.</p>}
         {macros.map((macro) => renderRow({ id: macroActionId(macro.uuid), label: macro.name }))}
+      </div>
       </div>
     </section>
   );
