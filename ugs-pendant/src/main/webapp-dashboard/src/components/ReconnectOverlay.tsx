@@ -30,7 +30,11 @@ const ReconnectOverlay = ({ onRetry }: Props) => {
           The dashboard lost its link to UGS (it may have been closed or restarted, or the network dropped). It keeps
           trying automatically and will pick up where it left off.
         </p>
-        <p className="reconnectKept">Your pane layout, open plugin windows and unsaved editor changes are kept.</p>
+        <p className="reconnectKept">Your pane layout and open plugin windows are kept.</p>
+        <p className="reconnectCaveat">
+          Unsaved editor text is kept too, as long as UGS still has the same file loaded when it comes back. If UGS
+          was restarted it starts with no file loaded, and unsaved changes can't be kept.
+        </p>
         <div className="reconnectFooter">
           <span className="reconnectElapsed">Disconnected for {formatOutage(seconds)}</span>
           <Button size="sm" variant="primary" onClick={onRetry}>

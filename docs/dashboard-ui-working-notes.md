@@ -77,6 +77,10 @@ temp profile directory - the user's own Chrome may be open.
 - **Never re-parent a plugin iframe** (moving it in the DOM reloads it and the plugin loses its state).
   Docked plugins are positioned over a pane slot, not moved into it. Also: do not unmount things that
   hold state - the dashboard stays mounted across a lost connection for the same reason.
+- **Test the case that matches reality, not the mock's convenient one.** The mock backend comes back with its
+  default file loaded after a restart, so an "edits survive a restart" test passed while real UGS (which
+  starts with nothing loaded) discards the editor buffer. When a test depends on backend state, make the
+  mock's state match what the real backend would be.
 - **A sandboxed (`allow-scripts`, no `allow-same-origin`) iframe swallows pointer events** and is blocked
   entirely in the in-app browser pane. Handles/shields must live in the parent DOM next to the iframe,
   never over a part of it that needs to be clickable; the harness can't click inside one.

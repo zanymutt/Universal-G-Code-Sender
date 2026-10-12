@@ -104,7 +104,7 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - `store/socketSlice.ts` — `isConnected`, `isEstablishingConnection`, `hasConnected` (true once a connection was ever made this page load), `lastMessageAt`.
 - `store/socketMiddleware.ts` — one live socket at a time: a new `connect` disconnects the previous socket, and `open`/`close`/`message` handlers ignore any socket that isn't `activeSocket`. On open it refetches settings, status and file status.
 - `components/ConnectionHealth.tsx` — the "● UGS" chip in the top bar: health of the **dashboard ↔ UGS link only** (age of the last WS message: live < 7s, stale < 15s, else lost). The machine's own state is the pill/`ConnectionWidget` beside it.
-- Why the dashboard stays mounted: the pane layout, plugin windows (iframes reload) and unsaved editor text all live in component state.
+- Why the dashboard stays mounted: the pane layout and plugin windows (iframes reload) live in component state. Unsaved editor text survives a drop only while UGS still has the same file loaded; if `fileStatus.fileName` goes empty (a UGS restart) `GcodeEditor` discards its buffer. Rescuing that text (keep the buffer, offer Save as / Discard) is a known, deliberately deferred improvement.
 
 ## Gcode editor (`components/GcodeEditor.tsx`, `GcodeEditor.scss`)
 
