@@ -163,7 +163,7 @@ const QuickLayouts = ({ sizing, zoom, onRecall }: Props) => {
                       setEditing(null);
                     }}
                   >
-                    Save current here
+                    Save
                   </Button>
                   {slot && (
                     <Button

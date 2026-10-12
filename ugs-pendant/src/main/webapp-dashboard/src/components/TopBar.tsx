@@ -44,21 +44,23 @@ const TopBar = () => {
         {status?.pins?.door && <AccessoryState title="Door">D</AccessoryState>}
       </div>
 
-      {/* Four one-tap layouts. Hidden below a width where they would only crowd
-          the row; the Layout and Panes dialogs still hold every saved layout. */}
-      <div className="topBarSection topBarQuickLayouts">
-        <QuickLayouts
-          sizing={sizing}
-          zoom={zoom}
-          onRecall={(slot) => {
-            setSizing(slot.sizing);
-            applyZoom(slot.zoom);
-            if (slot.panes) applyPaneLayout(slot.panes);
-          }}
-        />
-      </div>
-
       <div className="topBarSection">
+        {/* Four one-tap layouts, beside the Layout button. They live inside this
+            section (not a section of their own) because the plugin tray finds
+            its free stretch of the bar from exactly two sections. Hidden below a
+            width where they would only crowd the row; the Layout and Panes
+            dialogs still hold every saved layout. */}
+        <span className="topBarQuickLayouts">
+          <QuickLayouts
+            sizing={sizing}
+            zoom={zoom}
+            onRecall={(slot) => {
+              setSizing(slot.sizing);
+              applyZoom(slot.zoom);
+              if (slot.panes) applyPaneLayout(slot.panes);
+            }}
+          />
+        </span>
         <DashboardSizing zoom={zoom} resetZoom={resetZoom} applyZoom={applyZoom} sizing={sizing} setSizing={setSizing} />
         <PaneLayoutPresets />
         <Button variant="secondary" disabled={!canZoomOut} onClick={zoomOut} title="Zoom out">

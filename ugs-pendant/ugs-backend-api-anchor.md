@@ -136,7 +136,8 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 
 ## Quick layouts (top bar)
 
-- `utils/quickLayouts.ts` - pure: four slots `{color, sizing, zoom, panes|null}` (snapshots, not references to named presets), `parseQuickSlots` (always 4 entries; a bad slot is dropped alone), `quickSlotMatches` (marks the active slot), 8 colours. `hooks/useQuickLayouts.ts` persists them (localStorage `ugs-dashboard-quick-layouts`). `components/QuickLayouts.tsx`: tap recalls, empty tap / hold 600 ms / right click opens the editor (colour, Save current here, Clear).
+- `utils/quickLayouts.ts` - pure: four slots `{color, sizing, zoom, panes|null}` (snapshots, not references to named presets), `parseQuickSlots` (always 4 entries; a bad slot is dropped alone), `quickSlotMatches` (marks the active slot), 8 colours. `hooks/useQuickLayouts.ts` persists them (localStorage `ugs-dashboard-quick-layouts`). `components/QuickLayouts.tsx`: tap recalls, empty tap / hold 600 ms / right click opens the editor (colour, Save, Clear).
+- The boxes sit inside the top bar's second `.topBarSection`, beside Layout: `PluginTray`'s `usePlacement` needs exactly two `:scope > .topBarSection` children to find the free stretch for minimized-plugin chips, so do not add a third section.
 - Recall = `setSizing` + `applyZoom` + `applyPaneLayout(slot.panes)` (the existing `ugs-pane-layout-apply` event). `useDashboardSizing()` is now owned by `TopBar` and passed to `DashboardSizing` (it used to be called inside it), so the slots and the Layout dialog share one sizing state.
 - `utils/paneLayoutShape.ts` holds `isPaneLayout` (re-exported from `hooks/usePaneLayoutPresets.ts`) so it can be used and tested without React.
 - The visualizer toolbar's icons-only switch is a container query keyed to its measured natural width (762px; 808px with Stock on); re-measure when adding a button.
