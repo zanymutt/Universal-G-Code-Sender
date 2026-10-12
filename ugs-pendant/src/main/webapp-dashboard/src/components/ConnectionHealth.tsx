@@ -39,15 +39,24 @@ const ConnectionHealth = () => {
         ? "stale"
         : "live";
 
+  // This is the link between the dashboard (the browser) and the UGS program
+  // - NOT the machine. Next to the Connect button a bare green dot reads as
+  // "machine connected", so it carries a "UGS" caption and a tooltip that says
+  // what it measures; the machine's own state is the pill at the far left.
   const label = !isConnected
-    ? "Not connected"
+    ? "Dashboard ↔ UGS link: not connected (this is the link to the UGS program, not the machine)"
     : health === "lost"
-      ? "Connection stalled - no updates received recently"
+      ? "Dashboard ↔ UGS link: stalled - no updates received recently"
       : health === "stale"
-        ? `No update in ${Math.round(elapsedMs / 1000)}s`
-        : "Connection healthy";
+        ? `Dashboard ↔ UGS link: no update in ${Math.round(elapsedMs / 1000)}s`
+        : "Dashboard ↔ UGS link: healthy (the machine's own state is the pill on the left)";
 
-  return <div className={`connectionHealth ${health}`} title={label} />;
+  return (
+    <div className={`connectionHealth ${health}`} title={label} role="status" aria-label={label}>
+      <span className="connectionHealthDot" />
+      <span className="connectionHealthLabel">UGS</span>
+    </div>
+  );
 };
 
 export default ConnectionHealth;

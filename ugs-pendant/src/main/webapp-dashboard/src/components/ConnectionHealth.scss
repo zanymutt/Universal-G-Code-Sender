@@ -1,18 +1,45 @@
+// A small captioned chip - "UGS" plus a status dot - for the link between the
+// dashboard and the UGS program (see ConnectionHealth.tsx). The caption is what
+// stops it being read as the machine connection.
 .connectionHealth {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
+  display: inline-flex;
   flex-shrink: 0;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 999px;
+  background: var(--dashboard-surface);
+  color: var(--dashboard-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  cursor: default;
+  user-select: none;
 
-  &.live {
+  .connectionHealthDot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  &.live .connectionHealthDot {
     background-color: var(--dashboard-accent);
   }
 
-  &.stale {
+  &.stale .connectionHealthDot {
     background-color: #ff970b;
   }
 
-  &.lost {
+  &.lost .connectionHealthDot {
     background-color: var(--dashboard-danger);
+  }
+
+  // Say so in words as well as colour when the link is in trouble.
+  &.stale,
+  &.lost {
+    color: var(--dashboard-text);
   }
 }
