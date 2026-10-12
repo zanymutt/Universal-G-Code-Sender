@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useStore } from "react-redux";
+import type { Store } from "redux";
 import { getContinuousJog, onContinuousJogRefused } from "../services/continuousJogSession";
 import { runMacro } from "../services/macros";
 import { pause, stop } from "../services/files";
@@ -74,7 +75,7 @@ export const runActionCommand = (command: ActionCommand, state: RootState, dispa
   }
 };
 
-// A jog key held at least this long (when "hold to jog" is on) keeps the
+// A jog input held at least this long (when "hold to jog" is on) keeps the
 // machine moving; released sooner it is one step jog.
 export const HOLD_TO_JOG_MS = 250;
 
@@ -86,6 +87,91 @@ const contextOf = (state: RootState) => ({
   hasFile: state.fileStatus.fileName !== "",
 });
 
+// The press/release engine behind every input source (keyboard, controller):
+// an input names itself with a unique `code` ("KeyA", "Pad.B3") and says which
+// action it is bound to. It owns the "tap = step, hold = continuous" rule and
+// the cleanup, so every source behaves the same.
+export type ActionRunner = {
+  press: (code: string, actionId: string) => void;
+  release: (code: string) => void;
+  // Let go of everything held (focus lost, page hidden, controller gone).
+  releaseAll: () => void;
+};
+
+const runners = new WeakMap<object, ActionRunner>();
+
+const createActionRunner = (store: Store<RootState>): ActionRunner => {
+  const dispatch = store.dispatch as AppDispatch;
+  const continuousJog = getContinuousJog();
+  const holds = new Map<string, Hold>();
+
+  const forgetHolds = () => {
+    holds.forEach((hold) => window.clearTimeout(hold.timer));
+    holds.clear();
+  };
+
+  // The backend declined (job started, alarm, disconnect): forget the holds.
+  onContinuousJogRefused(forgetHolds);
+
+  const beginHold = (code: string, command: Hold["command"]) => {
+    const existing = holds.get(code);
+    if (existing) window.clearTimeout(existing.timer);
+    const timer = window.setTimeout(() => {
+      const hold = holds.get(code);
+      if (!hold) return;
+      hold.started = true;
+      continuousJog.set(code, { x: command.x, y: command.y, z: command.z });
+    }, HOLD_TO_JOG_MS);
+    holds.set(code, { command, started: false, timer });
+  };
+
+  return {
+    press(code, actionId) {
+      const state = store.getState();
+      const command = commandFor(actionId);
+      if (!command) return;
+      if (!isCommandAvailable(command, contextOf(state))) return;
+      if (command.kind === "jog" && state.keyBindings.holdToJog) {
+        beginHold(code, command);
+        return;
+      }
+      runActionCommand(command, state, dispatch);
+    },
+
+    // Handled regardless of settings or focus, so a jog can never be left
+    // running because an input came up somewhere unexpected.
+    release(code) {
+      const hold = holds.get(code);
+      if (!hold) return;
+      holds.delete(code);
+      window.clearTimeout(hold.timer);
+      if (hold.started) {
+        continuousJog.set(code, null);
+        return;
+      }
+      // Let go before the hold threshold: an ordinary step jog.
+      const state = store.getState();
+      if (isCommandAvailable(hold.command, contextOf(state))) {
+        runActionCommand(hold.command, state, dispatch);
+      }
+    },
+
+    releaseAll() {
+      forgetHolds();
+      continuousJog.stopAll();
+    },
+  };
+};
+
+export const getActionRunner = (store: Store<RootState>): ActionRunner => {
+  let runner = runners.get(store);
+  if (!runner) {
+    runner = createActionRunner(store);
+    runners.set(store, runner);
+  }
+  return runner;
+};
+
 // Turns key presses into dashboard actions using the bindings from Settings.
 // Reads the store at the moment of the key press rather than closing over
 // render-time values, so it never acts on stale state.
@@ -93,28 +179,7 @@ export const useKeyboardShortcuts = () => {
   const store = useStore<RootState>();
 
   useEffect(() => {
-    const dispatch = store.dispatch as AppDispatch;
-    const continuousJog = getContinuousJog();
-    // Jog keys currently down while "hold to jog" is on, by physical key.
-    const holds = new Map<string, Hold>();
-
-    const releaseAll = () => {
-      holds.forEach((hold) => window.clearTimeout(hold.timer));
-      holds.clear();
-      continuousJog.stopAll();
-    };
-
-    const beginHold = (code: string, command: Hold["command"]) => {
-      const existing = holds.get(code);
-      if (existing) window.clearTimeout(existing.timer);
-      const timer = window.setTimeout(() => {
-        const hold = holds.get(code);
-        if (!hold) return;
-        hold.started = true;
-        continuousJog.set(code, { x: command.x, y: command.y, z: command.z });
-      }, HOLD_TO_JOG_MS);
-      holds.set(code, { command, started: false, timer });
-    };
+    const runner = getActionRunner(store);
 
     const onKeyDown = (event: KeyboardEvent) => {
       const state = store.getState();
@@ -133,43 +198,19 @@ export const useKeyboardShortcuts = () => {
 
       // A bound key never also scrolls the page or moves a focused radio group.
       event.preventDefault();
-      // The OS's key repeat is ignored: holding is handled below as one hold,
-      // not as a stream of presses that would queue a jog per repeat.
+      // The OS's key repeat is ignored: holding is handled as one hold, not as
+      // a stream of presses that would queue a jog per repeat.
       if (event.repeat) return;
 
-      const command = commandFor(actionId);
-      if (!command) return;
-      if (!isCommandAvailable(command, contextOf(state))) return;
-
-      if (command.kind === "jog" && state.keyBindings.holdToJog) {
-        beginHold(event.code, command);
-        return;
-      }
-      runActionCommand(command, state, dispatch);
+      runner.press(event.code, actionId);
     };
 
-    // Releasing is handled regardless of the settings or focus, so a jog can
-    // never be left running because the key came up somewhere unexpected.
-    const onKeyUp = (event: KeyboardEvent) => {
-      const hold = holds.get(event.code);
-      if (!hold) return;
-      holds.delete(event.code);
-      window.clearTimeout(hold.timer);
-      if (hold.started) {
-        continuousJog.set(event.code, null);
-        return;
-      }
-      // Let go before the hold threshold: an ordinary step jog.
-      const state = store.getState();
-      if (isCommandAvailable(hold.command, contextOf(state))) {
-        runActionCommand(hold.command, state, dispatch);
-      }
-    };
-
+    const onKeyUp = (event: KeyboardEvent) => runner.release(event.code);
+    const releaseAll = () => runner.releaseAll();
     // Anything that takes the keyboard away from the page must stop a jog: a
     // key-up will never arrive.
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") releaseAll();
+      if (document.visibilityState === "hidden") runner.releaseAll();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -177,11 +218,6 @@ export const useKeyboardShortcuts = () => {
     window.addEventListener("blur", releaseAll);
     window.addEventListener("pagehide", releaseAll);
     document.addEventListener("visibilitychange", onVisibility);
-    // The backend declined (job started, alarm, disconnect): forget the holds.
-    const stopRefusedListener = onContinuousJogRefused(() => {
-      holds.forEach((hold) => window.clearTimeout(hold.timer));
-      holds.clear();
-    });
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
@@ -189,8 +225,7 @@ export const useKeyboardShortcuts = () => {
       window.removeEventListener("blur", releaseAll);
       window.removeEventListener("pagehide", releaseAll);
       document.removeEventListener("visibilitychange", onVisibility);
-      stopRefusedListener();
-      releaseAll();
+      runner.releaseAll();
     };
   }, [store]);
 };

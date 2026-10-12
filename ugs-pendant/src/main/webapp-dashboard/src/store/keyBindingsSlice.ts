@@ -4,7 +4,9 @@ import {
   defaultKeyBindingSettings,
   KEY_BINDINGS_STORAGE_KEY,
   KeyBindingSettings,
+  BindingKind,
   removeCombo,
+  resetBindingsForKind,
   sanitizeKeyBindingSettings,
 } from "../utils/keyBindings";
 
@@ -35,6 +37,14 @@ const keyBindingsSlice = createSlice({
       state.enabled = action.payload;
       persist(state);
     },
+    setGamepadEnabled: (state, action: PayloadAction<boolean>) => {
+      state.gamepadEnabled = action.payload;
+      persist(state);
+    },
+    setGamepadWhenUnfocused: (state, action: PayloadAction<boolean>) => {
+      state.gamepadWhenUnfocused = action.payload;
+      persist(state);
+    },
     setHoldToJog: (state, action: PayloadAction<boolean>) => {
       state.holdToJog = action.payload;
       persist(state);
@@ -47,9 +57,10 @@ const keyBindingsSlice = createSlice({
       state.bindings = removeCombo(state.bindings, action.payload.actionId, action.payload.combo);
       persist(state);
     },
-    // Back to the shipped keys. Whether shortcuts are enabled is left alone.
-    resetBindings: (state) => {
-      state.bindings = defaultKeyBindingSettings().bindings;
+    // Back to the shipped bindings of one kind. Whether input is enabled, and
+    // the other kind's bindings, are left alone.
+    resetBindings: (state, action: PayloadAction<{ kind: BindingKind }>) => {
+      state.bindings = resetBindingsForKind(state.bindings, action.payload.kind);
       persist(state);
     },
   },

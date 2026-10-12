@@ -1,4 +1,5 @@
 import { ACTIONS, isKnownActionId } from "./dashboardActions";
+import { describeInput, isPadInput } from "./gamepadInput";
 
 // Which keys trigger which dashboard actions. A "combo" is a string such as
 // "ArrowLeft" or "Shift+Numpad4": zero or more modifiers in a fixed order
@@ -12,6 +13,12 @@ export type KeyBindingSettings = {
   // Off until the person turns it on - nothing should jog the machine because
   // a key was pressed on a shared tablet.
   enabled: boolean;
+  // Controller (gamepad) input is switched on separately from the keyboard.
+  gamepadEnabled: boolean;
+  // Chrome keeps reading a controller while the page is visible even when it is
+  // not the focused window, so by default the dashboard only acts on it while
+  // it IS focused. On means it also answers from behind another window.
+  gamepadWhenUnfocused: boolean;
   // Holding a jog key keeps the machine moving until it is released (a tap is
   // still one step). Off by default so keys behave exactly as before.
   holdToJog: boolean;
@@ -29,6 +36,8 @@ export const defaultBindings = (): KeyBindings => {
 
 export const defaultKeyBindingSettings = (): KeyBindingSettings => ({
   enabled: false,
+  gamepadEnabled: false,
+  gamepadWhenUnfocused: false,
   holdToJog: false,
   bindings: defaultBindings(),
 });
@@ -36,7 +45,7 @@ export const defaultKeyBindingSettings = (): KeyBindingSettings => ({
 const MODIFIER_CODE = /^(Shift|Control|Alt|Meta|OS)(Left|Right)?$/;
 // Tab and Escape keep their job: moving focus, and cancelling "press a key".
 const RESERVED_CODES = new Set(["Tab", "Escape"]);
-const COMBO_PATTERN = /^((Ctrl|Alt|Shift|Meta)\+)*[A-Za-z0-9]+$/;
+const COMBO_PATTERN = /^(((Ctrl|Alt|Shift|Meta)\+)*[A-Za-z0-9]+|Pad\.(B\d+|A\d+[+-]|Hat[NESW]))$/;
 
 type KeyEventLike = {
   code: string;
@@ -99,6 +108,7 @@ const formatCode = (code: string): string => {
 };
 
 export const formatCombo = (combo: string): string => {
+  if (isPadInput(combo)) return describeInput(combo);
   const parts = combo.split("+");
   const code = parts.pop() ?? "";
   return [...parts, formatCode(code)].join("+");
@@ -115,8 +125,16 @@ const isValidCombo = (value: unknown): value is string =>
 export const sanitizeKeyBindingSettings = (raw: unknown): KeyBindingSettings => {
   const result = defaultKeyBindingSettings();
   if (!raw || typeof raw !== "object") return result;
-  const input = raw as { enabled?: unknown; holdToJog?: unknown; bindings?: unknown };
+  const input = raw as {
+    enabled?: unknown;
+    gamepadEnabled?: unknown;
+    gamepadWhenUnfocused?: unknown;
+    holdToJog?: unknown;
+    bindings?: unknown;
+  };
   result.enabled = input.enabled === true;
+  result.gamepadEnabled = input.gamepadEnabled === true;
+  result.gamepadWhenUnfocused = input.gamepadWhenUnfocused === true;
   result.holdToJog = input.holdToJog === true;
   if (!input.bindings || typeof input.bindings !== "object") return result;
 
@@ -170,6 +188,20 @@ export const assignCombo = (bindings: KeyBindings, actionId: string, combo: stri
   const mine = next[actionId] ?? [];
   next[actionId] = [...mine, combo];
   return { bindings: next, displaced: displaced === actionId ? null : displaced };
+};
+
+export type BindingKind = "keyboard" | "pad";
+
+// Puts one kind of binding (the keyboard's or the controller's) back to its
+// shipped state without touching the other kind. Controllers ship with none.
+export const resetBindingsForKind = (bindings: KeyBindings, kind: BindingKind): KeyBindings => {
+  const defaults = defaultBindings();
+  const next: KeyBindings = {};
+  for (const id of new Set([...Object.keys(bindings), ...Object.keys(defaults)])) {
+    const keep = (bindings[id] ?? []).filter((combo) => isPadInput(combo) !== (kind === "pad"));
+    next[id] = kind === "keyboard" ? [...keep, ...(defaults[id] ?? [])] : keep;
+  }
+  return next;
 };
 
 export const removeCombo = (bindings: KeyBindings, actionId: string, combo: string): KeyBindings => ({

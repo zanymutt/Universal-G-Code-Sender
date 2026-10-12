@@ -116,3 +116,24 @@
   .keyChip { min-height: 44px; }
   .keyChipRemove { width: 44px; height: 44px; }
 }
+
+.gamepadStatus {
+  margin: 16px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 8px;
+  background: var(--dashboard-surface-subtle);
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dashboard-accent);
+  }
+
+  p { margin: 0 0 6px; overflow-wrap: anywhere; }
+
+  .keyChip { margin-right: 6px; }
+}

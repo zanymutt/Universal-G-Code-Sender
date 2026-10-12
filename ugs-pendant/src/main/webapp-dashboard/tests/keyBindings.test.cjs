@@ -16,7 +16,8 @@ const load = (name, deps = {}) => {
 
 const presets = load("jogPresets");
 const actions = load("dashboardActions");
-const kb = load("keyBindings", { "./dashboardActions": actions });
+const pad = load("gamepadInput");
+const kb = load("keyBindings", { "./dashboardActions": actions, "./gamepadInput": pad });
 // vm objects have another realm's prototypes, so compare through JSON.
 const json = (v) => JSON.stringify(v);
 const ev = (code, mods = {}) => ({ code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });

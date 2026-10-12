@@ -15,6 +15,7 @@ import PluginManagerProvider from "../components/PluginManager";
 import DemoBanner from "../demo/DemoBanner";
 import { isDemo } from "../demo/isDemo";
 import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
+import { useGamepadShortcuts } from "../hooks/useGamepadShortcuts";
 import "./Dashboard.scss";
 import "./TabletDashboard.scss";
 import SettingsPage from "./SettingsPage";
@@ -27,6 +28,7 @@ const Dashboard = () => {
   const [consoleOpen, setConsoleOpen] = useState(false);
   const dispatch = useDispatch();
   useKeyboardShortcuts();
+  useGamepadShortcuts();
   const legacyLayout = new URLSearchParams(window.location.search).get("legacyLayout") === "1";
   const toggleConsole = () => {
     if (!legacyLayout) {

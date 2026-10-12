@@ -102,6 +102,8 @@ temp profile directory - the user's own Chrome may be open.
   Git warns "LF will be replaced by CRLF" - harmless.
 - **Shell quoting:** apostrophes inside `node -e '...'` and heredocs with backticks break; write a
   script file instead for anything non-trivial.
+- **Chrome reads gamepads while the window is unfocused** (visible is enough), and a Bluetooth Xbox pad has no `standard` mapping: D-pad on axis 9 with a ~1.2e9 neutral, triggers resting at -1. Judge axes by movement from rest, never from zero, and gate controller input on `document.hasFocus()`.
+- **Testing controller input in the preview pane**: there is no real pad, so replace `navigator.getGamepads` with a fake object and mutate its `axes`/`buttons`; the pane often reports `visibilityState: "hidden"` and `hasFocus() === false`, which are exactly the gates, so stub them with `Object.defineProperty(document, "visibilityState", ...)` and `document.hasFocus = () => ...` to exercise both sides. The poll is a timer for this reason (rAF doesn't run in a hidden pane).
 - **Another tool also edits this repo** (the THC plugin under `ugs-pendant/examples/thc` has had edits not
   made in these sessions). Check `git status` for unfamiliar changes and don't commit them by accident.
 

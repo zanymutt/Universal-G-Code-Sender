@@ -134,6 +134,14 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - `utils/jogPresets.ts` - the step-size/feed-rate preset ladders shared with `StepSize`/`FeedRate`, and `stepPreset`.
 - Keys never reach the dashboard while a plugin iframe has focus. With `holdToJog` on, a jog key held >= `HOLD_TO_JOG_MS` (250 ms) feeds the shared continuous-jog stream (below); released sooner it is a normal `GET /machine/jog` step.
 
+## Game controller input
+
+- `utils/gamepadInput.ts` - pure: `PadSnapshot` -> held inputs named `Pad.B<n>`, `Pad.A<n>+/-`, `Pad.HatN/E/S/W`. `GamepadInputState` judges an axis by its movement from its resting value (first reading per controller; `recalibrate()`), with press 0.5 / release 0.3 hysteresis, ignores non-finite/out-of-range axis values, and decodes a hat on axis 9 of a 10+ axis pad with no `standard` mapping (8 positions at `i*2/7-1`; neutral is a ~1.2e9 sentinel). `describeInput` is the label.
+- `services/gamepadPoller.ts` - one shared 16 ms timer over `navigator.getGamepads()` (a timer, not rAF); runs only while subscribed. `services/inputCapture.ts` pauses controller shortcuts during press-to-bind.
+- `hooks/useGamepadShortcuts.ts` (mounted in `Dashboard.tsx`) - gated by `keyBindings.gamepadEnabled`, dashboard page, no open modal, page visible, and (unless `gamepadWhenUnfocused`) `document.hasFocus()`. Inputs already down when the gate opens are ignored until released. Presses/releases go to the same `getActionRunner(store)` (in `hooks/useKeyboardShortcuts.ts`) as the keyboard, so tap/hold, availability and cleanup are identical.
+- Controller inputs live in the same `keyBindings.bindings` map as key combos (`Pad.` prefix); `BindingEditor.tsx` shows one kind per tab and `resetBindingsForKind` resets one without the other. No controller defaults ship.
+- Chrome 154 exposes `navigator.getGamepads` on a plain-HTTP LAN origin (verified with `tools/gamepad-test` on a Bluetooth Xbox pad, 045e:0b13) and keeps updating it while the window is unfocused but visible.
+
 ## Continuous jog
 
 - Backend: `pendantui/v1/ContinuousJogController.java` (one per server, bound in `AppV1Config`) drives `ugs-core`'s `ContinuousJogWorker` (short acknowledged segments at `JogService.getFeedRate()`). `update(x,y,z)` clamps, scales to unit length, refuses when not connected or `!JogService.canJog()` (IDLE/JOG + jogging capability), and doubles as a heartbeat. A watchdog (100 ms tick) stops and cancels the jog after `DEFAULT_TIMEOUT_MS` (500) without an update or when the controller stops being jog-able. `cancelJog()` is sent only while `getControllerState()==JOG` (for firmware without a real-time cancel it would cancel a job). Stopping when nothing of its own is jogging touches nothing. Tests: `ContinuousJogControllerTest`.
