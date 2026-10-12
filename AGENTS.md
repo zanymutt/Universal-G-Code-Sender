@@ -8,6 +8,10 @@ For dashboard/backend/plugin architecture, read:
 
 Use that document as an architectural map, not as a substitute for the current source. Verify implementation details against the repository before changing code.
 
+For how to build, preview, test and verify a dashboard UI change (and the pitfalls already hit), read:
+
+`docs/dashboard-ui-working-notes.md`
+
 ## Working rules
 
 - Inspect the relevant implementation before editing it.

@@ -49,6 +49,8 @@ Unrecognized fields are silently ignored rather than causing an error, so a mani
 
 ## How it runs
 
+If the Dashboard loses its connection to UGS (UGS restarted, or the network dropped) your plugin window stays open and is **not** reloaded: requests that need UGS reject until the connection is back, `status`/`line` events pause, and everything resumes by itself afterwards. Treat a rejected call as "try again shortly" rather than a fatal error.
+
 Plugins open once per Dashboard page by default. Clicking an already-open plugin brings its existing window to the front and focuses it without reloading its content. Closing it lets the next click open a fresh instance.
 
 Set `"allowMultipleInstances": true` in `plugin.json` only when your plugin supports independent windows. Reload Dashboard after changing the manifest. Each window has its own iframe, request routing, subscriptions, and local JavaScript state; closing one does not close its siblings. Settings remain shared by plugin ID (last save wins), and all windows use the same loaded job and machine connection. Keep batch runners and tools that modify the current job single-instance unless you implement appropriate coordination.

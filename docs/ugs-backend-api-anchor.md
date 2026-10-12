@@ -1,6 +1,6 @@
 # UGS Dashboard Backend/Frontend API Anchor
 
-Structural map of the bridge between `webapp-dashboard` (Vite/React) and the `ugs-pendant` Java backend, plus the plugin bridge. No prose, no code - paths and signatures only, for anchoring a fresh task.
+Structural map (as of 2026-10-12; see also `dashboard-ui-working-notes.md` for how to work here) of the bridge between `webapp-dashboard` (Vite/React) and the `ugs-pendant` Java backend, plus the plugin bridge. No prose, no code - paths and signatures only, for anchoring a fresh task.
 
 ## Backend bootstrap
 
@@ -97,6 +97,31 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - UI: a native `<select>` "Plugins" in each pane header (an optgroup in the narrow single select), Float/Close buttons on docked panes, and a Dock `<select>` in a floating window's title bar. Events: `ugs-pane-set-content` (dock request), `ugs-pane-plugin-closed` (a docked plugin closed -> pane reverts).
 - The current pane layout is not restored on page load (existing behaviour); saved presets are, via `ugs-pane-layout-apply`.
 - Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see `feedback_react_portal_container_swap_unmounts` / `CenterPanel.tsx` (`editorHostRef` + `appendChild`).
+
+## Frontend app shell and connection lifecycle
+
+- `src/App.tsx` — owns the connect/retry loop. Before the **first** connection it shows `pages/WaitingPage.tsx` ("Establishing connection", presentational only). After that `<Dashboard />` **stays mounted forever**; a lost connection renders `components/ReconnectOverlay.tsx` on top and sets `inert` on `.app`. Retries every `RECONNECT_INTERVAL_MS` (`utils/reconnect.ts`, 4s) whenever `!isConnected`.
+- `store/socketSlice.ts` — `isConnected`, `isEstablishingConnection`, `hasConnected` (true once a connection was ever made this page load), `lastMessageAt`.
+- `store/socketMiddleware.ts` — one live socket at a time: a new `connect` disconnects the previous socket, and `open`/`close`/`message` handlers ignore any socket that isn't `activeSocket`. On open it refetches settings, status and file status.
+- `components/ConnectionHealth.tsx` — the "● UGS" chip in the top bar: health of the **dashboard ↔ UGS link only** (age of the last WS message: live < 7s, stale < 15s, else lost). The machine's own state is the pill/`ConnectionWidget` beside it.
+- Why the dashboard stays mounted: the pane layout, plugin windows (iframes reload) and unsaved editor text all live in component state.
+
+## Gcode editor (`components/GcodeEditor.tsx`, `GcodeEditor.scss`)
+
+- CodeMirror 6 view created once per `fileName`; `editableCompartment` (editable + `readOnly`), `fontSizeCompartment` (`editorSizeTheme`: font size **and an integer pixel line height** - required for stable scrollbar dragging).
+- Line decorations (StateFields): `dimThroughField` (already-sent/skipped lines), `currentRunLineField`, `reviewMarksField`.
+- **Follow the run line**: `currentRunLine` = live job line, else the visualizer simulation's `ui.simLine`; `scrollLineIntoView` keeps it visible. Pauses on user wheel/touch/scrollbar/PageUp-Down input (`followRunLine` state + ref); the "Follow run" pill resumes; resets when the line returns to 0.
+- **Find / replace**: `search({top:true})` + `searchKeymap`; toolbar Find button → `openSearchPanel`. `searchCountPlugin` (ViewPlugin) injects a `current/total` counter into the panel DOM using `utils/searchMatchCount.ts` (cap 99,999). Panel CSS lives under `.gcodeEditorCodeMirror` in the SCSS.
+- **G-code review**: a docked panel under the code (not a modal). `POST /api/v1/review` with the editor text; marks flagged lines; per-finding **Ignore** persisted by severity+message (`utils/gcodeReviewIgnore.ts`, localStorage `ugs-dashboard-gcode-review-ignored`); panel height drag/keys/dbl-click reset persisted via `utils/gcodeReviewHeight.ts`.
+- Toolbar: `.gcodeEditorToolbar` is a container (`container-type: inline-size`); labels drop to icons at ≤ 920px, text-size buttons become a slider at ≤ 640px, filename ellipsises, row wraps as a last resort.
+- Unsaved text is published to `ui.editorIsDirty`; the job bar's Start warns on it. `services/editorSaveBridge.ts` lets other components trigger the editor's save.
+
+## Plugin windows: geometry and touch
+
+- `utils/pluginWindowGeometry.ts` — pure `resizeBox` / `moveBox` (min 220×160, max 96%/90% of the viewport, header always ≥ 80px on screen). Resize directions: `e`, `w`, `s`, `se`, `sw` (no top edge - that's the move header).
+- `PluginWindow.tsx` — handles are `.pluginWindowResize-*` strips in a frame band (`--plugin-frame-edge`/`-corner`/`-header-height`, larger under `any-pointer: coarse`) around the iframe; pointer deltas ÷ `layoutScale`; `.pluginWindowInteracting` disables the iframe's pointer events during a drag; `.pluginWindowActivateShield` raises a rear window on a body click.
+- Size is remembered per plugin (`utils/pluginWindowSize.ts`); a docked window's size is never saved as the floating size.
+- Header controls are native `<select>`/buttons (Dock menu, minimize, maximize, close).
 
 ## Stock view (material removal)
 

@@ -1,6 +1,6 @@
 # UGS Dashboard Backend/Frontend API Anchor
 
-Structural map of the bridge between `webapp-dashboard` (Vite/React) and the `ugs-pendant` Java backend, plus the plugin bridge. No prose, no code - paths and signatures only, for anchoring a fresh task.
+Structural map (as of 2026-10-12; see also `dashboard-ui-working-notes.md` for how to work here) of the bridge between `webapp-dashboard` (Vite/React) and the `ugs-pendant` Java backend, plus the plugin bridge. No prose, no code - paths and signatures only, for anchoring a fresh task.
 
 ## Backend bootstrap
 
@@ -19,6 +19,7 @@ All `@Path`-relative to `/api/v1`.
 - `MacrosResource.java` `@Path("/macros")` — `GET getMacroList()`→`List<Macro>`, `POST runMacro(Macro)`, `POST saveMacroList(List<Macro>)`→`List<Macro>`.
 - `ProbeResource.java` `@Path("/probe")` — `GET getSettings()`→`ProbeSettings`, `POST saveSettings(ProbeSettings)`, `POST run(ProbeRunRequest)`→`ProbeResult`.
 - `VisualizerResource.java` `@Path("/visualizer")` — `GET getToolpath()`→`List<ToolpathSegment>`.
+- `GcodeReviewResource.java` `@Path("/review")` — `GET` reviews the loaded file; `POST` reviews dashboard editor text→`GcodeReviewResult`.
 - `SettingsResource.java` `@Path("/settings")` — `GET getSettings()`→`Settings`, `POST setSettings(Settings)`.
 - `PluginsResource.java` `@Path("/plugins")` — `GET list()`→`List<PluginInfo>`; `GET {id}/files/{filename}`→`Response` (static file); `GET/POST {id}/settings` (JSON blob passthrough).
 - `TextResource.java` `@Path("/text")` — `GET getTexts()`→`Map<String,String>` (i18n strings).
@@ -37,7 +38,7 @@ All `@Path`-relative to `/api/v1`.
 - `FileStatus.java` `record(fileName, rowCount, completedRowCount, remainingRowCount, sendDuration, sendRemainingDuration, lastCompletedLineNumber, sendState)`.
 - `Macro.java` — id/name/description/gcode/color/icon/keypress etc. (class, not record).
 - `ProbeSettings.java`, `ProbeRunRequest.java`, `ProbeResult.java`, `ProbeOperation.java` (enum).
-- `ToolpathSegment.java` `record(start: ToolpathPoint, end: ToolpathPoint, rapid, arc, lineNumber)`; `ToolpathPoint.java` `record(x,y,z)`.
+- `ToolpathSegment.java` `record(start: ToolpathPoint, end: ToolpathPoint, rapid, arc, lineNumber, feedRate, inches, spindleSpeed)` (`spindleSpeed` = the modal S word; feeds laser engraving depth in the Stock view); `ToolpathPoint.java` `record(x,y,z)`.
 - `WorkspaceFileEntry.java`, `WorkspaceFileList.java` — file browser tree nodes.
 - `Settings.java` — app settings blob (units, etc.).
 - `PluginManifest.java` `record(name, description, version, entry, icon, allowMultipleInstances)` — maps to `plugin.json`, `@JsonIgnoreProperties(ignoreUnknown=true)`, `entryOrDefault()` defaults to `"index.html"`.
@@ -75,8 +76,10 @@ Thin REST wrappers, one file per backend resource, all `fetch("/api/v1/...")`.
 
 ## Plugin bridge (dashboard ⇄ sandboxed plugin iframe)
 
-- `ugs-pendant/src/main/webapp-dashboard/src/components/PluginWindow.tsx` — parent side; `callMethod(method, params)` switch (the whole plugin API surface): `getStatus`, `subscribe`/`unsubscribe`, `sendCommand`, `getGcode`/`setGcode`, `saveGcodeAs`, `downloadFile`, `listFiles`, `openFile`, `pickFile`, `getFileStatus`, `startSend`, `pauseSend`, `stopSend`, `readFile`/`writeFile`, `getSettings`/`saveSettings`, `getDeviceInfo`, `getMachineSettings`, `close`.
-- postMessage protocol: plugin→parent `{type:"fluid-request", id, method, params}`; parent→plugin `{type:"fluid-response", id, result|error}`; parent→plugin push `{type:"fluid-event", event, data}` (events: `"status"`, `"line"`).
+- `ugs-pendant/src/main/webapp-dashboard/src/components/PluginWindow.tsx` — parent side; `callMethod(method, params)` switch (the whole plugin API surface): `getStatus`, `getTheme`, `subscribe`/`unsubscribe`, `sendCommand`, `getGcode`/`setGcode`, `saveGcodeAs`, `downloadFile`, `listFiles`, `openFile`, `pickFile`, `getFileStatus`, `startSend`, `pauseSend`, `stopSend`, `readFile`/`writeFile`, `getSettings`/`saveSettings`, `getDeviceInfo`, `getMachineSettings`, `close`.
+- postMessage protocol: plugin→parent `{type:"fluid-request", id, method, params}`; parent→plugin `{type:"fluid-response", id, result|error}`; parent→plugin push `{type:"fluid-event", event, data}` (events: `"status"`, `"line"`, `"theme"`).
+- `getTheme`/the `"theme"` event hand a plugin `{mode:"dark"|"light", colors:{background,surface,surfaceRaised,border,borderStrong,text,textMuted,accent}}` — computed by `src/theme/palette.ts`'s `getPluginThemeSnapshot(theme, accent)` from the dashboard's own `theme`/`accent` redux state (`store/themeSlice.ts`, `store/accentSlice.ts`; accent presets in `src/theme/accentPresets.ts`), kept in sync with `theme.scss`'s `:root`/`:root[data-theme="light"]` tokens by hand rather than read live via `getComputedStyle` (the latter would race `App.tsx`'s own effect that writes `--dashboard-accent*` on the same theme/accent change). Sent once on `getTheme()`, and again via the `"theme"` event whenever a subscribed plugin's window is open and the person changes theme/accent - see the `rotate-gcode` example's `sdk.js`/`app.js` (`applyTheme`) for a plugin that consumes it. `border` vs `borderStrong` mirrors `theme.scss`'s own two-tier convention (soft dividers against `surface`, a stronger one for anything against the lighter `surfaceRaised`, e.g. buttons/inputs) - see `--dashboard-hud-*` below for the one family of tokens plugins _don't_ get a snapshot equivalent of.
+- `theme.scss` also declares a separate `--dashboard-hud-*` token family (`hud-bg`, `hud-border`, `hud-text`, `hud-text-subtle`, `hud-text-disabled`, `hud-info`, `hud-accent`), used only by the 3D visualizer's own overlays (`VisualizerReadout.scss`, `Visualizer3D.scss`'s order legend/empty state, `VisualizerZoomControl.scss`, `SimulationBar.scss`). These sit on the visualizer's WebGL canvas, which paints a fixed dark `scene.background` in both themes (`Visualizer3D.tsx`) rather than trying to maintain a second light-mode toolpath palette - so unlike everything else in `theme.scss`, these are declared once under `:root` and deliberately NOT repeated under `:root[data-theme="light"]`, and must never be swapped back to the plain `--dashboard-*` tokens (which DO flip and would go illegible against that permanently-dark backdrop). `--dashboard-hud-accent` is the one exception still driven by JS - `App.tsx`'s accent effect always writes the *dark* preset variant into it regardless of the active theme, so the readout's numbers still track the person's accent choice.
 - `ugs-pendant/src/main/webapp-dashboard/src/components/PluginManager.tsx` — owns plugin window list via `useReducer(pluginWindowsReducer, ...)`, renders one `<PluginWindow>` per open window.
 - `ugs-pendant/src/main/webapp-dashboard/src/store/pluginWindows.ts` — pure reducer, `PluginWindowsState={windows, frontKey, nextKey}`, actions: `open`(plugin), `activate`(key), `close`(key); enforces one-window-per-plugin unless `manifest.allowMultipleInstances`.
 - Plugin-side SDK (lives in each plugin's own folder, not in git): `sdk.js` builds `window.Fluid = {...}` wrapping every `callMethod` case above as a `postMessage`-based promise call, plus `Fluid.on(event, handler)` for `fluid-event` pushes. Reference copies: `~/.ugs/dashboard-plugins/{batch-runner,rotate-gcode}/sdk.js`.
@@ -94,3 +97,39 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - UI: a native `<select>` "Plugins" in each pane header (an optgroup in the narrow single select), Float/Close buttons on docked panes, and a Dock `<select>` in a floating window's title bar. Events: `ugs-pane-set-content` (dock request), `ugs-pane-plugin-closed` (a docked plugin closed -> pane reverts).
 - The current pane layout is not restored on page load (existing behaviour); saved presets are, via `ugs-pane-layout-apply`.
 - Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see `feedback_react_portal_container_swap_unmounts` / `CenterPanel.tsx` (`editorHostRef` + `appendChild`).
+
+## Frontend app shell and connection lifecycle
+
+- `src/App.tsx` — owns the connect/retry loop. Before the **first** connection it shows `pages/WaitingPage.tsx` ("Establishing connection", presentational only). After that `<Dashboard />` **stays mounted forever**; a lost connection renders `components/ReconnectOverlay.tsx` on top and sets `inert` on `.app`. Retries every `RECONNECT_INTERVAL_MS` (`utils/reconnect.ts`, 4s) whenever `!isConnected`.
+- `store/socketSlice.ts` — `isConnected`, `isEstablishingConnection`, `hasConnected` (true once a connection was ever made this page load), `lastMessageAt`.
+- `store/socketMiddleware.ts` — one live socket at a time: a new `connect` disconnects the previous socket, and `open`/`close`/`message` handlers ignore any socket that isn't `activeSocket`. On open it refetches settings, status and file status.
+- `components/ConnectionHealth.tsx` — the "● UGS" chip in the top bar: health of the **dashboard ↔ UGS link only** (age of the last WS message: live < 7s, stale < 15s, else lost). The machine's own state is the pill/`ConnectionWidget` beside it.
+- Why the dashboard stays mounted: the pane layout, plugin windows (iframes reload) and unsaved editor text all live in component state.
+
+## Gcode editor (`components/GcodeEditor.tsx`, `GcodeEditor.scss`)
+
+- CodeMirror 6 view created once per `fileName`; `editableCompartment` (editable + `readOnly`), `fontSizeCompartment` (`editorSizeTheme`: font size **and an integer pixel line height** - required for stable scrollbar dragging).
+- Line decorations (StateFields): `dimThroughField` (already-sent/skipped lines), `currentRunLineField`, `reviewMarksField`.
+- **Follow the run line**: `currentRunLine` = live job line, else the visualizer simulation's `ui.simLine`; `scrollLineIntoView` keeps it visible. Pauses on user wheel/touch/scrollbar/PageUp-Down input (`followRunLine` state + ref); the "Follow run" pill resumes; resets when the line returns to 0.
+- **Find / replace**: `search({top:true})` + `searchKeymap`; toolbar Find button → `openSearchPanel`. `searchCountPlugin` (ViewPlugin) injects a `current/total` counter into the panel DOM using `utils/searchMatchCount.ts` (cap 99,999). Panel CSS lives under `.gcodeEditorCodeMirror` in the SCSS.
+- **G-code review**: a docked panel under the code (not a modal). `POST /api/v1/review` with the editor text; marks flagged lines; per-finding **Ignore** persisted by severity+message (`utils/gcodeReviewIgnore.ts`, localStorage `ugs-dashboard-gcode-review-ignored`); panel height drag/keys/dbl-click reset persisted via `utils/gcodeReviewHeight.ts`.
+- Toolbar: `.gcodeEditorToolbar` is a container (`container-type: inline-size`); labels drop to icons at ≤ 920px, text-size buttons become a slider at ≤ 640px, filename ellipsises, row wraps as a last resort.
+- Unsaved text is published to `ui.editorIsDirty`; the job bar's Start warns on it. `services/editorSaveBridge.ts` lets other components trigger the editor's save.
+
+## Plugin windows: geometry and touch
+
+- `utils/pluginWindowGeometry.ts` — pure `resizeBox` / `moveBox` (min 220×160, max 96%/90% of the viewport, header always ≥ 80px on screen). Resize directions: `e`, `w`, `s`, `se`, `sw` (no top edge - that's the move header).
+- `PluginWindow.tsx` — handles are `.pluginWindowResize-*` strips in a frame band (`--plugin-frame-edge`/`-corner`/`-header-height`, larger under `any-pointer: coarse`) around the iframe; pointer deltas ÷ `layoutScale`; `.pluginWindowInteracting` disables the iframe's pointer events during a drag; `.pluginWindowActivateShield` raises a rear window on a body click.
+- Size is remembered per plugin (`utils/pluginWindowSize.ts`); a docked window's size is never saved as the floating size.
+- Header controls are native `<select>`/buttons (Dock menu, minimize, maximize, close).
+
+## Stock view (material removal)
+
+A "Stock" toggle in the 3D visualizer toolbar shows the block of material with the cut taken out of it, for a router (flat/ball/V cutter), laser (depth from S power) or plasma (through-cut, kerf width). Heightfield (2.5D) model: no undercuts or 4th/5th axis.
+
+- `utils/stockSimEngine.ts` — pure, DOM-free: `StockSettings`, `packToolpath`, `planStockGrid`, `StockSimulator` (stamps the cutter footprint per segment; seeks forward incrementally, backward via snapshots). Tested by `tests/stockSimEngine.test.cjs`.
+- `utils/stockSim.worker.ts` — runs the simulator off the UI thread; only ever works toward the newest `seek`. Messages: `load`/`seek` in; `ready`/`heights`/`progress`/`empty` out.
+- `utils/stockModel.ts` — `StockModel` owns the worker and the three.js objects: one static grid mesh displaced by a height `DataTexture` in a vertex shader (normals and burn shading in the fragment shader), so a new result is one texture upload. Through-cuts `discard` and show the background.
+- `components/StockSettings.tsx` (+ `utils/stockSettingsStore.ts`, localStorage `ugs.dashboard.stockSimulation`) — popover with per-process cutter/stock settings. All lengths are mm in settings and converted to the file's units in the engine.
+- `Visualizer3D.tsx` drives it: loads on toggle/settings/new toolpath; position follows the simulation playhead (`ToolpathSimulation.getCompletedSegments()`), the last completed line during a real job, else the finished part. Toolpath lines are hidden over the stock unless "Show toolpath over the stock" is on.
+- Cell size `0` = auto (`autoCellSize`: laser/plasma kerf / 2, router diameter / 10). The grid is capped at `StockSettings.maxCells` (default 2M, user-selectable 1M-8M in the popover); finer requested cell sizes are coarsened automatically and reported via `StockStatus.coarsened`.

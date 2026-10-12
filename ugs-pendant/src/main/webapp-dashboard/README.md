@@ -20,33 +20,28 @@ in memory and a reload starts over.
 - The demo code is compiled out of the normal build (`VITE_DEMO` is `"false"` in
   `vite.config.ts`).
 
-# React + TypeScript + Vite
+# Development
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React 18 + TypeScript + Vite app (Redux Toolkit, react-bootstrap, CodeMirror 6, three.js). It is built
+into the `ugs-pendant` jar by `frontend-maven-plugin` and served by UGS at `/dashboard`.
 
-Currently, two official plugins are available:
+| Command | What it does |
+|---|---|
+| `npm run dev` | Vite dev server; proxies `/api` and `/ws` to a UGS on `localhost:8080` |
+| `npm run build` | `tsc && vite build` (a type error here silently skips the bundle in a Maven build - always check the output) |
+| `npm run build:demo` | the static online demo build (see above) |
+| `npm run lint` | eslint |
+| `npx tsc --noEmit -p .` | typecheck only |
+| `node --test tests/*.test.cjs` | unit tests for the pure logic in `src/utils` and the reducers |
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Where things are, how the backend and plugin bridge fit together, and the gotchas learned so far:
 
-## Expanding the ESLint configuration
+- [`docs/ugs-backend-api-anchor.md`](../../../../docs/ugs-backend-api-anchor.md) - architectural map
+- [`docs/dashboard-ui-working-notes.md`](../../../../docs/dashboard-ui-working-notes.md) - build/verify routine,
+  isolated preview, testing real input, gotchas
+- [`ugs-pendant/PLUGIN_API.md`](../../../PLUGIN_API.md) - the plugin API
 
-If you are developing a production application, we recommend updating the configuration to enable type aware lint rules:
-
-- Configure the top-level `parserOptions` property like this:
-
-```js
-export default {
-  // other rules...
-  parserOptions: {
-    ecmaVersion: 'latest',
-    sourceType: 'module',
-    project: ['./tsconfig.json', './tsconfig.node.json'],
-    tsconfigRootDir: __dirname,
-  },
-}
-```
-
-- Replace `plugin:@typescript-eslint/recommended` to `plugin:@typescript-eslint/recommended-type-checked` or `plugin:@typescript-eslint/strict-type-checked`
-- Optionally add `plugin:@typescript-eslint/stylistic-type-checked`
-- Install [eslint-plugin-react](https://github.com/jsx-eslint/eslint-plugin-react) and add `plugin:react/recommended` & `plugin:react/jsx-runtime` to the `extends` list
+`src/` at a glance: `pages/` (Dashboard, Tablet/Portrait variants, Settings, Waiting) · `components/`
+(one file per UI piece; the center panes are `CenterPaneLayoutDemo.tsx`) · `store/` (Redux slices, socket
+middleware, plugin window reducer) · `services/` (thin REST wrappers) · `hooks/` · `utils/` (pure,
+tested logic) · `theme/` (palette + accent presets) · `demo/` (in-browser simulated backend).
