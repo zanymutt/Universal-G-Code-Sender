@@ -138,3 +138,85 @@
 
   .keyChip { margin-right: 6px; }
 }
+
+.padTuning {
+  margin: 16px 0 4px;
+
+  h3 {
+    margin: 0 0 8px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dashboard-accent);
+  }
+}
+
+.padTuningRow {
+  max-width: 560px;
+  margin-bottom: 8px;
+
+  label { display: block; margin-bottom: 2px; }
+  .form-range { accent-color: var(--dashboard-accent); }
+}
+
+.padAxes {
+  margin: 8px 0;
+}
+
+.padAxis {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0;
+}
+
+.padAxisLabel { flex: 0 0 56px; }
+.padAxisValue { flex: 0 0 44px; text-align: right; font-variant-numeric: tabular-nums; }
+
+// Travel from rest, centre = at rest. The shaded middle is the dead band; the
+// two lines are the activation point either way.
+.padAxisBar {
+  position: relative;
+  flex: 1 1 auto;
+  max-width: 420px;
+  height: 12px;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  background: var(--dashboard-bg);
+
+  i { position: absolute; top: 0; bottom: 0; }
+  .padAxisDead { background: var(--dashboard-accent-soft); }
+  .padAxisMark { width: 2px; margin-left: -1px; background: var(--dashboard-text-muted); }
+  .padAxisDot {
+    width: 8px;
+    margin-left: -4px;
+    border-radius: 4px;
+    background: var(--dashboard-accent);
+  }
+}
+
+.inputBackup {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--dashboard-border);
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dashboard-accent);
+  }
+}
+
+.inputBackupButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.inputBackupChoice { margin-top: 12px; }
+.inputBackupError { color: #f87171; }

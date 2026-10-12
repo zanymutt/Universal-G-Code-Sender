@@ -1,4 +1,4 @@
-import { GamepadInputState, PadSnapshot } from "../utils/gamepadInput";
+import { GamepadInputState, PadSnapshot, PadTuning } from "../utils/gamepadInput";
 
 // One shared read loop over navigator.getGamepads() for everything that needs
 // controller input (the dashboard's shortcuts, the settings page's live view and
@@ -9,6 +9,8 @@ export type GamepadFrame = {
   pads: PadSnapshot[];
   // Inputs held down right now ("Pad.B3", "Pad.A1-", "Pad.HatN").
   active: Set<string>;
+  // How far each axis of each controller (same order as `pads`) is from rest.
+  deltas: number[][];
 };
 
 type Listener = (frame: GamepadFrame) => void;
@@ -41,7 +43,7 @@ const readPads = (): PadSnapshot[] => {
 
 const poll = () => {
   const pads = readPads();
-  const frame: GamepadFrame = { pads, active: state.update(pads) };
+  const frame: GamepadFrame = { pads, active: state.update(pads), deltas: state.axisDeltas() };
   listeners.forEach((listener) => listener(frame));
 };
 
@@ -56,6 +58,10 @@ export const subscribeGamepads = (listener: Listener): (() => void) => {
     }
   };
 };
+
+// How far a stick has to be pushed to count as pressed, and how close to rest
+// it has to come back to release.
+export const setGamepadTuning = (tuning: PadTuning) => state.setTuning(tuning);
 
 // Take the sticks' and triggers' present positions as their rest positions.
 export const recalibrateGamepads = () => state.recalibrate();

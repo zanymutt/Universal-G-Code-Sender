@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useStore } from "react-redux";
 import { isInputCapturing } from "../services/inputCapture";
-import { subscribeGamepads } from "../services/gamepadPoller";
+import { setGamepadTuning, subscribeGamepads } from "../services/gamepadPoller";
 import type { RootState } from "../store/store";
 import { actionForCombo } from "../utils/keyBindings";
 import { getActionRunner } from "./useKeyboardShortcuts";
@@ -19,6 +19,13 @@ const MODAL_SELECTOR = ".modal.show, [role='dialog'][aria-modal='true']";
 export const useGamepadShortcuts = () => {
   const store = useStore<RootState>();
   const enabled = useAppSelector((state) => state.keyBindings.gamepadEnabled);
+  const { activation, deadband } = useAppSelector((state) => state.keyBindings.padTuning);
+
+  // Always in sync, even while input is off, so the settings page's live view
+  // reflects the sliders.
+  useEffect(() => {
+    setGamepadTuning({ activation, deadband });
+  }, [activation, deadband]);
 
   useEffect(() => {
     if (!enabled) return;

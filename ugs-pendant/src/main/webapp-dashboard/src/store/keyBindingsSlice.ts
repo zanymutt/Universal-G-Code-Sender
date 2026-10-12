@@ -1,4 +1,5 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
+import { PadTuning, sanitizePadTuning } from "../utils/gamepadInput";
 import {
   assignCombo,
   defaultKeyBindingSettings,
@@ -43,6 +44,20 @@ const keyBindingsSlice = createSlice({
     },
     setGamepadWhenUnfocused: (state, action: PayloadAction<boolean>) => {
       state.gamepadWhenUnfocused = action.payload;
+      persist(state);
+    },
+    setPadTuning: (state, action: PayloadAction<Partial<PadTuning>>) => {
+      state.padTuning = sanitizePadTuning({ ...state.padTuning, ...action.payload });
+      persist(state);
+    },
+    // Replaces the bindings (and optionally the stick tuning) wholesale, after
+    // the caller has validated and merged them. Never touches the enabled flags.
+    importInputSettings: (
+      state,
+      action: PayloadAction<{ bindings: KeyBindingSettings["bindings"]; padTuning?: PadTuning }>
+    ) => {
+      state.bindings = action.payload.bindings;
+      if (action.payload.padTuning) state.padTuning = sanitizePadTuning(action.payload.padTuning);
       persist(state);
     },
     setHoldToJog: (state, action: PayloadAction<boolean>) => {

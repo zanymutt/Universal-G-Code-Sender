@@ -171,3 +171,33 @@ test("resetting one kind leaves the other alone", () => {
   assert.ok(padsReset["jog.xPlus"].includes("ArrowRight"));
   assert.equal(padsReset["jog.xMinus"].includes("ArrowLeft"), false, "a removed key stays removed");
 });
+
+test("activation point and dead band are the person's to tune", () => {
+  const state = new pad.GamepadInputState();
+  state.update([xbox()]);
+
+  // more sensitive: 25% is enough
+  state.setTuning({ activation: 0.25, deadband: 0.1 });
+  assert.equal(json(sorted(state.update([withAxis(0, 0.3)]))), json(["Pad.A0+"]));
+  // held until it is back within the 10% dead band
+  assert.equal(json(sorted(state.update([withAxis(0, 0.15)]))), json(["Pad.A0+"]));
+  assert.equal(state.update([withAxis(0, 0.05)]).size, 0);
+
+  // less sensitive: 80% needed
+  state.setTuning({ activation: 0.8, deadband: 0.5 });
+  assert.equal(state.update([withAxis(0, 0.7)]).size, 0);
+  assert.equal(json(sorted(state.update([withAxis(0, 0.85)]))), json(["Pad.A0+"]));
+  assert.equal(json(sorted(state.update([withAxis(0, 0.6)]))), json(["Pad.A0+"]));
+  assert.equal(state.update([withAxis(0, 0.4)]).size, 0);
+});
+
+test("axis travel is reported from rest, with the hat and bad readings as 0", () => {
+  const state = new pad.GamepadInputState();
+  state.update([xbox()]);
+  state.update([withAxis(0, 0.4, withAxis(3, 0.2, withAxis(9, -0.429)))]);
+  const [d] = state.axisDeltas();
+  assert.ok(Math.abs(d[0] - 0.4) < 1e-9);
+  assert.ok(Math.abs(d[3] - 1.2) < 1e-9, "a trigger resting at -1 reports travel from -1");
+  assert.equal(d[9], 0);
+  assert.equal(d.length, 10);
+});

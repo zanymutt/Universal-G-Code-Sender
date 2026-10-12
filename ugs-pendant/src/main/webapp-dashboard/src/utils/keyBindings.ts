@@ -1,5 +1,5 @@
 import { ACTIONS, isKnownActionId } from "./dashboardActions";
-import { describeInput, isPadInput } from "./gamepadInput";
+import { DEFAULT_PAD_TUNING, describeInput, isPadInput, PadTuning, sanitizePadTuning } from "./gamepadInput";
 
 // Which keys trigger which dashboard actions. A "combo" is a string such as
 // "ArrowLeft" or "Shift+Numpad4": zero or more modifiers in a fixed order
@@ -19,6 +19,9 @@ export type KeyBindingSettings = {
   // not the focused window, so by default the dashboard only acts on it while
   // it IS focused. On means it also answers from behind another window.
   gamepadWhenUnfocused: boolean;
+  // How far a stick or trigger must be pushed to count as pressed, and how close
+  // to rest it must return to count as released (fractions of full travel).
+  padTuning: PadTuning;
   // Holding a jog key keeps the machine moving until it is released (a tap is
   // still one step). Off by default so keys behave exactly as before.
   holdToJog: boolean;
@@ -38,6 +41,7 @@ export const defaultKeyBindingSettings = (): KeyBindingSettings => ({
   enabled: false,
   gamepadEnabled: false,
   gamepadWhenUnfocused: false,
+  padTuning: { ...DEFAULT_PAD_TUNING },
   holdToJog: false,
   bindings: defaultBindings(),
 });
@@ -129,12 +133,16 @@ export const sanitizeKeyBindingSettings = (raw: unknown): KeyBindingSettings => 
     enabled?: unknown;
     gamepadEnabled?: unknown;
     gamepadWhenUnfocused?: unknown;
+    padTuning?: unknown;
     holdToJog?: unknown;
     bindings?: unknown;
   };
   result.enabled = input.enabled === true;
   result.gamepadEnabled = input.gamepadEnabled === true;
   result.gamepadWhenUnfocused = input.gamepadWhenUnfocused === true;
+  result.padTuning = sanitizePadTuning(
+    input.padTuning && typeof input.padTuning === "object" ? (input.padTuning as Partial<PadTuning>) : null
+  );
   result.holdToJog = input.holdToJog === true;
   if (!input.bindings || typeof input.bindings !== "object") return result;
 
@@ -200,6 +208,24 @@ export const resetBindingsForKind = (bindings: KeyBindings, kind: BindingKind): 
   for (const id of new Set([...Object.keys(bindings), ...Object.keys(defaults)])) {
     const keep = (bindings[id] ?? []).filter((combo) => isPadInput(combo) !== (kind === "pad"));
     next[id] = kind === "keyboard" ? [...keep, ...(defaults[id] ?? [])] : keep;
+  }
+  return next;
+};
+
+// What an import does to the bindings: for each chosen kind, the incoming file's
+// inputs of that kind replace the current ones; the other kind is left alone.
+export const mergeImportedBindings = (
+  current: KeyBindings,
+  incoming: KeyBindings,
+  kinds: { keyboard: boolean; pad: boolean }
+): KeyBindings => {
+  const next: KeyBindings = {};
+  for (const id of new Set([...Object.keys(current), ...Object.keys(incoming)])) {
+    const mine = current[id] ?? [];
+    const theirs = incoming[id] ?? [];
+    const keepFromCurrent = mine.filter((combo) => (isPadInput(combo) ? !kinds.pad : !kinds.keyboard));
+    const takeFromFile = theirs.filter((combo) => (isPadInput(combo) ? kinds.pad : kinds.keyboard));
+    next[id] = [...keepFromCurrent, ...takeFromFile];
   }
   return next;
 };

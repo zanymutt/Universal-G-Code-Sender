@@ -5,6 +5,7 @@ import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { keyBindingsActions } from "../store/keyBindingsSlice";
 import BindingEditor from "./BindingEditor";
+import InputBackupControls from "./InputBackupControls";
 import "./KeyboardSettings.scss";
 
 const KeyboardSettings = () => {
@@ -49,6 +50,7 @@ const KeyboardSettings = () => {
       </p>
 
       <BindingEditor kind="keyboard" />
+      <InputBackupControls />
     </section>
   );
 };

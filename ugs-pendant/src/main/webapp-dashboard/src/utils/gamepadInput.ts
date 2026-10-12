@@ -24,10 +24,31 @@ export type PadSnapshot = {
 };
 
 export const PAD_PREFIX = "Pad.";
-// How far an axis must move from its resting value to count as pressed, and the
-// lower bound it must fall back under to count as released (so it can't chatter).
-export const AXIS_PRESS = 0.5;
-export const AXIS_RELEASE = 0.3;
+// How far an axis must move from its resting value to count as pressed (the
+// activation point), and how close to rest it must come back to count as
+// released again (the dead band, so it can't chatter around the activation
+// point). Both are fractions of full travel and are the person's to tune.
+export type PadTuning = { activation: number; deadband: number };
+
+export const DEFAULT_PAD_TUNING: PadTuning = { activation: 0.5, deadband: 0.3 };
+export const ACTIVATION_RANGE = { min: 0.2, max: 0.9 };
+export const DEADBAND_RANGE = { min: 0.05, max: 0.6 };
+// The release point always sits at least this far inside the activation point.
+const MIN_HYSTERESIS = 0.05;
+
+const clampTo = (value: unknown, range: { min: number; max: number }, fallback: number) =>
+  typeof value === "number" && Number.isFinite(value) ? Math.min(range.max, Math.max(range.min, value)) : fallback;
+
+export const sanitizePadTuning = (raw: Partial<PadTuning> | null | undefined): PadTuning => ({
+  activation: clampTo(raw?.activation, ACTIVATION_RANGE, DEFAULT_PAD_TUNING.activation),
+  deadband: clampTo(raw?.deadband, DEADBAND_RANGE, DEFAULT_PAD_TUNING.deadband),
+});
+
+// Where an axis counts as pressed and where it counts as released again.
+export const axisThresholds = (tuning: PadTuning) => {
+  const press = tuning.activation;
+  return { press, release: Math.max(0.02, Math.min(tuning.deadband, press - MIN_HYSTERESIS)) };
+};
 // Real axis readings are within -1..1; anything far outside is a sentinel.
 const AXIS_SANE_LIMIT = 1.5;
 const HAT_AXIS = 9;
@@ -74,6 +95,20 @@ export class GamepadInputState {
   // Resting axis values per controller, taken from the first reading seen.
   private baselines = new Map<string, number[]>();
   private active = new Set<string>();
+  private tuning: PadTuning = DEFAULT_PAD_TUNING;
+  // How far each axis of each controller is from its rest, by the same order
+  // as the `pads` last given to update() (for showing the person what they do).
+  private deltas: number[][] = [];
+
+  setTuning(tuning: PadTuning) {
+    this.tuning = sanitizePadTuning(tuning);
+  }
+
+  // Axis movement from rest for each controller in the last update(); a hat or
+  // an unusable reading is 0.
+  axisDeltas(): number[][] {
+    return this.deltas;
+  }
 
   // Forget where the axes rest; the next update takes the present position as
   // the new rest (hands off the sticks).
@@ -85,6 +120,8 @@ export class GamepadInputState {
   update(pads: PadSnapshot[]): Set<string> {
     const next = new Set<string>();
     const present = new Set<string>();
+    const { press, release } = axisThresholds(this.tuning);
+    const deltas: number[][] = [];
 
     for (const pad of pads) {
       const key = `${pad.index}:${pad.id}`;
@@ -100,7 +137,9 @@ export class GamepadInputState {
       });
 
       const hat = hatAxisIndex(pad);
+      const padDeltas: number[] = [];
       pad.axes.forEach((value, index) => {
+        padDeltas[index] = 0;
         if (index === hat) {
           const position = decodeHat(value);
           if (position !== null) HAT_CARDINALS[position].forEach((c) => next.add(`${PAD_PREFIX}Hat${c}`));
@@ -108,12 +147,15 @@ export class GamepadInputState {
         }
         if (!finiteAxis(value)) return;
         const delta = value - (baseline![index] ?? 0);
+        padDeltas[index] = delta;
         const plus = `${PAD_PREFIX}A${index}+`;
         const minus = `${PAD_PREFIX}A${index}-`;
-        if (delta >= AXIS_PRESS || (this.active.has(plus) && delta >= AXIS_RELEASE)) next.add(plus);
-        else if (-delta >= AXIS_PRESS || (this.active.has(minus) && -delta >= AXIS_RELEASE)) next.add(minus);
+        if (delta >= press || (this.active.has(plus) && delta >= release)) next.add(plus);
+        else if (-delta >= press || (this.active.has(minus) && -delta >= release)) next.add(minus);
       });
+      deltas.push(padDeltas);
     }
+    this.deltas = deltas;
 
     for (const key of [...this.baselines.keys()]) {
       if (!present.has(key)) this.baselines.delete(key);
