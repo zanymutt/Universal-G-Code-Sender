@@ -7,6 +7,7 @@ import { themeActions, DashboardTheme } from "../store/themeSlice";
 import { accentActions } from "../store/accentSlice";
 import { ACCENT_PRESET_ORDER, ACCENT_PRESETS } from "../theme/accentPresets";
 import { uiActions } from "../store/uiSlice";
+import KeyboardSettings from "../components/KeyboardSettings";
 import "./SettingsPage.scss";
 
 const THEME_OPTIONS: { value: DashboardTheme; label: string }[] = [
@@ -96,6 +97,8 @@ const SettingsPage = () => {
           <p className="settingsFieldHint">Applies to both themes - each color adjusts for light or dark.</p>
         </div>
       </section>
+
+      <KeyboardSettings />
 
       <section className="settingsCard settingsCardFuture" aria-labelledby="more-settings-heading">
         <h2 id="more-settings-heading">More settings</h2>

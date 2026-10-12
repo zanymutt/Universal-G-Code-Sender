@@ -123,6 +123,16 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - Size is remembered per plugin (`utils/pluginWindowSize.ts`); a docked window's size is never saved as the floating size.
 - Header controls are native `<select>`/buttons (Dock menu, minimize, maximize, close).
 
+## Keyboard shortcuts (input -> action layer)
+
+- `utils/dashboardActions.ts` - pure: the `ACTIONS` registry (id, label, group, `command`, `defaults`), `commandFor(id)` (also resolves `macro:<uuid>`), and `isCommandAvailable(command, {connected, state, hasFile})`, whose rules mirror the on-screen buttons (jog/macros IDLE|JOG; start IDLE|HOLD with a file; pause RUN|CHECK; stop RUN|HOLD|CHECK|JOG; zero/home/return IDLE; overrides not DISCONNECTED/CONNECTING/ALARM). An input source (keyboard now, gamepad later) only has to map its events to an action id.
+- `utils/keyBindings.ts` - pure: combos (`"Shift+Numpad4"` = modifiers + `KeyboardEvent.code`, so the keypad stays distinct from the digit row), `comboFromEvent`, `formatCombo`, `assignCombo` (a combo belongs to one action; the previous owner loses it), `sanitizeKeyBindingSettings`, `isTypingTarget`, `isActivationOnControl`. Tab/Escape are never bindable.
+- `store/keyBindingsSlice.ts` - `{enabled, bindings}` persisted in localStorage `ugs-dashboard-key-bindings` (per device on purpose). `enabled` defaults to **false**.
+- `hooks/useKeyboardShortcuts.ts` (mounted in `Dashboard.tsx`) - one window `keydown` listener that reads the store at press time. Ignores: disabled, not the dashboard page, typing targets (text inputs, textarea, select, `.cm-editor`, contenteditable), Enter/Space on a focused control, any open `.modal.show`, and `event.repeat` (bound keys still `preventDefault` so arrows don't scroll/move a focused radio group). Start dispatches `window` event `ugs-job-start`, which `JobBar` handles through its normal unsaved-text confirm. `runActionCommand` is exported so a gamepad source can reuse it.
+- `components/KeyboardSettings.tsx` (card in `pages/SettingsPage.tsx`) - enable switch, per-action chips, press-to-bind capture (window capture-phase listener that `stopImmediatePropagation`s so the bound key never also fires), reset to defaults, one row per macro.
+- `utils/jogPresets.ts` - the step-size/feed-rate preset ladders shared with `StepSize`/`FeedRate`, and `stepPreset`.
+- Keys never reach the dashboard while a plugin iframe has focus. Held-key continuous jog is not implemented: `GET /machine/jog` is a fixed step, and `ugs-core`'s `ContinuousJogWorker` is not used by the pendant backend yet.
+
 ## Stock view (material removal)
 
 A "Stock" toggle in the 3D visualizer toolbar shows the block of material with the cut taken out of it, for a router (flat/ball/V cutter), laser (depth from S power) or plasma (through-cut, kerf width). Heightfield (2.5D) model: no undercuts or 4th/5th axis.

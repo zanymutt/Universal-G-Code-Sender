@@ -14,6 +14,7 @@ import AlarmModal from "../components/AlarmModal";
 import PluginManagerProvider from "../components/PluginManager";
 import DemoBanner from "../demo/DemoBanner";
 import { isDemo } from "../demo/isDemo";
+import { useKeyboardShortcuts } from "../hooks/useKeyboardShortcuts";
 import "./Dashboard.scss";
 import "./TabletDashboard.scss";
 import SettingsPage from "./SettingsPage";
@@ -25,6 +26,7 @@ const Dashboard = () => {
   const [panel, setPanel] = useState("program");
   const [consoleOpen, setConsoleOpen] = useState(false);
   const dispatch = useDispatch();
+  useKeyboardShortcuts();
   const legacyLayout = new URLSearchParams(window.location.search).get("legacyLayout") === "1";
   const toggleConsole = () => {
     if (!legacyLayout) {

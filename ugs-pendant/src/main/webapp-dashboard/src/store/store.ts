@@ -9,6 +9,7 @@ import macrosReducer from "./macrosSlice";
 import uiReducer from "./uiSlice";
 import themeReducer from "./themeSlice";
 import accentReducer from "./accentSlice";
+import keyBindingsReducer from "./keyBindingsSlice";
 
 import { socketMiddleware } from "./socketMiddleware";
 
@@ -23,6 +24,7 @@ const rootReducer = combineReducers({
   ui: uiReducer,
   theme: themeReducer,
   accent: accentReducer,
+  keyBindings: keyBindingsReducer,
 });
 
 export const store = configureStore({

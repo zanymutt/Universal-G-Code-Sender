@@ -1,5 +1,6 @@
 import { ButtonGroup, ToggleButton } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
+import { STEP_SIZE_OPTIONS } from "../utils/jogPresets";
 import "./StepSize.scss";
 
 type Props = {
@@ -9,7 +10,7 @@ type Props = {
   onChange: (value: number) => void;
 };
 
-const options = [0.01, 0.1, 1, 10, 100, 1000];
+const options = STEP_SIZE_OPTIONS;
 
 const StepSize = ({ name, label, value, onChange }: Props) => {
   const units = useAppSelector((state) => state.settings.preferredUnits);

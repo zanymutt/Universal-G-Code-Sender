@@ -1,0 +1,109 @@
+.keyboardEnable {
+  font-weight: 600;
+
+  .form-check-input:checked {
+    background-color: var(--dashboard-accent);
+    border-color: var(--dashboard-accent);
+  }
+}
+
+.keyBindingsToolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 16px 0 4px;
+}
+
+.keyBindingsNotice {
+  color: var(--dashboard-text-muted);
+  font-size: 0.85rem;
+}
+
+.keyBindingGroup {
+  margin-top: 20px;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--dashboard-text-muted);
+  }
+}
+
+.keyBindingRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--dashboard-border);
+}
+
+.keyBindingLabel {
+  flex: 0 0 220px;
+  max-width: 100%;
+}
+
+.keyBindingCombos {
+  flex: 1 1 160px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.keyBindingNone {
+  color: var(--dashboard-text-muted);
+  font-size: 0.85rem;
+}
+
+.keyChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 2px 1px 8px;
+  border: 1px solid var(--dashboard-border-strong, var(--dashboard-border));
+  border-radius: 6px;
+  background: var(--dashboard-surface-subtle);
+
+  kbd {
+    padding: 0;
+    background: transparent;
+    color: var(--dashboard-text);
+    font-size: 0.85rem;
+  }
+}
+
+.keyChipRemove {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dashboard-text-muted);
+  cursor: pointer;
+
+  &:hover { color: var(--dashboard-text); }
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 1px;
+  }
+}
+
+.keyBindingAdd {
+  flex: 0 0 auto;
+}
+
+@media (any-pointer: coarse) {
+  .keyBindingRow { padding: 8px 0; }
+  .keyBindingAdd { min-height: 44px; }
+  .keyChip { min-height: 44px; }
+  .keyChipRemove { width: 44px; height: 44px; }
+}

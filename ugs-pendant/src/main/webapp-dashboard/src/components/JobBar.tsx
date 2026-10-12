@@ -15,6 +15,7 @@ import { closeFile, pause, runFromLine, send, stop } from "../services/files";
 import { saveEditorContent } from "../services/editorSaveBridge";
 import { refreshFileState } from "../store/refreshFileState";
 import { uiActions } from "../store/uiSlice";
+import { JOB_START_EVENT } from "../hooks/useKeyboardShortcuts";
 import OpenFileModal from "./OpenFileModal";
 import ConfirmDialog from "./ConfirmDialog";
 import "./JobBar.scss";
@@ -95,6 +96,14 @@ const JobBar = () => {
   useEffect(() => {
     dispatch(fetchFileStatus());
   }, [dispatch]);
+
+  // A "Start" keyboard shortcut. The shortcut layer already checked the state;
+  // this just makes it go through the same unsaved-text warning as the button.
+  useEffect(() => {
+    const onKeyboardStart = () => handleStartClick();
+    window.addEventListener(JOB_START_EVENT, onKeyboardStart);
+    return () => window.removeEventListener(JOB_START_EVENT, onKeyboardStart);
+  });
 
   useEffect(() => {
     const timer = setInterval(() => {
