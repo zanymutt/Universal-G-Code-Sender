@@ -89,6 +89,23 @@ export const describeInput = (input: string): string => {
   return input;
 };
 
+// Names for the standard mapping's buttons and axes (Xbox-style labels), shown
+// beside the numbers so a layout can be read at a glance. Only meaningful when
+// the controller reports mapping "standard".
+export const STANDARD_BUTTON_NAMES = [
+  "A", "B", "X", "Y", "LB", "RB", "LT", "RT", "View", "Menu", "L stick", "R stick",
+  "D-pad ↑", "D-pad ↓", "D-pad ←", "D-pad →", "Guide",
+];
+export const STANDARD_AXIS_NAMES = ["Left stick X", "Left stick Y", "Right stick X", "Right stick Y"];
+
+export const buttonName = (mapping: string, index: number): string | null =>
+  mapping === "standard" ? STANDARD_BUTTON_NAMES[index] ?? null : null;
+export const axisName = (mapping: string, index: number): string | null =>
+  mapping === "standard" ? STANDARD_AXIS_NAMES[index] ?? null : null;
+
+// "up", "up-right", ... for a decoded hat position (0 = up, clockwise).
+export const HAT_POSITION_NAMES = ["up", "up-right", "right", "down-right", "down", "down-left", "left", "up-left"];
+
 export const isValidPadInput = (value: string) => /^Pad\.(B\d+|A\d+[+-]|Hat[NESW])$/.test(value);
 
 export class GamepadInputState {
@@ -132,8 +149,15 @@ export class GamepadInputState {
         this.baselines.set(key, baseline);
       }
 
+      // A button can be analog (the triggers of a standard-mapped pad report
+      // partial pressure in `value`), so it is judged like an axis: pressed at
+      // the activation point, held until it falls back under the dead band. A
+      // plain digital button reports 0 or 1 and so is unaffected; one that
+      // reports only `pressed` counts as fully down.
       pad.buttons.forEach((button, index) => {
-        if (button.pressed || button.value > 0.5) next.add(`${PAD_PREFIX}B${index}`);
+        const value = button.value > 0 ? button.value : button.pressed ? 1 : 0;
+        const id = `${PAD_PREFIX}B${index}`;
+        if (value >= press || (this.active.has(id) && value >= release)) next.add(id);
       });
 
       const hat = hatAxisIndex(pad);

@@ -201,3 +201,56 @@ test("axis travel is reported from rest, with the hat and bad readings as 0", ()
   assert.equal(d[9], 0);
   assert.equal(d.length, 10);
 });
+
+// A standard-mapped pad after a reconnect: 17 buttons, 4 axes, triggers are
+// analog buttons 6 and 7.
+const standardPad = (values = {}) => ({
+  index: 0,
+  id: "HID-compliant game controller (STANDARD GAMEPAD Vendor: 045e Product: 0b13)",
+  mapping: "standard",
+  buttons: Array.from({ length: 17 }, (_, i) => {
+    const value = values[i] ?? 0;
+    return { pressed: value >= 0.5, value };
+  }),
+  axes: [0, 0, 0, 0],
+});
+
+test("an analog trigger button presses at the activation point and holds until the dead band", () => {
+  const state = new pad.GamepadInputState();
+  state.update([standardPad()]);
+  assert.equal(state.update([standardPad({ 7: 0.4 })]).size, 0, "partial pressure below 50% is not a press");
+  assert.equal(json(sorted(state.update([standardPad({ 7: 0.6 })]))), json(["Pad.B7"]));
+  // eased off, but still above the 30% dead band: held
+  assert.equal(json(sorted(state.update([standardPad({ 7: 0.4 })]))), json(["Pad.B7"]));
+  assert.equal(state.update([standardPad({ 7: 0.2 })]).size, 0);
+});
+
+test("the person's activation point applies to analog buttons too", () => {
+  const state = new pad.GamepadInputState();
+  state.update([standardPad()]);
+  state.setTuning({ activation: 0.2, deadband: 0.1 });
+  assert.equal(json(sorted(state.update([standardPad({ 6: 0.25 })]))), json(["Pad.B6"]));
+  state.update([standardPad()]); // let go
+  state.setTuning({ activation: 0.9, deadband: 0.5 });
+  assert.equal(state.update([standardPad({ 6: 0.7 })]).size, 0, "70% is not enough at a 90% activation point");
+  assert.equal(json(sorted(state.update([standardPad({ 6: 0.95 })]))), json(["Pad.B6"]));
+});
+
+test("a digital button is unaffected by tuning, and one that only reports pressed counts as down", () => {
+  const state = new pad.GamepadInputState();
+  state.update([standardPad()]);
+  state.setTuning({ activation: 0.9, deadband: 0.6 });
+  assert.equal(json(sorted(state.update([standardPad({ 0: 1 })]))), json(["Pad.B0"]));
+  const pressedOnly = standardPad();
+  pressedOnly.buttons[2] = { pressed: true, value: 0 };
+  assert.equal(json(sorted(state.update([pressedOnly]))), json(["Pad.B2"]));
+});
+
+test("standard layout names", () => {
+  assert.equal(pad.buttonName("standard", 7), "RT");
+  assert.equal(pad.buttonName("standard", 12), "D-pad ↑");
+  assert.equal(pad.buttonName("", 7), null);
+  assert.equal(pad.axisName("standard", 3), "Right stick Y");
+  assert.equal(pad.axisName("standard", 9), null);
+  assert.equal(pad.HAT_POSITION_NAMES[2], "right");
+});

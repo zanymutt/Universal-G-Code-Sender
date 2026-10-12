@@ -220,3 +220,72 @@
 
 .inputBackupChoice { margin-top: 12px; }
 .inputBackupError { color: #f87171; }
+
+.padMonitorToggle { margin: 10px 0 0; }
+
+.padMonitor {
+  margin-top: 8px;
+
+  h4 {
+    margin: 12px 0 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--dashboard-text-muted);
+  }
+
+  .padMonitorPad { overflow-wrap: anywhere; margin: 0 0 4px; }
+}
+
+.padMonitorAxis {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 3px 0;
+}
+
+.padMonitorAxisLabel { flex: 0 0 170px; }
+.padMonitorAxisValue { flex: 0 0 120px; text-align: right; font-variant-numeric: tabular-nums; }
+
+.padMonitorButtons {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 6px;
+}
+
+// One analog/digital button: the fill is how far it is pressed, the line is the
+// activation point, and the cell lights up while it counts as held.
+.padMonitorButton {
+  position: relative;
+  overflow: hidden;
+  padding: 3px 8px 5px;
+  border: 1px solid var(--dashboard-border);
+  border-radius: 6px;
+  background: var(--dashboard-bg);
+  font-size: 0.8rem;
+
+  .padMonitorFill {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 4px;
+    background: var(--dashboard-accent);
+    opacity: 0.8;
+  }
+  .padMonitorMark {
+    position: absolute;
+    bottom: 0;
+    height: 4px;
+    width: 2px;
+    margin-left: -1px;
+    background: var(--dashboard-text);
+  }
+  strong { display: block; font-weight: 600; }
+  span { color: var(--dashboard-text-muted); font-variant-numeric: tabular-nums; }
+
+  &.padMonitorHeld {
+    border-color: var(--dashboard-accent);
+    background: var(--dashboard-accent-soft);
+  }
+}

@@ -7,37 +7,27 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { hasGamepadApi, recalibrateGamepads, subscribeGamepads } from "../services/gamepadPoller";
 import { keyBindingsActions } from "../store/keyBindingsSlice";
 import { ACTIVATION_RANGE, axisThresholds, DEADBAND_RANGE, DEFAULT_PAD_TUNING, describeInput, PadSnapshot } from "../utils/gamepadInput";
+import AxisMonitor from "./AxisMonitor";
 import BindingEditor from "./BindingEditor";
 import InputBackupControls from "./InputBackupControls";
 import "./KeyboardSettings.scss";
 
-type MovingAxis = { pad: number; axis: number; delta: number };
-type Seen = { pads: PadSnapshot[]; active: string[]; moving: MovingAxis[] };
-
-// An axis shows in the live view once it has left rest by this much.
-const SHOW_AXIS_AT = 0.05;
+type Seen = { pads: PadSnapshot[]; active: string[] };
 
 // What the page can see right now, re-rendered only when it changes (the read
 // loop runs every animation frame).
 const useGamepadsSeen = (): Seen => {
-  const [seen, setSeen] = useState<Seen>({ pads: [], active: [], moving: [] });
+  const [seen, setSeen] = useState<Seen>({ pads: [], active: [] });
   useEffect(() => {
     let lastKey = "";
-    return subscribeGamepads(({ pads, active, deltas }) => {
+    return subscribeGamepads(({ pads, active }) => {
       const list = [...active].sort();
-      const moving: MovingAxis[] = [];
-      pads.forEach((pad, padIndex) => {
-        (deltas[padIndex] ?? []).forEach((delta, axis) => {
-          // In 5% steps, so a stick at rest with a little noise does not re-render.
-          if (Math.abs(delta) >= SHOW_AXIS_AT) moving.push({ pad: pad.index, axis, delta: Math.round(delta * 20) / 20 });
-        });
-      });
       const key =
         pads.map((pad) => `${pad.index}:${pad.id}:${pad.mapping}:${pad.buttons.length}:${pad.axes.length}`).join("|") +
-        "#" + list.join(",") + "#" + moving.map((m) => `${m.pad}.${m.axis}=${m.delta}`).join(",");
+        "#" + list.join(",");
       if (key === lastKey) return;
       lastKey = key;
-      setSeen({ pads, active: list, moving });
+      setSeen({ pads, active: list });
     });
   }, []);
   return seen;
@@ -46,7 +36,8 @@ const useGamepadsSeen = (): Seen => {
 const GamepadSettings = () => {
   const dispatch = useAppDispatch();
   const { gamepadEnabled, gamepadWhenUnfocused, holdToJog } = useAppSelector((state) => state.keyBindings);
-  const { pads, active, moving } = useGamepadsSeen();
+  const { pads, active } = useGamepadsSeen();
+  const [showMonitor, setShowMonitor] = useState(false);
   const api = hasGamepadApi();
   const { padTuning } = useAppSelector((state) => state.keyBindings);
   const { press, release } = axisThresholds(padTuning);
@@ -174,28 +165,22 @@ const GamepadSettings = () => {
             </span>
           ))}
         </p>
-        <div className="padAxes" aria-label="Axes away from rest">
-          {moving.length === 0 && <span className="keyBindingNone">Move a stick or trigger to see its travel against the settings above.</span>}
-          {moving.map((m) => {
-            const at = (value: number) => `${((Math.max(-1, Math.min(1, value)) + 1) / 2) * 100}%`;
-            return (
-              <div className="padAxis" key={`${m.pad}.${m.axis}`}>
-                <span className="padAxisLabel">Axis {m.axis}</span>
-                <span className="padAxisBar">
-                  <i className="padAxisDead" style={{ left: at(-release), width: `${release * 100}%` }} />
-                  <i className="padAxisMark" style={{ left: at(-press) }} />
-                  <i className="padAxisMark" style={{ left: at(press) }} />
-                  <i className="padAxisDot" style={{ left: at(m.delta) }} />
-                </span>
-                <span className="padAxisValue">{Math.round(m.delta * 100)}%</span>
-              </div>
-            );
-          })}
-        </div>
         <Button variant="secondary" size="sm" onClick={() => recalibrateGamepads()}>
           Recalibrate rest positions
         </Button>
         <span className="keyBindingNone"> Hands off the sticks and triggers, then press.</span>
+        <p className="padMonitorToggle">
+          <Button
+            variant="secondary"
+            size="sm"
+            aria-expanded={showMonitor}
+            aria-controls="pad-monitor"
+            onClick={() => setShowMonitor((open) => !open)}
+          >
+            {showMonitor ? "▾ Hide" : "▸ Show"} all axes and analog buttons
+          </Button>
+        </p>
+        {showMonitor && <AxisMonitor />}
       </div>
 
       <BindingEditor kind="pad" />
