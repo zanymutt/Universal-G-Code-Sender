@@ -1,7 +1,10 @@
 .settingsPage {
   // One content width for the header, tabs and panel, wide enough for two or
   // three columns of settings on a desktop or landscape tablet.
-  --settings-max-width: 1280px;
+  --settings-max-width: 1400px;
+  // A notch below the dashboard's base size: settings are dense tables, and at
+  // 1080p the larger size wrapped labels and key chips onto second lines.
+  font-size: 0.875rem;
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
@@ -99,7 +102,7 @@
   border-radius: 10px;
   box-shadow: var(--dashboard-shadow);
 
-  h2 { margin: 0; font-size: 1.05rem; }
+  h2 { margin: 0; font-size: 1rem; }
   p { color: var(--dashboard-text-muted); }
 }
 
@@ -137,7 +140,7 @@
 .settingsFieldHint {
   margin: 10px 0 0;
   color: var(--dashboard-text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .themeSwatchRow {

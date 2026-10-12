@@ -73,15 +73,15 @@ export const ACTIONS: ActionDef[] = [
   { id: "machine.unlock", label: "Unlock (kill alarm)", group: "Machine", command: { kind: "machine", op: "unlock" }, defaults: [] },
   { id: "machine.softReset", label: "Soft reset", group: "Machine", command: { kind: "machine", op: "softReset" }, defaults: [] },
 
-  { id: "override.feedPlus", label: "Feed override +10%", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_COARSE_PLUS" }, defaults: [] },
-  { id: "override.feedMinus", label: "Feed override -10%", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_COARSE_MINUS" }, defaults: [] },
-  { id: "override.feedReset", label: "Feed override reset", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_RESET" }, defaults: [] },
-  { id: "override.rapidLow", label: "Rapid override 25%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_LOW" }, defaults: [] },
-  { id: "override.rapidMedium", label: "Rapid override 50%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_MEDIUM" }, defaults: [] },
-  { id: "override.rapidReset", label: "Rapid override 100%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_RESET" }, defaults: [] },
-  { id: "override.spindlePlus", label: "Spindle override +10%", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_COARSE_PLUS" }, defaults: [] },
-  { id: "override.spindleMinus", label: "Spindle override -10%", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_COARSE_MINUS" }, defaults: [] },
-  { id: "override.spindleReset", label: "Spindle override reset", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_RESET" }, defaults: [] },
+  { id: "override.feedPlus", label: "Feed +10%", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_COARSE_PLUS" }, defaults: [] },
+  { id: "override.feedMinus", label: "Feed -10%", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_COARSE_MINUS" }, defaults: [] },
+  { id: "override.feedReset", label: "Feed reset", group: "Overrides", command: { kind: "override", command: "CMD_FEED_OVR_RESET" }, defaults: [] },
+  { id: "override.rapidLow", label: "Rapid 25%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_LOW" }, defaults: [] },
+  { id: "override.rapidMedium", label: "Rapid 50%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_MEDIUM" }, defaults: [] },
+  { id: "override.rapidReset", label: "Rapid 100%", group: "Overrides", command: { kind: "override", command: "CMD_RAPID_OVR_RESET" }, defaults: [] },
+  { id: "override.spindlePlus", label: "Spindle +10%", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_COARSE_PLUS" }, defaults: [] },
+  { id: "override.spindleMinus", label: "Spindle -10%", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_COARSE_MINUS" }, defaults: [] },
+  { id: "override.spindleReset", label: "Spindle reset", group: "Overrides", command: { kind: "override", command: "CMD_SPINDLE_OVR_RESET" }, defaults: [] },
 ];
 
 export const ACTION_GROUPS: ActionGroup[] = ["Jog", "Jog settings", "Job", "Machine", "Overrides"];
