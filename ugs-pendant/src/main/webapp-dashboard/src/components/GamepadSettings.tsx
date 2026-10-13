@@ -6,37 +6,36 @@ import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { hasGamepadApi, recalibrateGamepads, subscribeGamepads } from "../services/gamepadPoller";
 import { keyBindingsActions } from "../store/keyBindingsSlice";
-import { ACTIVATION_RANGE, axisThresholds, DEADBAND_RANGE, DEFAULT_PAD_TUNING, describeInput, PadSnapshot } from "../utils/gamepadInput";
+import { ACTIVATION_RANGE, axisThresholds, DEADBAND_RANGE, DEFAULT_PAD_TUNING, PadSnapshot } from "../utils/gamepadInput";
 import AxisMonitor from "./AxisMonitor";
 import BindingEditor from "./BindingEditor";
 import InputBackupControls from "./InputBackupControls";
 import "./KeyboardSettings.scss";
 
-type Seen = { pads: PadSnapshot[]; active: string[] };
-
-// What the page can see right now, re-rendered only when it changes (the read
-// loop runs every animation frame).
-const useGamepadsSeen = (): Seen => {
-  const [seen, setSeen] = useState<Seen>({ pads: [], active: [] });
+// The controllers the page can see, re-rendered only when one connects,
+// disconnects or changes shape. What is being pressed is deliberately not part
+// of this: a line that came and went with every button press made the whole
+// page jump. The axes and analog buttons panel shows that, in a fixed layout.
+const usePadsSeen = (): PadSnapshot[] => {
+  const [pads, setPads] = useState<PadSnapshot[]>([]);
   useEffect(() => {
     let lastKey = "";
-    return subscribeGamepads(({ pads, active }) => {
-      const list = [...active].sort();
-      const key =
-        pads.map((pad) => `${pad.index}:${pad.id}:${pad.mapping}:${pad.buttons.length}:${pad.axes.length}`).join("|") +
-        "#" + list.join(",");
+    return subscribeGamepads(({ pads: current }) => {
+      const key = current
+        .map((pad) => `${pad.index}:${pad.id}:${pad.mapping}:${pad.buttons.length}:${pad.axes.length}`)
+        .join("|");
       if (key === lastKey) return;
       lastKey = key;
-      setSeen({ pads, active: list });
+      setPads(current);
     });
   }, []);
-  return seen;
+  return pads;
 };
 
 const GamepadSettings = () => {
   const dispatch = useAppDispatch();
   const { gamepadEnabled, gamepadWhenUnfocused, holdToJog } = useAppSelector((state) => state.keyBindings);
-  const { pads, active } = useGamepadsSeen();
+  const pads = usePadsSeen();
   const [showMonitor, setShowMonitor] = useState(false);
   const api = hasGamepadApi();
   const { padTuning } = useAppSelector((state) => state.keyBindings);
@@ -156,15 +155,6 @@ const GamepadSettings = () => {
             </span>
           </p>
         ))}
-        <p>
-          <span className="keyBindingNone">Held now: </span>
-          {active.length === 0 && <span className="keyBindingNone">nothing</span>}
-          {active.map((input) => (
-            <span className="keyChip" key={input}>
-              <kbd>{describeInput(input)}</kbd>
-            </span>
-          ))}
-        </p>
         <Button variant="secondary" size="sm" onClick={() => recalibrateGamepads()}>
           Recalibrate rest positions
         </Button>

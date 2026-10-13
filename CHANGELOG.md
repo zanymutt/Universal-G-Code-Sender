@@ -4,6 +4,8 @@ Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. 
 
 ## 2026-10-13
 
+- **Game controller page no longer jumps while you press buttons.** The "Held now" line grew and shrank with every press, moving everything below it; it is removed (the *Show all axes and analog buttons* panel shows what is held, in a fixed layout).
+- **"Read-only while a job is running" is now an orange "Read-only" pill over the corner of the code**, like the Follow run pill (the two stack when both show), instead of a long label in the editor toolbar that could wrap the toolbar during a run.
 - **Removed the old centre-panel layout** (the hidden `?legacyLayout=1` switch). The pane layout has been the default since 2026-09-23; the single tabbed panel with an optional split and a bottom console it fell back to is gone, along with its state (`centerView`, `splitLeft`, `splitRight`, `bottomView`) and about 640 lines of component and styles. The parameter is now simply ignored.
 - **Tablet and tabbed layouts: the "Show console" shortcut is gone, and the panel buttons moved.** It put the console in a different place depending on the layout and took space from the workspace. On a tablet the Program and Machine / Macros buttons now sit above the position readout in the left column, so the workspace (or the machine rail) runs all the way up to the top bar instead of starting below a full-width button row. The tabbed layout keeps its one row of tabs (Position / Jog, Program, Machine / Macros). The console is still a pane: pick Console from any pane's header menu, or save it in a quick layout.
 

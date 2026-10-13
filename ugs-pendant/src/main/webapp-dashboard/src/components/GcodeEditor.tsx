@@ -25,6 +25,7 @@ import {
   faChevronDown,
   faChevronUp,
   faCrosshairs,
+  faLock,
   faFloppyDisk,
   faFileExport,
   faForward,
@@ -861,16 +862,32 @@ const GcodeEditor = () => {
       <div className="gcodeEditorContent">
         {isLoading && <div className="gcodeEditorLoading">Loading...</div>}
         <div className="gcodeEditorCodeMirror" ref={editorContainerRef} />
-        {!followRunLine && currentRunLine > 0 && (
-          <button
-            type="button"
-            className="gcodeEditorFollow"
-            onClick={resumeFollow}
-            title="Scroll back to the running line and keep following it"
-          >
-            <FontAwesomeIcon icon={faCrosshairs} /> Follow run
-          </button>
-        )}
+        {/* Pills over the corner of the code: read-only while a job streams,
+            and the way back to the running line after scrolling away. They
+            stack (read-only above) so they never cover each other, and they
+            use none of the toolbar's width. */}
+        <div className="gcodeEditorOverlays">
+          {!isEditable && (
+            <span
+              className="gcodeEditorReadOnly"
+              role="status"
+              aria-label="Read-only while a job is running"
+              title="Read-only while a job is running"
+            >
+              <FontAwesomeIcon icon={faLock} /> Read-only
+            </span>
+          )}
+          {!followRunLine && currentRunLine > 0 && (
+            <button
+              type="button"
+              className="gcodeEditorFollow"
+              onClick={resumeFollow}
+              title="Scroll back to the running line and keep following it"
+            >
+              <FontAwesomeIcon icon={faCrosshairs} /> Follow run
+            </button>
+          )}
+        </div>
       </div>
 
       {showReview && (
@@ -1000,7 +1017,6 @@ const GcodeEditor = () => {
 
       <div className="gcodeEditorToolbar">
         <span className="gcodeEditorFileName">{fileName}</span>
-        {!isEditable && <span className="gcodeEditorLocked">Read-only while a job is running</span>}
         {error && <span className="gcodeEditorError">{error}</span>}
         <Button
           className="gcodeEditorFind"
