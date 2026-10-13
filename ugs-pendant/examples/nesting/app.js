@@ -119,10 +119,36 @@
       remove.onclick = () => { entries = entries.filter(item => item.id !== entry.id); invalidate(); refreshFiles(); message(entries.length ? 'File removed. Nest & generate to update the output.' : 'Add a G-code file to begin.'); };
       head.append(name, remove); row.append(head);
       const meta = document.createElement('div'); meta.className = 'fileItemMeta'; meta.textContent = entryInfo(entry); row.append(meta);
-      const copies = document.createElement('label'); copies.className = 'fileItemCopies'; copies.textContent = 'Copies';
+      const copies = document.createElement('div'); copies.className = 'fileItemCopies';
+      const copyLabel = document.createElement('label'); copyLabel.textContent = 'Copies'; copyLabel.htmlFor = `copies-${entry.id}`;
       const input = document.createElement('input'); input.type = 'number'; input.min = '1'; input.max = '2000'; input.step = '1'; input.value = String(entry.copies); input.setAttribute('aria-label', `Copies of ${entry.name || 'file'}`);
-      input.oninput = () => { entry.copies = Math.max(1, Math.min(2000, Math.floor(Number(input.value) || 1))); input.value = String(entry.copies); meta.textContent = entryInfo(entry); updateFileSummary(); saveLastSoon(); };
-      copies.append(input); row.append(copies); list.append(row);
+      input.id = copyLabel.htmlFor; input.inputMode = 'numeric';
+      const controls = document.createElement('div'); controls.className = 'copyControls';
+      const minus = document.createElement('button'), plus = document.createElement('button');
+      for (const [button, text, label, delta] of [[minus, '−', 'Decrease', -1], [plus, '+', 'Increase', 1]]) {
+        button.type = 'button'; button.className = 'copyStep'; button.textContent = text;
+        button.setAttribute('aria-label', `${label} copies of ${entry.name || 'file'}`);
+        button.onclick = () => { commit(entry.copies + delta); };
+      }
+      const update = value => {
+        if (entry.copies !== value) { entry.copies = value; invalidate(); }
+        minus.disabled = value <= 1; plus.disabled = value >= 2000;
+        meta.textContent = entryInfo(entry); updateFileSummary(); saveLastSoon();
+      };
+      const commit = value => {
+        const number = Number(value);
+        update(Number.isFinite(number) ? Math.max(1, Math.min(2000, Math.floor(number))) : entry.copies);
+        input.value = String(entry.copies);
+      };
+      // Leave the user's draft alone while typing, including an empty field.
+      input.oninput = () => {
+        const value = input.valueAsNumber;
+        if (Number.isInteger(value) && value >= 1 && value <= 2000) update(value);
+      };
+      input.onblur = () => commit(input.value === '' ? entry.copies : input.value);
+      input.onkeydown = event => { if (event.key === 'Enter') { event.preventDefault(); input.blur(); } };
+      minus.disabled = entry.copies <= 1; plus.disabled = entry.copies >= 2000;
+      controls.append(minus, input, plus); copies.append(copyLabel, controls); row.append(copies); list.append(row);
     });
     updateFileSummary();
   }

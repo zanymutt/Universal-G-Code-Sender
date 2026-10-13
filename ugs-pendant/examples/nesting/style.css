@@ -53,8 +53,12 @@ output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere;
 .fileItemName { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }
 .fileItemRemove { min-width: 36px; min-height: 34px; padding: 4px 8px; }
 .fileItemMeta { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--plugin-text-muted); font-size: 12px; line-height: 1.45; margin: 5px 0 8px; }
-.fileItemCopies { display: flex; align-items: center; gap: 8px; margin: 0; }
-.fileItemCopies input { width: 90px; }
+.fileItemCopies { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+.fileItemCopies label { margin: 0; }
+.copyControls { display: flex; align-items: center; gap: 8px; }
+.fileItemCopies input { width: 80px; min-height: 48px; text-align: center; font-size: 18px; appearance: textfield; -moz-appearance: textfield; }
+.fileItemCopies input::-webkit-inner-spin-button, .fileItemCopies input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.copyControls .copyStep { width: 52px; min-width: 52px; min-height: 48px; padding: 4px; font-size: 28px; line-height: 1; touch-action: manipulation; }
 
 .settings, .work { min-height: 0; overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; }
 .settings { padding-right: 4px; }
