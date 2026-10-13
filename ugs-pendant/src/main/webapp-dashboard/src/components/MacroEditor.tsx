@@ -123,8 +123,8 @@ const MacroEditor = ({ compact = false, onDirtyChange }: Props) => {
   // not just macros.length, so it doesn't fight an in-progress unsaved-new
   // draft (selectedUuid is set for that, just not to an existing macro's
   // id) or re-select something out from under editing an existing one.
-  // MacroEditor stays mounted across split/non-split toggles (see
-  // CenterPanel.tsx) and deleting the selected macro clears selectedUuid
+  // MacroEditor stays mounted while its pane is shown and deleting the
+  // selected macro clears selectedUuid
   // back to null, so in practice this fires once on first page load and
   // again after deleting whatever was selected - both are exactly the
   // "nothing selected" moments this is meant to cover, not just the first.

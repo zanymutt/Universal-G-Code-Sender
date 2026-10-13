@@ -13,7 +13,7 @@ const ConsolePanel = () => {
   const dispatch = useAppDispatch();
   const currentState = useAppSelector((state) => state.status.state);
   const verboseEnabled = useAppSelector((state) => state.console.verboseEnabled);
-  // Owned here now (rather than passed down from CenterPanel) since both the
+  // Owned here now (rather than passed down from a parent) since both the
   // +/- control and the text itself live entirely inside this component -
   // there's only ever one ConsolePanel instance, so there's no risk of two
   // separate hook instances drifting apart on the shared localStorage key.

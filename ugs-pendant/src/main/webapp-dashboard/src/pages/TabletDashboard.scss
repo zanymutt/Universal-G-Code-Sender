@@ -41,7 +41,6 @@
       .form-control, .form-select { min-width: 0; max-width: 100%; }
     }
   }
-  .centerPanelConsole { max-height: 50%; }
 }
 @mixin tablet-landscape {
   @include tablet-shell;

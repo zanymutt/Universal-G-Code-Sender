@@ -3,7 +3,7 @@ import { Macro } from "../model/Macro";
 import { getMacroList } from "../services/macros";
 
 // Single source of truth for the macro list, shared between the right
-// rail's run buttons (MacrosPanel) and the editor (CenterPanel's Macros
+// rail's run buttons (MacrosPanel) and the editor (the Macros pane's
 // tab), so saving in one place is reflected in the other without either
 // needing to know about the other's existence.
 export const fetchMacros = createAsyncThunk("macros/fetch", getMacroList);

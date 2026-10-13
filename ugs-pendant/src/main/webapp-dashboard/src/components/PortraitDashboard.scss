@@ -19,7 +19,7 @@
   }
 }
 
-// Program (CenterPanel) and Machine (RightRail) already manage their own
+// Program (the pane layout) and Machine (RightRail) already manage their own
 // padding/scrolling exactly as they do in the landscape layout - only
 // Position needs it added here, the same treatment .dashboardLeft gives it
 // there.

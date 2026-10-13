@@ -5,7 +5,7 @@ import DroPanel from "./DroPanel";
 import FeedSpindleReadout from "./FeedSpindleReadout";
 import PinsStatus from "./PinsStatus";
 import JogPad from "./JogPad";
-import CenterPanel from "./CenterPanel";
+import CenterPaneLayout from "./CenterPaneLayoutDemo";
 import RightRail from "./RightRail";
 import "./PortraitDashboard.scss";
 
@@ -27,7 +27,7 @@ const TABS: { key: PortraitTab; label: string; icon: typeof faCrosshairs }[] = [
 // the wide one.
 //
 // All three pages stay mounted always (via [hidden], not by only rendering
-// the active one) - CenterPanel's own internal tabs already do the same for
+// the active one) - the pane layout's own internal tabs already do the same for
 // the same reason (see its comment): switching away from Program shouldn't
 // lose the editor's cursor position or the visualizer's camera angle any
 // more than switching tabs in landscape mode does today.
@@ -47,7 +47,7 @@ const PortraitDashboard = () => {
       </div>
 
       <div className="portraitDashboardPage" hidden={tab !== "program"}>
-        <CenterPanel />
+        <CenterPaneLayout />
       </div>
 
       <div className="portraitDashboardPage" hidden={tab !== "machine"}>

@@ -11,7 +11,7 @@ import "./MacrosPanel.scss";
 
 const MacrosPanel = () => {
   const dispatch = useAppDispatch();
-  // Shared with the editor (CenterPanel's Macros tab) via macrosSlice, so a
+  // Shared with the editor (the Macros pane) via macrosSlice, so a
   // save there is reflected here without a page reload.
   const macros = useAppSelector((state) => state.macros.macros);
   const loaded = useAppSelector((state) => state.macros.loaded);

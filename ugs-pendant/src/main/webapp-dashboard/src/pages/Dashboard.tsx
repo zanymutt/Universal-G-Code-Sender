@@ -5,7 +5,7 @@ import DroPanel from "../components/DroPanel";
 import FeedSpindleReadout from "../components/FeedSpindleReadout";
 import PinsStatus from "../components/PinsStatus";
 import JogPad from "../components/JogPad";
-import CenterPanel from "../components/CenterPanel";
+import CenterPaneLayout from "../components/CenterPaneLayoutDemo";
 import RightRail from "../components/RightRail";
 import JobBar from "../components/JobBar";
 import AlarmModal from "../components/AlarmModal";
@@ -36,7 +36,7 @@ const Dashboard = () => {
             flex layout below it, so it doesn't need any of its own sizing
             rules to pass sibling layout through untouched. Kept mounted
             (not conditionally rendered) so switching to Settings and back
-            doesn't unmount CenterPanel/RightRail - that would reset their
+            doesn't unmount the panes/RightRail - that would reset their
             own local state (the pane layout, its splits/sizes, which pane
             is maximized) back to defaults every time. */}
         <div className="dashboardMain" style={{ display: activePage === "settings" ? "none" : "contents" }}>
@@ -67,7 +67,7 @@ const Dashboard = () => {
             </div>
 
             <div className="dashboardCenter">
-              <CenterPanel />
+              <CenterPaneLayout />
             </div>
 
             <div className="dashboardRight">
