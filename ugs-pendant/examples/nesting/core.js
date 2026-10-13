@@ -1151,6 +1151,61 @@
     return { minGap, outside, ok: outside === 0 && minGap >= gap - 1e-6 };
   }
 
+  // Column profiles deliberately leave a little conservative space. For the
+  // selected-origin layout, refine each translation against the actual
+  // polygons so that conservative profile space is recovered without changing
+  // part angles or the origin-direction strategy.
+  function* polishOrigin(prep, placements, gap, frame, reverseX, reverseY, ctl, effort) {
+    const parts = placements.map(p => ({ ...p }));
+    // Keep the search bounded for SVG/G-code contours with thousands of points.
+    // The exact, unsimplified outlines are still used by the final verifier.
+    const simplify = poly => {
+      if (poly.length <= 200) return poly;
+      const stride = Math.ceil(poly.length / 200);
+      return poly.filter((_, i) => i % stride === 0);
+    };
+    const shape = p => prep.orients[p.k].polys.map(poly => simplify(poly).map(q => ({ x: q.x + p.cx, y: q.y + p.cy })));
+    const shapes = parts.map(shape), boxes = shapes.map(s => bboxOf(s.flat()));
+    const clearance = Math.max(gap + 2 * FLAT_TOL, 1e-6);
+    for (let round = 0; round < Math.min(2, effort); round++) {
+      let moved = false;
+      for (const axis of ['cx', 'cy']) {
+        const isX = axis === 'cx', positive = isX ? reverseX : reverseY;
+        const edge = isX ? (positive ? 'maxX' : 'minX') : (positive ? 'maxY' : 'minY');
+        const bound = isX ? frame.w : frame.h;
+        const order = parts.map((_, i) => i).sort((a, b) => boxes[a][edge] - boxes[b][edge]);
+        for (const i of order) {
+          const p = parts[i], origin = p[axis], direction = positive ? 1 : -1;
+          const extent = positive ? bound - boxes[i][edge] : boxes[i][edge];
+          const valid = amount => {
+            const trial = shape({ ...p, [axis]: origin + direction * amount }), box = bboxOf(trial.flat());
+            for (let j = 0; j < parts.length; j++) {
+              if (i === j) continue;
+              const b = boxes[j];
+              if (box.minX - b.maxX >= clearance || b.minX - box.maxX >= clearance || box.minY - b.maxY >= clearance || b.minY - box.maxY >= clearance) continue;
+              if (shapeDistance(trial, shapes[j], clearance) < clearance - 1e-9) return false;
+            }
+            return true;
+          };
+          let lo = 0, hi = Math.max(0, extent);
+          if (!valid(hi)) for (let step = 0; step < 10 && hi - lo > 0.002; step++) {
+            const mid = (lo + hi) / 2;
+            if (valid(mid)) lo = mid; else hi = mid;
+          } else lo = hi;
+          if (lo > 1e-5) {
+            p[axis] = origin + direction * lo; shapes[i] = shape(p); boxes[i] = bboxOf(shapes[i].flat()); moved = true;
+          }
+          if (ctl?.cancelled) throw Error('Nesting stopped.');
+          yield { placed: parts.length };
+        }
+      }
+      if (!moved) break;
+    }
+    const result = tighten(prep, parts);
+    const check = verify(prep, result.placements, gap, result.frame);
+    return check.ok && result.frame.w * result.frame.h <= frame.w * frame.h + 1e-6 ? result : null;
+  }
+
   function* nestGenInternal(src, opts, ctl) {
     const sources = Array.isArray(src) ? src : [src];
     if (!sources.length || sources.some(s => !s)) throw Error('Add at least one G-code file.');
@@ -1278,6 +1333,10 @@
       throw Error('Unknown layout mode.');
     }
 
+    if (effort >= 2 && placements.length > 1 && placements.length <= 80 && mode !== 'maxParts') {
+      const refined = yield* polishOrigin(prep, placements, gap, frame, base.reverseX, base.reverseY, ctl, effort);
+      if (refined) ({ placements, frame } = refined);
+    }
     if (counts && placements.length !== totalCount) throw Error(`Only ${placements.length} of the ${totalCount} requested copies fit. Increase the limits or reduce the file copy counts.`);
     const check = verify(prep, placements, gap, frame);
     const partArea = placements.reduce((sum, p) => sum + prep.oneAreas[prep.orients[p.k].sourceIndex], 0);
