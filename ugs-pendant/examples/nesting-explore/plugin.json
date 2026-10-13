@@ -1,0 +1,7 @@
+{
+  "name": "Nesting Explore",
+  "description": "Experimental nesting engine (B) run side by side with the current Nesting engine (A): parts in holes, edge-aligned angles, time-budgeted search.",
+  "version": "0.1.0",
+  "entry": "index.html",
+  "allowMultipleInstances": false
+}
