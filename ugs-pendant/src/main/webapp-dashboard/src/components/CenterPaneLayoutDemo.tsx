@@ -27,7 +27,7 @@ export type PaneContent = BuiltInPaneContent | `plugin:${string}`;
 // Lets something outside this component (RightRail's "Edit macros" pencil,
 // today) force a specific content type into view without needing to know
 // this component's own pane/id bookkeeping - it always lands on the first
-// pane, the same convention the console shortcut below already uses.
+// pane.
 export const SHOW_PANE_CONTENT_EVENT = "ugs-layout-demo-show-content";
 export type Orientation = "horizontal" | "vertical";
 export type Coordinate = 0 | 1 | 2;
@@ -177,7 +177,6 @@ const PaneHeader = ({ content, onChange, splitButtons, plugins, pluginControls }
 const CenterPaneLayoutDemo = () => {
   const [layout, setLayout] = useState<LayoutState>(() => initialLayout());
   const nextId = useRef(3);
-  const consoleRestore = useRef<{ id: number; content: PaneContent } | null>(null);
   // The built-in view each pane showed before a plugin replaced it, so Float
   // / Close can put it back instead of guessing.
   const lastBuiltIn = useRef<Record<number, BuiltInPaneContent>>({});
@@ -215,7 +214,6 @@ const CenterPaneLayoutDemo = () => {
       if (!nextLayout?.panes?.length) return;
       const restored = clone(nextLayout);
       nextId.current = Math.max(2, ...restored.panes.map(pane => pane.id)) + 1;
-      consoleRestore.current = null;
       setLayout(restored);
     };
     window.addEventListener(PANE_LAYOUT_APPLY_EVENT, onApply);
@@ -399,31 +397,6 @@ const CenterPaneLayoutDemo = () => {
     // Handlers only touch refs and functional setLayout updates, so the
     // listeners registered once stay correct.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const onConsoleShortcut = (event: Event) => {
-      const show = (event as CustomEvent<{ show?: boolean }>).detail?.show !== false;
-      setLayout(current => {
-        const next = clone(current);
-        const consolePane = next.panes.find(pane => pane.content === "console");
-        if (show) {
-          if (consolePane) return next;
-          const target = next.panes[0];
-          consoleRestore.current = { id: target.id, content: target.content };
-          target.content = "console";
-          return next;
-        }
-        if (!consolePane) return next;
-        const restore = consoleRestore.current;
-        const target = restore && next.panes.find(pane => pane.id === restore.id);
-        if (target && !next.panes.some(pane => pane.id !== target.id && pane.content === restore.content)) target.content = restore.content;
-        consoleRestore.current = null;
-        return next;
-      });
-    };
-    window.addEventListener("ugs-layout-demo-console", onConsoleShortcut);
-    return () => window.removeEventListener("ugs-layout-demo-console", onConsoleShortcut);
   }, []);
 
   useEffect(() => {

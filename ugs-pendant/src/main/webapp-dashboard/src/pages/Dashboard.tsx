@@ -1,7 +1,5 @@
 import { useAppSelector } from "../hooks/useAppSelector";
 import { useState } from "react";
-import { useDispatch } from "react-redux";
-import { uiActions } from "../store/uiSlice";
 import TopBar from "../components/TopBar";
 import DroPanel from "../components/DroPanel";
 import FeedSpindleReadout from "../components/FeedSpindleReadout";
@@ -25,31 +23,12 @@ const Dashboard = () => {
   const activePage = useAppSelector((state) => state.ui.activePage);
   // Keep the panels mounted across responsive layout changes.
   const [panel, setPanel] = useState("program");
-  const [consoleOpen, setConsoleOpen] = useState(false);
-  const dispatch = useDispatch();
   useKeyboardShortcuts();
   useGamepadShortcuts();
-  const legacyLayout = new URLSearchParams(window.location.search).get("legacyLayout") === "1";
-  const toggleConsole = () => {
-    if (!legacyLayout) {
-      const nextOpen = !consoleOpen;
-      setPanel("program");
-      setConsoleOpen(nextOpen);
-      window.dispatchEvent(new CustomEvent("ugs-layout-demo-console", { detail: { show: nextOpen } }));
-      return;
-    }
-    if (!consoleOpen || panel !== "program") {
-      setPanel("program");
-      dispatch(uiActions.setBottomView("console"));
-      setConsoleOpen(true);
-    } else {
-      setConsoleOpen(false);
-    }
-  };
 
   return (
     <PluginManagerProvider>
-      <div className="dashboard" data-panel={panel} data-console-open={consoleOpen}>
+      <div className="dashboard" data-panel={panel}>
         {isDemo && <DemoBanner />}
         <TopBar />
         {activePage === "settings" && <SettingsPage />}
@@ -65,13 +44,17 @@ const Dashboard = () => {
           {(["x", "y", "z"] as const).map(axis => <span key={axis}>{axis.toUpperCase()} <strong>{Number(status.workCoord?.[axis] ?? 0).toFixed(3)}</strong></span>)}
           <span>{status.workCoord?.units === "INCH" ? "in" : "mm"}</span>
         </div>
-        <nav className="tabletNavigation" aria-label="Dashboard panels">
-          <button className="tabletPositionTab" aria-pressed={panel === "position"} onClick={() => setPanel("position")}>Position / Jog</button>
-          <button aria-pressed={panel === "program"} onClick={() => setPanel("program")}>Program</button>
-          <button aria-pressed={panel === "machine"} onClick={() => setPanel("machine")}>Machine / Macros</button>
-          <button className="tabletConsoleToggle" aria-pressed={consoleOpen && panel === "program"} onClick={toggleConsole}>{consoleOpen && panel === "program" ? "Hide console" : "Show console"}</button>
-        </nav>
           <div className="dashboardBody">
+            {/* Panel switcher for the tablet and tabbed layouts (hidden on
+                desktop). Inside the body, as its first item, so on a tablet it
+                sits above the position readout in the left column and the
+                workspace beside it runs all the way up to the top bar; in the
+                tabbed layout it is still the first row. */}
+            <nav className="tabletNavigation" aria-label="Dashboard panels">
+              <button className="tabletPositionTab" aria-pressed={panel === "position"} onClick={() => setPanel("position")}>Position / Jog</button>
+              <button aria-pressed={panel === "program"} onClick={() => setPanel("program")}>Program</button>
+              <button aria-pressed={panel === "machine"} onClick={() => setPanel("machine")}>Machine / Macros</button>
+            </nav>
             <div className="dashboardLeft">
               <DroPanel />
               <FeedSpindleReadout />
