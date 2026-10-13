@@ -18,6 +18,13 @@ function program(poly, { head = HEAD, foot = FOOT, arcs = [] } = {}) {
 const tri = program([[0, 0], [40, 0], [20, 30]]);
 const square = (s) => program([[0, 0], [s, 0], [s, s], [0, s]]);
 const contourPolys = (text) => C.extract(text).contours.filter(c => c.top).map(c => c.pts);
+const rectangle = (x, y, w, h) => [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }];
+
+test('footprint area unions repeated, nested and overlapping XY profiles', () => {
+  near(C.unionArea([rectangle(0, 0, 10, 10), rectangle(0, 0, 10, 10)]), 100, 1e-5);
+  near(C.unionArea([rectangle(0, 0, 10, 10), rectangle(2, 2, 2, 2)]), 100, 1e-5);
+  near(C.unionArea([rectangle(0, 0, 10, 10), rectangle(5, 0, 10, 10)]), 150, 1e-5);
+});
 
 const sample = fs.readFileSync(__dirname + '/sample.gcode', 'utf8');
 

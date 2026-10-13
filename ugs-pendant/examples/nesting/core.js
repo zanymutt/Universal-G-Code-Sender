@@ -199,6 +199,88 @@
     return b;
   }
 
+  // The same XY path may be emitted once for each depth pass. A part's footprint
+  // is the union of those paths, so overlapping passes must contribute once.
+  // This scanline union handles concave contours and partially overlapping
+  // profiles without changing the original contours used for G-code output.
+  function contourKey(poly) {
+    const q = poly.map(p => `${Math.round(p.x * 1e6)},${Math.round(p.y * 1e6)}`);
+    if (q.length > 1 && q[0] === q[q.length - 1]) q.pop();
+    if (!q.length) return '';
+    const rotations = [];
+    for (const reverse of [false, true]) {
+      const a = reverse ? q.slice().reverse() : q;
+      let first = 0;
+      for (let i = 1; i < a.length; i++) if (a[i] < a[first]) first = i;
+      rotations.push(Array.from({ length: a.length }, (_, i) => a[(first + i) % a.length]).join(';'));
+    }
+    return rotations.sort()[0];
+  }
+
+  function uniqueContours(polys) {
+    const seen = new Set(), result = [];
+    for (const poly of polys) {
+      const key = contourKey(poly);
+      if (key && !seen.has(key)) { seen.add(key); result.push(poly); }
+    }
+    return result;
+  }
+
+  function unionArea(polys) {
+    const shapes = uniqueContours(polys);
+    if (!shapes.length) return 0;
+    if (shapes.length === 1) return polyArea(shapes[0]);
+    const breaks = [];
+    shapes.forEach(poly => poly.forEach(p => breaks.push(p.y)));
+    const cross = (a, b, c, d) => {
+      const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y;
+      const den = rx * sy - ry * sx;
+      if (Math.abs(den) < 1e-12) return;
+      const t = ((c.x - a.x) * sy - (c.y - a.y) * sx) / den;
+      const u = ((c.x - a.x) * ry - (c.y - a.y) * rx) / den;
+      if (t > 1e-9 && t < 1 - 1e-9 && u > 1e-9 && u < 1 - 1e-9) breaks.push(a.y + t * ry);
+    };
+    for (let i = 0; i < shapes.length; i++) for (let j = i + 1; j < shapes.length; j++) {
+      const a = shapes[i], b = shapes[j];
+      for (let m = 0; m < a.length; m++) {
+        const a1 = a[m], a2 = a[(m + 1) % a.length];
+        for (let n = 0; n < b.length; n++) {
+          const b1 = b[n], b2 = b[(n + 1) % b.length];
+          if (Math.max(a1.x, a2.x) < Math.min(b1.x, b2.x) - EPS || Math.max(b1.x, b2.x) < Math.min(a1.x, a2.x) - EPS ||
+              Math.max(a1.y, a2.y) < Math.min(b1.y, b2.y) - EPS || Math.max(b1.y, b2.y) < Math.min(a1.y, a2.y) - EPS) continue;
+          cross(a1, a2, b1, b2);
+        }
+      }
+    }
+    breaks.sort((a, b) => a - b);
+    const ys = [];
+    for (const y of breaks) if (!ys.length || Math.abs(y - ys[ys.length - 1]) > 1e-8) ys.push(y);
+    const widthAt = y => {
+      const spans = [];
+      for (const poly of shapes) {
+        const xs = [];
+        for (let i = 0; i < poly.length; i++) {
+          const a = poly[i], b = poly[(i + 1) % poly.length];
+          if ((a.y <= y && y < b.y) || (b.y <= y && y < a.y)) xs.push(a.x + (y - a.y) * (b.x - a.x) / (b.y - a.y));
+        }
+        xs.sort((a, b) => a - b);
+        for (let i = 0; i + 1 < xs.length; i += 2) spans.push([xs[i], xs[i + 1]]);
+      }
+      spans.sort((a, b) => a[0] - b[0]);
+      let total = 0, end = -Infinity;
+      for (const [lo, hi] of spans) { if (lo > end) total += hi - lo; else if (hi > end) total += hi - end; end = Math.max(end, hi); }
+      return total;
+    };
+    let area = 0;
+    for (let i = 0; i + 1 < ys.length; i++) {
+      const y0 = ys[i], y1 = ys[i + 1], dy = y1 - y0;
+      if (dy <= 1e-10) continue;
+      const e = Math.min(dy * 1e-7, 1e-8);
+      area += (widthAt(y0 + e) + widthAt(y1 - e)) * (dy - 2 * e) / 2;
+    }
+    return area;
+  }
+
   const orient2 = (a, b, c) => (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   function segIntersect(a, b, c, d) {
     const o1 = orient2(a, b, c), o2 = orient2(a, b, d), o3 = orient2(c, d, a), o4 = orient2(c, d, b);
@@ -429,7 +511,7 @@
       startState, contours, blocks, safeZ, outline, center, bbox: box,
       firstPoint: { x: events[firstMove].to.x, y: events[firstMove].to.y },
       lastPoint: { x: events[lastCut].to.x, y: events[lastCut].to.y },
-      area: outline.reduce((s, p) => s + polyArea(p), 0) * mmPerUnit * mmPerUnit,
+      area: unionArea(outline) * mmPerUnit * mmPerUnit,
       warnings,
     };
   }
@@ -707,7 +789,7 @@
     sources.forEach((source, sourceIndex) => {
       const s = source.mmPerUnit;
       const base = source.outline.map(poly => poly.map(p => ({ x: (p.x - source.center.x) * s, y: (p.y - source.center.y) * s })));
-      oneAreas[sourceIndex] = base.reduce((sum, p) => sum + polyArea(p), 0);
+      oneAreas[sourceIndex] = unionArea(base);
       angles.forEach(angle => {
         const rad = (angle * Math.PI) / 180, cos = Math.cos(rad), sin = Math.sin(rad);
         const polys = base.map(poly => poly.map(p => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos })));
@@ -1216,7 +1298,7 @@
 
   const api = {
     parseLine, advance, newState, extract, analyze, buildGcode, previewGeometry, resolvePlacements, orderParts, planSequence, emitBlock, anchorPoint,
-    prepare, footprint, nestGen, nest, runSync, verify, shapeDistance, polyArea, pointInPoly, transformLine, makeMap, FLAT_TOL,
+    prepare, footprint, nestGen, nest, runSync, verify, shapeDistance, polyArea, unionArea, pointInPoly, transformLine, makeMap, FLAT_TOL,
   };
   if (typeof module !== 'undefined') module.exports = api; else root.NestCore = api;
 })(typeof window === 'undefined' ? globalThis : window);
