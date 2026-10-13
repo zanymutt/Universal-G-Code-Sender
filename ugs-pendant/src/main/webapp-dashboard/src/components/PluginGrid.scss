@@ -1,0 +1,142 @@
+// Placed inline by PluginGrid.tsx (left/top/width/max-height), fixed inside
+// .app. Above the plugin windows (40/41) and their tray (42), like the
+// simulation settings popover.
+.pluginGridToggle {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  line-height: 1;
+}
+
+.pluginGrid {
+  position: fixed;
+  z-index: 60;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overscroll-behavior: contain;
+  color: var(--dashboard-text);
+
+  .pluginGridHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .pluginGridTitle { font-weight: 700; }
+
+  .pluginGridCount {
+    margin-left: 6px;
+    color: var(--dashboard-text-muted);
+    font-size: 0.8rem;
+    font-weight: 400;
+  }
+
+  .pluginGridModes { display: inline-flex; gap: 4px; }
+
+  .pluginGridCards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .pluginGridNone,
+  .pluginGridHint {
+    margin: 0;
+    color: var(--dashboard-text-muted);
+    font-size: 0.8rem;
+  }
+}
+
+.pluginGridCard {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 8px;
+  background: var(--dashboard-surface);
+
+  &.pluginGridCardPinned { border-color: var(--dashboard-accent-border); }
+}
+
+.pluginGridOpen {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover .pluginGridName { color: var(--dashboard-accent); }
+
+  // Already running: the same dot the rail uses, solid or hollow if minimized.
+  &[data-state]::after {
+    content: "";
+    flex-shrink: 0;
+    margin-left: auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--dashboard-accent);
+    background: var(--dashboard-accent);
+  }
+  &[data-state="minimized"]::after { background: transparent; }
+}
+
+.pluginGridText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.pluginGridName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.pluginGridDescription {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  color: var(--dashboard-text-muted);
+  font-size: 0.8rem;
+}
+
+.pluginGridPin {
+  flex: 0 0 auto;
+  width: 44px;
+  border: 0;
+  border-left: 1px solid var(--dashboard-border);
+  border-radius: 0 8px 8px 0;
+  background: none;
+  color: var(--dashboard-text-subtle);
+  cursor: pointer;
+
+  svg { transform: rotate(35deg); transition: transform 0.12s ease; }
+
+  &[aria-pressed="true"] {
+    color: var(--dashboard-accent);
+    svg { transform: rotate(0deg); }
+  }
+
+  &:hover { color: var(--dashboard-text); }
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: -2px;
+  }
+}

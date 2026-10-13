@@ -63,3 +63,47 @@
   font-size: 0.8rem;
   margin: 0;
 }
+
+// A plugin's own icon or, without one, its initials on a colour.
+.pluginBadge {
+  flex-shrink: 0;
+  border-radius: 6px;
+}
+
+.pluginBadgeImage { object-fit: contain; }
+
+.pluginBadgeInitials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+// Icon tiles: one small square per plugin instead of a named button, so a
+// dozen plugins take one or two rows rather than six. The running/minimized
+// dot moves to the corner since there is no label to follow.
+.pluginListPanel.pluginListIconsOnly {
+  grid-template-columns: repeat(auto-fill, 46px);
+  gap: 6px;
+
+  .pluginListButton {
+    position: relative;
+    width: 46px;
+    min-height: 46px;
+    padding: 0;
+    justify-content: center;
+
+    &[data-state]::after {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      margin: 0;
+      width: 9px;
+      height: 9px;
+      box-shadow: 0 0 0 1.5px var(--dashboard-bg);
+    }
+  }
+}

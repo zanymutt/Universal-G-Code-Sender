@@ -6,13 +6,18 @@ import Toolbox from "./Toolbox";
 import MacrosPanel from "./MacrosPanel";
 import SpindleCoolantControls from "./SpindleCoolantControls";
 import OverrideControls from "./OverrideControls";
-import PluginListPanel from "./PluginListPanel";
+import PluginsSection from "./PluginsSection";
+import RailHeading from "./RailHeading";
+import { useRailCollapsed } from "../hooks/useRailPrefs";
 import MacroEditorModal from "./MacroEditorModal";
 import "./RightRail.scss";
 
 const RightRail = () => {
   const [tab, setTab] = useState<"machine" | "overrides">("machine");
   const [macroEditorOpen, setMacroEditorOpen] = useState(false);
+  // Sections can be folded away (remembered per device) so a short screen can
+  // keep just the ones it uses in view.
+  const { isCollapsed, toggle } = useRailCollapsed();
 
   return (
     <div className="rightRail">
@@ -22,13 +27,15 @@ const RightRail = () => {
       </div>
       <div className="rightRailTabPanel" role="tabpanel" id="machine-controls-panel" aria-labelledby="machine-controls-tab" hidden={tab !== "machine"}>
       <div className="rightRailSection">
-        <h6 className="rightRailHeading">Toolbox</h6>
-        <Toolbox />
+        <RailHeading id="toolbox" title="Toolbox" collapsed={isCollapsed("toolbox")} onToggle={() => toggle("toolbox")} />
+        <div id="rail-section-toolbox" hidden={isCollapsed("toolbox")}>
+          <Toolbox />
+        </div>
       </div>
 
-      <div className="rightRailSection rightRailMacros">
+      <div className={`rightRailSection rightRailMacros${isCollapsed("macros") ? " rightRailCollapsed" : ""}`}>
         <div className="rightRailSectionHeader">
-          <h6 className="rightRailHeading">Macros</h6>
+          <RailHeading id="macros" title="Macros" collapsed={isCollapsed("macros")} onToggle={() => toggle("macros")} />
           <Button
             size="sm"
             variant="outline-secondary"
@@ -39,23 +46,26 @@ const RightRail = () => {
             <FontAwesomeIcon icon={faPen} />
           </Button>
         </div>
-        <MacrosPanel />
+        <div id="rail-section-macros" className="rightRailMacrosBody" hidden={isCollapsed("macros")}>
+          <MacrosPanel />
+        </div>
       </div>
 
-      <div className="rightRailSection">
-        <h6 className="rightRailHeading">Plugins</h6>
-        <PluginListPanel />
-      </div>
+      <PluginsSection collapsed={isCollapsed("plugins")} onToggleCollapsed={() => toggle("plugins")} />
 
       <div className="rightRailSection rightRailSpindle">
-        <h6 className="rightRailHeading">Spindle / Coolant</h6>
-        <SpindleCoolantControls />
+        <RailHeading id="spindle" title="Spindle / Coolant" collapsed={isCollapsed("spindle")} onToggle={() => toggle("spindle")} />
+        <div id="rail-section-spindle" hidden={isCollapsed("spindle")}>
+          <SpindleCoolantControls />
+        </div>
       </div>
       </div>
       <div className="rightRailTabPanel" role="tabpanel" id="overrides-panel" aria-labelledby="overrides-tab" hidden={tab !== "overrides"}>
         <div className="rightRailSection rightRailOverrides">
-          <h6 className="rightRailHeading">Overrides</h6>
-          <OverrideControls />
+          <RailHeading id="overrides" title="Overrides" collapsed={isCollapsed("overrides")} onToggle={() => toggle("overrides")} />
+          <div id="rail-section-overrides" hidden={isCollapsed("overrides")}>
+            <OverrideControls />
+          </div>
         </div>
       </div>
       <MacroEditorModal show={macroEditorOpen} onClose={() => setMacroEditorOpen(false)} />

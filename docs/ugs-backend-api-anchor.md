@@ -134,6 +134,12 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - `utils/jogPresets.ts` - the step-size/feed-rate preset ladders shared with `StepSize`/`FeedRate`, and `stepPreset`.
 - Keys never reach the dashboard while a plugin iframe has focus. With `holdToJog` on, a jog key held >= `HOLD_TO_JOG_MS` (250 ms) feeds the shared continuous-jog stream (below); released sooner it is a normal `GET /machine/jog` step.
 
+## Right rail: sections, pinned plugins, icon tiles
+
+- `components/RightRail.tsx` - every section heading is a `RailHeading` (an h6 holding a fold button, `aria-controls="rail-section-<id>"`); folded ids are kept by `hooks/useRailPrefs.ts` `useRailCollapsed` in localStorage `ugs-dashboard-rail-collapsed`. A folded Macros section drops its flex-grow via `.rightRailCollapsed`.
+- `components/PluginsSection.tsx` = heading + `PluginGrid` button + `PluginListPanel` (pinned only). Pins are stored as the **unpinned** ids (`ugs-dashboard-plugins-unpinned`) so a plugin installed later is pinned by default; rail style is `ugs-dashboard-plugin-tiles` (`"names"` default | `"icons"`). Pure helpers and tests: `utils/pluginPins.ts` / `tests/pluginPins.test.cjs`.
+- `PluginGrid.tsx` is a portal into `.app` placed with `placePopover` (same pattern as `SimulationSettings`), because the rail is `overflow-y: auto` and would clip an inline popover. `PluginBadge.tsx` draws the plugin's icon or, with none, its initials on `hsl(hash(id), 55%, 38%)`.
+
 ## Quick layouts (top bar)
 
 - `utils/quickLayouts.ts` - pure: four slots `{color, sizing, zoom, panes|null}` (snapshots, not references to named presets), `parseQuickSlots` (always 4 entries; a bad slot is dropped alone), `quickSlotMatches` (marks the active slot), 8 colours. `hooks/useQuickLayouts.ts` persists them (localStorage `ugs-dashboard-quick-layouts`). `components/QuickLayouts.tsx`: tap recalls, empty tap / hold 600 ms / right click opens the editor (colour, Save, Clear).
