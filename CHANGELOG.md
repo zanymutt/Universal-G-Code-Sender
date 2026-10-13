@@ -2,10 +2,13 @@
 
 Notable changes to the touchscreen dashboard (`/dashboard`), most recent first. The classic pendant (`/`) is unaffected unless noted.
 
-## 2026-10-12
+## 2026-10-13
 
 - **Removed the old centre-panel layout** (the hidden `?legacyLayout=1` switch). The pane layout has been the default since 2026-09-23; the single tabbed panel with an optional split and a bottom console it fell back to is gone, along with its state (`centerView`, `splitLeft`, `splitRight`, `bottomView`) and about 640 lines of component and styles. The parameter is now simply ignored.
 - **Tablet and tabbed layouts: the "Show console" shortcut is gone, and the panel buttons moved.** It put the console in a different place depending on the layout and took space from the workspace. On a tablet the Program and Machine / Macros buttons now sit above the position readout in the left column, so the workspace (or the machine rail) runs all the way up to the top bar instead of starting below a full-width button row. The tabbed layout keeps its one row of tabs (Position / Jog, Program, Machine / Macros). The console is still a pane: pick Console from any pane's header menu, or save it in a quick layout.
+
+## 2026-10-12
+
 - **Right rail: icon tiles, foldable sections and a plugin grid with pins.** On a short screen the rail overflowed (about 270px at 1920x940 with 7 plugins and 3 macros). Section headings (Toolbox, Macros, Plugins, Spindle / Coolant, Overrides) now fold and the choice is remembered per device. Beside the Plugins heading a grid button pops out every installed plugin with a pin on each: pinned plugins show on the rail, unpinned ones only in the grid (a plugin installed later arrives pinned). The grid also chooses how the rail draws plugins - named buttons (as before, still the default) or icon tiles, one small square each; a plugin with no icon of its own gets a tile with its initials on a colour derived from its id. The grid has a search box once there are six or more plugins.
 - **Four one-tap layouts on the top bar** (screens at least 1180px wide, right-aligned beside Layout): boxes 1-4 recall a saved dashboard layout (column widths, density and screen layout, page zoom) **and** the pane arrangement (what each pane shows, the split and its dividers, docked plugins) in one tap. An empty box, or a press-and-hold / right click on any box, opens a small editor to save the current layout there (Save) and pick one of eight colours, or clear it; a filled box shows its colour and lights up while its layout is the one showing. Stored per browser; the existing Layout and Panes dialogs are unchanged.
 - The 3D view's toolbar now switches to icons early enough: the labelled row actually needs about 762px (808px with Stock on) but the switch was set for 670px, so at widths in between "Run boundary" wrapped onto a second row. It now switches below 850px.

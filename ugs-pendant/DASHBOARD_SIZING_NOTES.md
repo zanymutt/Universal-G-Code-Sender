@@ -1,5 +1,7 @@
 # Dashboard sizing preview
 
+> Historical notes from September 2026. The "Show console" shortcut described below was removed on 2026-10-13 (see `CHANGELOG.md`); the console is now an ordinary pane. For the current layout shells see "Layout shells" in `docs/ugs-backend-api-anchor.md`.
+
 ## Named presets
 
 Layout now includes Save current layout, Apply saved layout, Update with current, and Delete preset. Each named preset saves page zoom, compact mode, and both column widths. Presets are local to this browser and address, not synchronized between devices. Choosing a name in the list does not change the layout until Apply is pressed. The UI indicates whether current settings match the selected preset. Duplicate names are rejected without regard to capitalization. Deleting a preset leaves the current layout unchanged.

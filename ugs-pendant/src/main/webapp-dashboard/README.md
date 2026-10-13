@@ -32,7 +32,8 @@ into the `ugs-pendant` jar by `frontend-maven-plugin` and served by UGS at `/das
 | `npm run build:demo` | the static online demo build (see above) |
 | `npm run lint` | eslint |
 | `npx tsc --noEmit -p .` | typecheck only |
-| `node --test tests/*.test.cjs` | unit tests for the pure logic in `src/utils` and the reducers |
+| `node --test tests/*.test.cjs` | unit tests for the pure logic in `src/utils` and the reducers (list the files, not the directory) |
+| `npx sass --no-source-map src/components/<File>.scss > /dev/null` | catch a SCSS error quickly |
 
 Where things are, how the backend and plugin bridge fit together, and the gotchas learned so far:
 
@@ -41,7 +42,44 @@ Where things are, how the backend and plugin bridge fit together, and the gotcha
   isolated preview, testing real input, gotchas
 - [`ugs-pendant/PLUGIN_API.md`](../../../PLUGIN_API.md) - the plugin API
 
-`src/` at a glance: `pages/` (Dashboard, Tablet/Portrait variants, Settings, Waiting) · `components/`
-(one file per UI piece; the center panes are `CenterPaneLayoutDemo.tsx`) · `store/` (Redux slices, socket
-middleware, plugin window reducer) · `services/` (thin REST wrappers) · `hooks/` · `utils/` (pure,
-tested logic) · `theme/` (palette + accent presets) · `demo/` (in-browser simulated backend).
+`src/` at a glance:
+
+| Folder | What is in it |
+|---|---|
+| `pages/` | `Dashboard` (the shell; the panel switcher sits in the left column on a tablet and in a row when tabbed), `SettingsPage` (Appearance, Keyboard, Game controller tabs), the tablet/tabbed layout styles, the connect page |
+| `components/` | one file per UI piece. The center panes are `CenterPaneLayoutDemo.tsx`; the right rail is `RightRail.tsx` (foldable sections, `PluginsSection` + `PluginGrid` for pinned plugins); `TopBar` holds `QuickLayouts` (four one-tap layouts), `DashboardSizing` and `PaneLayoutPresets` |
+| `store/` | Redux slices (status, settings, files, console, macros, ui, theme/accent, `keyBindings`), socket middleware, the plugin window reducer |
+| `services/` | thin REST wrappers (`machine.ts` includes `jogContinuous`), plus the page-wide `continuousJogSession`, `gamepadPoller` and `inputCapture` |
+| `hooks/` | `useKeyboardShortcuts` (also exports the shared press/release `ActionRunner`), `useGamepadShortcuts`, `useQuickLayouts`, `useRailPrefs`, sizing/zoom/layout-preset hooks |
+| `utils/` | pure, tested logic: `dashboardActions` (the action registry), `keyBindings`, `gamepadInput`, `continuousJog`, `inputBackup`, `quickLayouts`, `pluginPins`, `pluginPanes`, `layoutRect`, `placePopover`, the stock simulator, and more |
+| `theme/` | palette and accent presets |
+| `demo/` | the in-browser simulated backend for the online demo |
+
+## Input: keyboard, game controller, continuous jog
+
+Everything an input device can do is a named action in `utils/dashboardActions.ts` with the same state rules as the
+on-screen buttons. Keys (`useKeyboardShortcuts`) and controller inputs (`useGamepadShortcuts`) both feed one
+`ActionRunner`, which owns "tap is a step, hold keeps jogging" and cleans up on blur or disconnect. Held-key
+jogging goes to `POST /api/v1/machine/jogContinuous`; UGS runs the jog and cancels it by itself if the dashboard
+stops sending heartbeats. Details and the reasoning are in the anchor doc ("Keyboard shortcuts", "Game controller
+input", "Continuous jog"). A standalone page for checking what a browser sees from a controller is in
+[`ugs-pendant/tools/gamepad-test`](../../../tools/gamepad-test/README.md).
+
+## What is stored in the browser
+
+All of these are per browser and per address (localhost and a LAN IP are separate stores). The layout and
+bindings ones can be exported from the dashboard (Layout / Panes dialogs, and the Keyboard and Game controller
+tabs).
+
+| Key | Holds |
+|---|---|
+| `ugs-dashboard-theme`, `ugs-dashboard-accent` | colour theme and accent |
+| `ugs-dashboard-zoom`, `ugs-dashboard-sizing` | page zoom; column widths, density, screen layout |
+| `ugs-dashboard-layout-presets`, `ugs-dashboard-pane-layout-presets`, `ugs-dashboard-current-pane-layout` | saved layouts, saved pane layouts, the pane layout showing now |
+| `ugs-dashboard-quick-layouts` | the four top-bar layout slots (colour, widths, zoom, panes) |
+| `ugs-dashboard-key-bindings` | keyboard and controller bindings, the on/off switches, stick tuning, hold-to-jog |
+| `ugs-dashboard-plugins-unpinned`, `ugs-dashboard-plugin-tiles`, `ugs-dashboard-rail-collapsed` | plugins hidden from the rail, rail plugin style, folded rail sections |
+| `ugs-dashboard-settings-tab` | last Settings tab |
+| `ugs-dashboard-console-font-size`, `ugs-dashboard-editor-font-size` | text sizes |
+| `ugs-dashboard-gcode-review-height`, `ugs-dashboard-gcode-review-ignored` | review panel height, ignored findings |
+| `ugs.dashboard.stockSimulation`, `ugs.dashboard.simulation.rapidRate`, `ugs.dashboard.pluginWindowSize.<id>` | stock view, simulation and plugin window sizes |

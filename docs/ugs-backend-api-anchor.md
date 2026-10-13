@@ -96,7 +96,7 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - **Never re-parent the iframe** (moving it reloads the plugin). `PluginWindow.tsx` stays mounted at one place and, when docked, is laid over the slot's box measured by `hooks/useDockRect.ts` (zoom-corrected via `utils/layoutRect.ts`; z-index 10, under the pane dividers at 20 and floating windows at 40/41). A non-front floating window gets `.pluginWindowActivateShield` because clicks inside the iframe never reach the parent.
 - UI: a native `<select>` "Plugins" in each pane header (an optgroup in the narrow single select), Float/Close buttons on docked panes, and a Dock `<select>` in a floating window's title bar. Events: `ugs-pane-set-content` (dock request), `ugs-pane-plugin-closed` (a docked plugin closed -> pane reverts).
 - The current pane layout is not restored on page load (existing behaviour); saved presets are, via `ugs-pane-layout-apply`.
-- Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see `feedback_react_portal_container_swap_unmounts` / `CenterPanel.tsx` (`editorHostRef` + `appendChild`).
+- Do NOT reuse a naive `createPortal(children, activeSlot)` swap for anything that holds state — see the removed legacy `CenterPanel.tsx` in git history (`editorHostRef` + `appendChild`) for the stable-host-node pattern; the pane layout (`CenterPaneLayoutDemo.tsx`) is the only center layout now.
 
 ## Frontend app shell and connection lifecycle
 
@@ -105,6 +105,12 @@ Plugins open floating by default (right-rail click), and can be docked into a ce
 - `store/socketMiddleware.ts` — one live socket at a time: a new `connect` disconnects the previous socket, and `open`/`close`/`message` handlers ignore any socket that isn't `activeSocket`. On open it refetches settings, status and file status.
 - `components/ConnectionHealth.tsx` — the "● UGS" chip in the top bar: health of the **dashboard ↔ UGS link only** (age of the last WS message: live < 7s, stale < 15s, else lost). The machine's own state is the pill/`ConnectionWidget` beside it.
 - Why the dashboard stays mounted: the pane layout and plugin windows (iframes reload) live in component state. Unsaved editor text survives a drop only while UGS still has the same file loaded; if `fileStatus.fileName` goes empty (a UGS restart) `GcodeEditor` discards its buffer. Rescuing that text (keep the buffer, offer Save as / Discard) is a known, deliberately deferred improvement.
+
+## Layout shells (desktop, tablet, tabbed)
+
+- `pages/Dashboard.tsx` renders one tree for every width; CSS in `pages/Dashboard.scss` and `pages/TabletDashboard.scss` decides what shows (`html[data-dashboard-layout]` = auto|desktop|tablet|tabbed, set from the sizing hook). Desktop is three columns (position, panes, rail); the rail's Machine/Macros and Overrides tabs stack at desktop widths.
+- The panel switcher (`nav.tabletNavigation`: Position / Jog, Program, Machine / Macros) is the first child of `.dashboardBody`. In the tablet shell it is grid cell column 1 / row 1, above the position readout, and `.dashboardCenter` / `.dashboardRight` span both rows so the workspace runs to the top bar; in the tabbed shell `.dashboardBody` is a flex column and it is the first row. It is hidden on desktop. There is no console shortcut: the console is a pane content like any other.
+- The legacy single-panel center layout (`?legacyLayout=1`, `CenterPanel.tsx`) and its `ui` state (`centerView`, `splitLeft`, `splitRight`, `bottomView`) were removed 2026-10-13; `store/uiSlice.ts` now holds only the page, run-from line, cursor/sim lines, toolpath version and dirty flag.
 
 ## Gcode editor (`components/GcodeEditor.tsx`, `GcodeEditor.scss`)
 

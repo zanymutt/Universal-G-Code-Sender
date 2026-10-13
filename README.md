@@ -23,6 +23,26 @@ Technical details:
 * [JTS](https://github.com/locationtech/jts) for geometric transformations
 * [Batik](https://xmlgraphics.apache.org/batik/) for reading SVG
 
+## This fork: the touchscreen Dashboard
+
+This fork adds a browser-based **Dashboard** to UGS, served by UGS itself at `http://<host>:8080/dashboard`
+(the port is the Pendant setting). It is aimed at tablets, touchscreens and a second screen at the machine, and
+works without the NetBeans window: position readout and jogging, a 3D visualizer with simulation and a stock
+(material removal) view, a G-code editor with review, macros, probing, pane layouts you can save, and plugins that
+run beside the machine view.
+
+- **Try it with no machine:** https://zanymutt.github.io/Universal-G-Code-Sender/ (a simulated backend in the browser).
+- **Keyboard, Bluetooth keypad and game controller** drive jogging, the job, zero/home and macros; bindings are per
+  device and can be exported and imported. Nothing is on until you enable it in Settings.
+- **Plugins** (Nesting, Rotate G-code, Straight Cut, SVG to G-code, THC panel and more) are plain HTML/JS folders;
+  see [`ugs-pendant/PLUGIN_API.md`](ugs-pendant/PLUGIN_API.md).
+- **What changed and when:** [`CHANGELOG.md`](CHANGELOG.md). **How it is put together and how to work on it:**
+  [`docs/ugs-backend-api-anchor.md`](docs/ugs-backend-api-anchor.md),
+  [`docs/dashboard-ui-working-notes.md`](docs/dashboard-ui-working-notes.md) and
+  [`ugs-pendant/src/main/webapp-dashboard/README.md`](ugs-pendant/src/main/webapp-dashboard/README.md).
+
+Like the rest of this repository it is licensed under GPLv3 (see `COPYING`).
+
 ## Downloads
 Below you will find the latest release of UGS.<br/> For older releases please visit the [releases page](https://github.com/winder/Universal-G-Code-Sender/releases).
 

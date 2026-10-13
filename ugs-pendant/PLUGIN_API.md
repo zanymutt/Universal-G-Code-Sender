@@ -39,17 +39,21 @@ Any additional files (CSS, JS, an icon) go in the same folder alongside `index.h
 | Field | Required | Notes |
 |---|---|---|
 | `name` | ✅ | Shown in the Plugins list |
-| `description` | No | Not currently shown anywhere in the UI, but good practice |
+| `description` | No | Shown as the tooltip on the rail and as the second line of the plugin's card in the all-plugins grid |
 | `version` | No | Not currently shown anywhere in the UI |
 | `entry` | No | Defaults to `index.html` |
 | `allowMultipleInstances` | No | Boolean; defaults to `false`. Set to `true` to permit multiple windows of this plugin in one Dashboard page. |
-| `icon` | No | Shown next to the name in the Plugins list and the plugin window's title bar |
+| `icon` | No | Shown as the plugin's tile or next to its name in the rail, in the all-plugins grid and in the window's title bar. Without one, the dashboard draws a tile with the plugin's initials on a colour derived from its id - fine, but an icon is recognisable at a glance in the icon-only rail. A square image, around 64px, works best |
 
 Unrecognized fields are silently ignored rather than causing an error, so a manifest written for another plugin ecosystem with a similar `plugin.json` shape (extra fields like `layout`, `layoutTablet`, `layoutMobile`, `files`) will still load here - it just won't do anything with the fields this dashboard doesn't act on yet.
 
 ## How it runs
 
 If the Dashboard loses its connection to UGS (UGS restarted, or the network dropped) your plugin window stays open and is **not** reloaded: requests that need UGS reject until the connection is back, `status`/`line` events pause, and everything resumes by itself afterwards. Treat a rejected call as "try again shortly" rather than a fatal error.
+
+**Where a plugin appears.** In the right rail's Plugins section as a named button or an icon tile (the person chooses), unless they have unpinned it: the grid button beside the heading lists every installed plugin with a pin on each, and an unpinned plugin opens from there. A newly installed plugin is pinned by default. You don't need to do anything for this; it is described so you can choose a good `name`, `description` and `icon`.
+
+**Keyboard.** The dashboard's own shortcuts (jog keys, job start/stop and so on) are not active while your plugin has focus: key events inside a sandboxed iframe never reach the dashboard page. Handle your own keys in your plugin; don't rely on, or try to disable, the dashboard's.
 
 Plugins open once per Dashboard page by default. Clicking an already-open plugin brings its existing window to the front and focuses it without reloading its content. Closing it lets the next click open a fresh instance.
 
