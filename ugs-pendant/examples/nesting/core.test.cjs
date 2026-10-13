@@ -541,4 +541,17 @@ if (fs.existsSync(ramFile)) {
   });
 }
 
+const reliefFile = process.env.NEST_SAMPLE_RELIEF;
+if (reliefFile && fs.existsSync(reliefFile)) {
+  test('finer rotation step keeps the complete 90-degree baseline', () => {
+    const s = C.extract(fs.readFileSync(reliefFile, 'utf8'));
+    const common = { mode: 'minArea', sizeX: '', sizeY: 300, count: 9, gap: 5, effort: 5, prefer: 'compact', rotate: true, origin: 'top-left' };
+    const coarse = C.nest(s, { ...common, rotStep: 90 });
+    const fine = C.nest(s, { ...common, rotStep: 15 });
+    assert.ok(coarse.verify.ok && fine.verify.ok);
+    assert.equal(fine.count, coarse.count);
+    assert.ok(fine.frame.w * fine.frame.h <= coarse.frame.w * coarse.frame.h + 1e-6);
+  });
+}
+
 console.log(`${checks} nesting checks passed`);

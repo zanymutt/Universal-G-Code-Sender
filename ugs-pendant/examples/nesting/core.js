@@ -1151,7 +1151,7 @@
     return { minGap, outside, ok: outside === 0 && minGap >= gap - 1e-6 };
   }
 
-  function* nestGen(src, opts, ctl) {
+  function* nestGenInternal(src, opts, ctl) {
     const sources = Array.isArray(src) ? src : [src];
     if (!sources.length || sources.some(s => !s)) throw Error('Add at least one G-code file.');
     const gap = Number(opts.gap);
@@ -1294,6 +1294,23 @@
       if (r.done) return r.value;
     }
   }
+  // A finer angle step contains every orientation available to a coarser step,
+  // but the heuristic search can still choose a worse width/layout. Run the
+  // complete 90-degree search as a reference and keep the smaller valid frame.
+  function* nestGen(src, opts, ctl) {
+    const step = Number(opts.rotStep);
+    if (opts.rotate && step > 0 && step < 90) {
+      const fine = yield* nestGenInternal(src, opts, ctl);
+      const coarse = yield* nestGenInternal(src, { ...opts, rotStep: 90 }, ctl);
+      if (fine.count !== coarse.count) return fine.count > coarse.count ? fine : coarse;
+      if (!fine.verify.ok) return coarse;
+      if (!coarse.verify.ok) return fine;
+      const fineArea = fine.frame.w * fine.frame.h, coarseArea = coarse.frame.w * coarse.frame.h;
+      return coarseArea < fineArea - 1e-6 ? coarse : fine;
+    }
+    return yield* nestGenInternal(src, opts, ctl);
+  }
+
   const nest = (src, opts) => runSync(nestGen(src, opts));
 
   const api = {
