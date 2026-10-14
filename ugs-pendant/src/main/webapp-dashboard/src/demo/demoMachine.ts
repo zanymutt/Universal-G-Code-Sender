@@ -92,7 +92,29 @@ const macros: any[] = [
 const files: Record<string, string> = { ...SAMPLE_FILES };
 const fileTimes: Record<string, number> = {};
 const extraFolders = new Set<string>();
-Object.keys(files).forEach((path, i) => (fileTimes[path] = Date.now() - i * 17 * 60 * 1000));
+
+// Big sample programs: listed straight away (with their size), but their text
+// is only fetched the first time one is opened or read - a 10 MB file shouldn't
+// ride along with the page. Once loaded they live in `files` like any other.
+const library = new Map<string, { size: number; url: string }>(
+  __DEMO_LIBRARY__.map((entry) => [entry.path, { size: entry.size, url: entry.url }] as const)
+);
+Object.keys(files).concat([...library.keys()]).forEach((path, i) => (fileTimes[path] = Date.now() - i * 17 * 60 * 1000));
+
+// Resolves true when the file's text is available in memory.
+const ensureLoaded = async (path: string): Promise<boolean> => {
+  if (files[path] !== undefined) return true;
+  const entry = library.get(path);
+  if (!entry) return false;
+  try {
+    const response = await window.fetch(new URL(entry.url, document.baseURI).toString());
+    if (!response.ok) return false;
+    files[path] = await response.text();
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 // Plugin settings live here for the page's lifetime, like everything else.
 const pluginSettings: Record<string, unknown> = {};
@@ -639,7 +661,7 @@ const startJob = () => {
 };
 
 const workspaceFileList = () => {
-  const paths = Object.keys(files);
+  const paths = [...new Set([...Object.keys(files), ...library.keys()])];
   const folders = new Set<string>(extraFolders);
   for (const path of paths) {
     const parts = path.split("/");
@@ -647,7 +669,11 @@ const workspaceFileList = () => {
   }
   return {
     fileList: paths.map((path) => path.split("/").pop()),
-    fileDetails: paths.map((path) => ({ path, size: files[path].length, lastModified: fileTimes[path] ?? Date.now() })),
+    fileDetails: paths.map((path) => ({
+      path,
+      size: files[path]?.length ?? library.get(path)?.size ?? 0,
+      lastModified: fileTimes[path] ?? Date.now(),
+    })),
     folderList: [...folders].sort(),
   };
 };
@@ -867,7 +893,10 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       return json(workspaceFileList());
     case "/api/v1/files/openWorkspaceFile": {
       const file = query.get("file");
-      if (file) openFile(file);
+      if (file) {
+        if (!(await ensureLoaded(file))) return json({ error: `Could not load "${file}"` }, 404);
+        openFile(file);
+      }
       return ok();
     }
     case "/api/v1/files/createWorkspaceFolder": {
@@ -875,8 +904,11 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       if (folder) extraFolders.add(folder);
       return ok();
     }
-    case "/api/v1/files/getFileContent":
-      return text(files[query.get("file") || activeFile] ?? "");
+    case "/api/v1/files/getFileContent": {
+      const file = query.get("file") || activeFile;
+      await ensureLoaded(file);
+      return text(files[file] ?? "");
+    }
     case "/api/v1/files/saveFileContent": {
       // In memory only - reloading the page restores the original samples.
       if (activeFile) {

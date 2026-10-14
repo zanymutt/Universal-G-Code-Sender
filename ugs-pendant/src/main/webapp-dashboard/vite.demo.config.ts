@@ -1,4 +1,4 @@
-import { cpSync, existsSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig, mergeConfig } from "vite";
@@ -39,6 +39,29 @@ const pluginList = DEMO_PLUGINS.filter((id) => existsSync(join(examplesDir, id, 
   };
 });
 
+// Big sample programs (src/demo/library): not bundled into the page, copied to
+// dist-demo/samples and fetched the first time one is opened. They appear in
+// the workspace under Samples/. The size is the character count the real
+// backend would report for a pure-ASCII file.
+const libraryDir = join(root, "src", "demo", "library");
+const library = existsSync(libraryDir)
+  ? readdirSync(libraryDir)
+      .filter((name) => statSync(join(libraryDir, name)).isFile())
+      .sort((a, b) => a.localeCompare(b))
+      .map((name) => ({
+        path: `Samples/${name}`,
+        size: statSync(join(libraryDir, name)).size,
+        url: `samples/${encodeURIComponent(name)}`,
+      }))
+  : [];
+
+const copyDemoLibrary = () => ({
+  name: "copy-demo-library",
+  closeBundle() {
+    if (library.length > 0) cpSync(libraryDir, join(root, outDir, "samples"), { recursive: true });
+  },
+});
+
 const copyDemoPlugins = () => ({
   name: "copy-demo-plugins",
   closeBundle() {
@@ -52,10 +75,11 @@ export default mergeConfig(
   base,
   defineConfig({
     base: "./",
-    plugins: [copyDemoPlugins()],
+    plugins: [copyDemoPlugins(), copyDemoLibrary()],
     define: {
       "import.meta.env.VITE_DEMO": JSON.stringify("true"),
       __DEMO_PLUGINS__: JSON.stringify(pluginList),
+      __DEMO_LIBRARY__: JSON.stringify(library),
     },
     build: {
       outDir,

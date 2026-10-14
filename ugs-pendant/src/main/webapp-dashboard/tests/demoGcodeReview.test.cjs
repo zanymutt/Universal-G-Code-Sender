@@ -44,9 +44,14 @@ test("grbl system lines are ignored and an empty file has one (blank) line", () 
 });
 
 test("the bundled sample programs review completely clean", () => {
-  const dir = path.join(__dirname, "../src/demo/samples");
-  for (const name of fs.readdirSync(dir)) {
-    const result = reviewGcode(name, fs.readFileSync(path.join(dir, name), "utf8"));
-    assert.deepEqual(plain(result.diagnostics), [], name);
+  // src/demo/samples is bundled into the page; src/demo/library is fetched on
+  // first open. Both are offered to visitors, so both must review clean.
+  for (const sub of ["samples", "library"]) {
+    const dir = path.join(__dirname, "../src/demo", sub);
+    if (!fs.existsSync(dir)) continue;
+    for (const name of fs.readdirSync(dir)) {
+      const result = reviewGcode(name, fs.readFileSync(path.join(dir, name), "utf8"));
+      assert.deepEqual(plain(result.diagnostics), [], `${sub}/${name}`);
+    }
   }
 });
