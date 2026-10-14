@@ -230,10 +230,10 @@ table.fieldTable input, table.fieldTable select { width: auto; flex: 1 1 auto; m
 table.fieldTable .setbtn { min-height: 30px; padding: 4px 10px; font-size: 13px; border-width: 2px; border-color: var(--plugin-border-strong); }
 table.fieldTable .setbtn:active:not(:disabled) { border-color: var(--plugin-accent); }
 
-#presetPreview table { width: 100%; border-collapse: collapse; margin-top: 8px; }
-#presetPreview td, #presetPreview th { border-bottom: 1px solid var(--plugin-border); padding: 5px 6px; font-size: 13.5px; }
-#presetPreview th[colspan] { background: var(--plugin-surface); color: var(--plugin-text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: .03em; }
-#presetPreview .curcol { color: var(--plugin-accent); font-weight: 700; }
+:is(#presetPreview, #activePreview) table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+:is(#presetPreview, #activePreview) td, :is(#presetPreview, #activePreview) th { border-bottom: 1px solid var(--plugin-border); padding: 5px 6px; font-size: 13.5px; }
+:is(#presetPreview, #activePreview) th[colspan] { background: var(--plugin-surface); color: var(--plugin-text-muted); text-transform: uppercase; font-size: 11px; letter-spacing: .03em; }
+:is(#presetPreview, #activePreview) .curcol { color: var(--plugin-accent); font-weight: 700; }
 
 .presetControls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 8px; }
 .presetControls select { flex: 1 1 100px; }
@@ -350,7 +350,7 @@ body[data-view=link] .view[data-view=link] { display: block; }
   table.fieldTable td:nth-child(3) { grid-column: 2; grid-row: 2; display: flex; }
   table.fieldTable td:nth-child(4) { grid-column: 3; grid-row: 2; }
   table.fieldTable input, table.fieldTable select { max-width: 130px; }
-  #presetPreview { overflow-x: auto; }
+  :is(#presetPreview, #activePreview) { overflow-x: auto; }
 }
 
 @media (max-width: 520px) {
@@ -441,11 +441,11 @@ body[data-view=link] .view[data-view=link] { display: block; }
   .settingsBody { padding: 8px; }
   .statBig .statValue { font-size: 26px; }
   .presetActions button { flex-basis: 100%; }
-  #presetPreview table, #presetPreview tbody { display: block; }
-  #presetPreview tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
-  #presetPreview td, #presetPreview th { display: block; }
-  #presetPreview th[colspan] { grid-column: 1 / -1; }
-  #presetPreview td:empty { display: none; }
+  :is(#presetPreview, #activePreview) table, :is(#presetPreview, #activePreview) tbody { display: block; }
+  :is(#presetPreview, #activePreview) tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; }
+  :is(#presetPreview, #activePreview) td, :is(#presetPreview, #activePreview) th { display: block; }
+  :is(#presetPreview, #activePreview) th[colspan] { grid-column: 1 / -1; }
+  :is(#presetPreview, #activePreview) td:empty { display: none; }
 }
 @media (max-width: 340px) {
   /* Setting | Current | New value | Send no longer fits on one line: label and
@@ -474,6 +474,13 @@ body[data-view=link] .view[data-view=link] { display: block; }
 @media (max-height: 300px) {
   .stickyTop { position: static; }
 }
+
+/* Active settings tab: sections and values link to the tab that edits them. */
+#activePreview .goto { cursor: pointer; }
+#activePreview th.secLink:active, #activePreview td.goto:active { background: var(--plugin-accent-soft); }
+/* The flashed row lives in the settings tables (the tab that edits it), not in
+   the Active table - hence not scoped to #activePreview. */
+tr.flash, tr.flash td { background: var(--plugin-accent-soft); }
 
 /* ---- In-page replacements for alert() / confirm() / prompt() / downloads ---
    The plugin iframe is sandboxed, so the browser silently blocks all four.

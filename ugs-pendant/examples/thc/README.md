@@ -32,7 +32,9 @@ then open **THC Control Panel** from Plugins.
   **Save CSV** exports the list; **Clear** empties it. Derived from the live
   telemetry only; kept in memory until cleared or the window is closed.
 - **Settings** - presets (read and write the same `settings.csv` the Sunton's
-  SD card uses) and every live setting, with the speed-curve preview and the
+  SD card uses), an **Active** tab that lists everything the THC is running
+  right now on one page (tap a section or value to jump to the tab that edits
+  it), and every live setting, with the speed-curve preview and the
   3 s rolling voltage graph.
 - A banner on Operate / Settings says when readings are not live (not
   connected, or no telemetry for more than 3 s).

@@ -124,7 +124,7 @@ document.querySelectorAll('.tabs button[data-tab]').forEach((btn) => {
   btn.onclick = () => {
     document.querySelectorAll('.tabs button[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b === btn)));
     document.querySelectorAll('.tabPanel').forEach((p) => { p.hidden = p.dataset.panel !== btn.dataset.tab; });
-    if (typeof renderMovementCurve === 'function') { renderMovementCurve(); renderVoltGraph(); }
+    if (typeof renderMovementCurve === 'function') { renderMovementCurve(); renderVoltGraph(); renderActiveSettings(); }
   };
 });
 
@@ -767,6 +767,7 @@ function render(f) {
   });
 
   updateAvgWarn(f);
+  if (!document.querySelector('.tabPanel[data-panel="active"]').hidden) renderActiveSettings();
   if (spEditing) updateSpDelta();   // the THC's value can change under an open editor
   $('raw').textContent = JSON.stringify(f, null, 2);
 
@@ -1012,6 +1013,82 @@ $('spCancel').onclick = closeSetpointEdit;
 // Tapping anywhere else abandons the edit - nothing was sent.
 document.addEventListener('pointerdown', (e) => {
   if (spEditing && !e.target.closest('#setpointTile')) closeSetpointEdit();
+});
+
+// ---- Active settings tab: everything the THC is running right now ----------
+// Same layout as a preset's preview, but read from the live telemetry, so all
+// four groups can be checked on one page instead of tab by tab. Sections and
+// values are links: tapping one opens the tab that edits it and flashes the row.
+const GROUP_TITLES = { thc: 'THC', movement: 'Movement', voltage: 'Voltage', sync: 'Sync' };
+let activeSignature = '';
+
+function activeFieldCell(group, f, raw) {
+  const unit = (f.unit && f.kind !== 'bool' && f.kind !== 'mode') ? ' ' + f.unit : '';
+  const attrs = ' data-goto="' + group + '" data-group="' + group + '" data-key="' + f.key + '"';
+  return '<td class="goto"' + attrs + '>' + f.label + '</td><td class="curcol goto"' + attrs + '>' +
+    formatPresetField(f.kind, raw) + unit + '</td>';
+}
+
+// Name of the loaded preset that equals what the THC is running (testRun
+// ignored, a preset never carries it), false if none does, null if none loaded.
+function matchingPresetName() {
+  if (!latest || parsedPresets.length === 0) return null;
+  const same = (p) => ['thc', 'movement', 'voltage', 'sync'].every((g) =>
+    FIELDS[g].every((f) => f.key === 'testRun' || (p[g] && p[g][f.key] === latest[g][f.key])));
+  const hit = parsedPresets.find(same);
+  return hit ? hit.name : false;
+}
+
+function renderActiveSettings(force) {
+  const el = $('activePreview'), note = $('activeNote');
+  if (!latest) {
+    el.innerHTML = '';
+    note.textContent = 'No live settings yet - connect to the THC first.';
+    activeSignature = '';
+    return;
+  }
+  // Rebuilt only when something changed, so a tap isn't swallowed by a repaint.
+  const sig = JSON.stringify([latest.thc, latest.movement, latest.voltage, latest.sync, parsedPresets.map((p) => p.name)]);
+  if (!force && sig === activeSignature) return;
+  activeSignature = sig;
+  let html = '<table><tr><th colspan="4" style="text-align:left;">Active settings - live from the THC</th></tr>';
+  ['thc', 'movement', 'voltage', 'sync'].forEach((group) => {
+    const fields = FIELDS[group].filter((f) => latest[group] && latest[group][f.key] !== undefined);
+    if (fields.length === 0) return;
+    html += '<tr><th colspan="4" class="secLink goto" data-goto="' + group + '" title="Open the ' + GROUP_TITLES[group] + ' tab">' +
+      group.toUpperCase() + ' SETTINGS &#8250;</th></tr>';
+    for (let i = 0; i < fields.length; i += 2) {
+      html += '<tr>' + activeFieldCell(group, fields[i], latest[group][fields[i].key]);
+      html += fields[i + 1]
+        ? activeFieldCell(group, fields[i + 1], latest[group][fields[i + 1].key])
+        : '<td></td><td></td>';
+      html += '</tr>';
+    }
+  });
+  html += '</table>';
+  el.innerHTML = html;
+  const m = matchingPresetName();
+  note.textContent = (m === null ? '' : m ? 'Matches loaded preset "' + m + '". ' : 'Differs from every loaded preset. ') +
+    'Tap a section or a value to open the tab that changes it.';
+}
+
+$('activePreview').addEventListener('click', (e) => {
+  const t = e.target.closest('[data-goto]');
+  if (!t) return;
+  document.querySelector('.tabs button[data-tab="' + t.dataset.goto + '"]').click();
+  if (!t.dataset.key) return;
+  const input = $(t.dataset.group + '_' + t.dataset.key + '_in');
+  if (!input) return;
+  const row = input.closest('tr');
+  if (!row) return;
+  // Scroll THIS page only. element.scrollIntoView() also scrolls every
+  // ancestor, which inside the dashboard moved the whole dashboard up.
+  const head = document.querySelector('.stickyTop');
+  const headH = head ? head.offsetHeight : 0;
+  const top = row.getBoundingClientRect().top + window.scrollY - (window.innerHeight + headH) / 2;
+  window.scrollTo(0, Math.max(0, top));
+  row.classList.add('flash');
+  setTimeout(() => row.classList.remove('flash'), 1500);
 });
 
 // ---- Test-run window averages (kept as a list) ------------------------------

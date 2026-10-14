@@ -156,6 +156,7 @@
       <div class="card">
         <nav class="tabs" role="tablist" aria-label="Settings">
           <button type="button" role="tab" data-tab="presets" aria-selected="true">Presets</button>
+          <button type="button" role="tab" data-tab="active" aria-selected="false">Active</button>
           <button type="button" role="tab" data-tab="thc" aria-selected="false">THC</button>
           <button type="button" role="tab" data-tab="movement" aria-selected="false">Movement</button>
           <button type="button" role="tab" data-tab="voltage" aria-selected="false">Voltage</button>
@@ -180,6 +181,11 @@
             </div>
             <div id="presetPreview"></div>
             <p id="presetStatus" class="hint"></p>
+          </div>
+
+          <div class="tabPanel" data-panel="active" hidden>
+            <p class="hint" id="activeNote" style="margin-top:0"></p>
+            <div id="activePreview"></div>
           </div>
 
           <div class="tabPanel" data-panel="thc" hidden><table class="fieldTable" id="thcTable"></table></div>
