@@ -17,6 +17,7 @@ import {
   setToolCutter,
   ToolRow,
 } from "../utils/toolTable";
+import ConfirmDialog from "./ConfirmDialog";
 import "./ToolEditorPanel.scss";
 
 const PANEL_WIDTH = 780;
@@ -88,6 +89,8 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
   // Tools saved from an earlier file but not named in this one do nothing to the
   // carve, so they stay out of the way unless asked for (or just added).
   const [showSaved, setShowSaved] = useState(false);
+  // "Reset all" forgets every saved tool - not only those in this file - so it asks first.
+  const [confirmingResetAll, setConfirmingResetAll] = useState(false);
   const drag = useRef<{ pointer: number; x: number; y: number; left: number; top: number; scale: number } | null>(null);
 
   const parsed = newTool.trim() === "" ? null : Number(newTool);
@@ -95,6 +98,7 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
   const exists = valid && rows.some((row) => row.tool === parsed);
   const anySaved = Object.keys(saved).length > 0;
   const savedOnlyCount = rows.filter((row) => !row.inFile).length;
+  const savedCount = Object.keys(saved).length;
   const visibleRows = showSaved ? rows : rows.filter((row) => row.inFile);
 
   const viewportOf = (element: HTMLElement) => {
@@ -140,7 +144,9 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
 
   const edit = (row: ToolRow, patch: Partial<CutterSpec>) => onChange(setToolCutter(saved, row.tool, { ...row.cutter, ...patch }));
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
     <div
       ref={panelRef}
       className="toolEditorPanel"
@@ -403,15 +409,35 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
         <Button
           size="sm"
           variant="outline-secondary"
-          title="Forget every edit, color and deletion: tools go back to what the file says"
+          title="Forget every edit, color and deletion, for every file: tools go back to what their file says"
           disabled={!anySaved}
-          onClick={() => onChange({})}
+          onClick={() => setConfirmingResetAll(true)}
         >
           Reset all
         </Button>
       </div>
     </div>,
     document.querySelector(".app") ?? document.body
+      )}
+      {/* Beside the panel, not inside it: a key press in the dialog must not reach the panel's Escape handler. */}
+      <ConfirmDialog
+        show={confirmingResetAll}
+        title="Reset all tools?"
+        message={
+          `This erases every tool you have edited, recolored or deleted - for all files, not just the one that is ` +
+          `open.\n\n${savedCount} saved tool${savedCount === 1 ? "" : "s"}` +
+          (savedOnlyCount > 0 ? `, ${savedOnlyCount} of them not in this file` : "") +
+          `. Each tool goes back to what its file says, or to the default cutter.`
+        }
+        confirmLabel="Reset all tools"
+        confirmVariant="danger"
+        onCancel={() => setConfirmingResetAll(false)}
+        onConfirm={() => {
+          setConfirmingResetAll(false);
+          onChange({});
+        }}
+      />
+    </>
   );
 };
 
