@@ -12,7 +12,7 @@
 // work); for router, laser and plasma work on flat stock that's not a limit.
 
 export type StockProcess = "router" | "laser" | "plasma";
-export type StockShape = "flat" | "ball" | "v";
+export type StockShape = "flat" | "ball" | "bullnose" | "v" | "taperball";
 
 // All lengths are in millimetres here whatever units the file uses; the
 // simulator converts to the file's own units.
@@ -21,8 +21,14 @@ export type StockSettings = {
   shape: StockShape;
   // Router: cutter diameter. Laser/plasma: kerf (the width of the cut).
   diameter: number;
-  // V-bit included angle, degrees.
+  // V-bit and taper-ball included angle, degrees.
   vAngle: number;
+  // Bull nose: radius of the rounded corner (0 = a flat end mill; the cutter's
+  // own radius = a ball nose).
+  cornerRadius: number;
+  // V-bit / chamfer: diameter of the flat at the tip (0 = a sharp point).
+  // Taper ball: diameter of the ball at the tip.
+  tipDiameter: number;
   // Stock extends this far beyond the toolpath's own footprint, per side.
   margin: number;
   // 0 = automatic (router: deepest cut plus a little; laser/plasma: 3 mm).
@@ -45,6 +51,8 @@ export const DEFAULT_STOCK_SETTINGS: StockSettings = {
   shape: "flat",
   diameter: 6,
   vAngle: 60,
+  cornerRadius: 1,
+  tipDiameter: 0,
   margin: 5,
   thickness: 0,
   topZ: 0,
@@ -123,10 +131,24 @@ const MM_PER_INCH = 25.4;
 const AUTO_EXTRA_DEPTH_MM = 3;
 const AUTO_THROUGH_THICKNESS_MM = 3;
 
+// How the cutter's height above its tip is worked out for a cell at a given
+// distance from the centre line. A number so the per-cell branch stays cheap.
+const KIND_FIXED = 0; // laser / plasma: the cut is a straight-sided slot
+const KIND_FLAT = 1;
+const KIND_BALL = 2;
+const KIND_V = 3;
+const KIND_BULLNOSE = 4;
+const KIND_TAPERBALL = 5;
+
 type ToolModel = {
   process: StockProcess;
-  shape: StockShape;
+  kind: number;
   radius: number;
+  // Radius of the rounded corner (bull nose), of the tip flat (V-bit) or of the
+  // tip ball (taper ball); in the file's units.
+  cornerRadius: number;
+  tipRadius: number;
+  halfAngle: number;
   tanHalf: number;
   hasPower: boolean;
   fullPower: number;
@@ -137,11 +159,21 @@ const toolModel = (packed: PackedToolpath, settings: StockSettings): ToolModel =
   let maxPower = 0;
   for (let i = 0; i < packed.power.length; i++) if (packed.power[i] > maxPower) maxPower = packed.power[i];
   const half = (Math.min(150, Math.max(10, settings.vAngle)) / 2) * (Math.PI / 180);
+  const radius = Math.max(settings.diameter, 0.01) * units * 0.5;
+  const tipRadius = Math.min(Math.max(settings.tipDiameter, 0) * units * 0.5, radius);
+  let kind = KIND_FIXED; // Laser and plasma have no profile.
+  if (settings.process === "router") {
+    kind = { flat: KIND_FLAT, ball: KIND_BALL, bullnose: KIND_BULLNOSE, v: KIND_V, taperball: KIND_TAPERBALL }[settings.shape];
+    // A tip ball as wide as the cutter leaves no taper: it is just a ball nose.
+    if (kind === KIND_TAPERBALL && tipRadius >= radius) kind = KIND_BALL;
+  }
   return {
     process: settings.process,
-    // Laser and plasma have no profile: the kerf is a straight-sided slot.
-    shape: settings.process === "router" ? settings.shape : "flat",
-    radius: Math.max(settings.diameter, 0.01) * units * 0.5,
+    kind,
+    radius,
+    cornerRadius: Math.min(Math.max(settings.cornerRadius, 0) * units, radius),
+    tipRadius,
+    halfAngle: half,
     tanHalf: Math.tan(half),
     hasPower: maxPower > 0,
     fullPower: settings.fullPower > 0 ? settings.fullPower : maxPower > 0 ? maxPower : 1,
@@ -320,8 +352,18 @@ export class StockSimulator {
     const plunge = len2 < 1e-12;
     const r2 = radius * radius;
     const zLow = Math.min(z0, z1);
-    const shape = tool.shape;
+    const kind = tool.kind;
     const tanHalf = tool.tanHalf;
+    const tipRadius = tool.tipRadius;
+    // Bull nose: flat out to flatRadius, then the corner arc.
+    const cornerRadius = tool.cornerRadius;
+    const flatRadius = radius - cornerRadius;
+    // Taper ball: a ball of tipRadius blending into a cone at the half angle.
+    // The cone touches the ball at (taperRadius, taperHeight).
+    const taperRadius = tipRadius * Math.cos(tool.halfAngle);
+    const taperHeight = tipRadius * (1 - Math.sin(tool.halfAngle));
+    const tipR2 = tipRadius * tipRadius;
+    const cornerR2 = cornerRadius * cornerRadius;
 
     for (let j = j0; j <= j1; j++) {
       const py = oy + j * cell;
@@ -338,11 +380,20 @@ export class StockSimulator {
         const d2 = ex * ex + ey * ey;
         if (d2 > r2) continue;
         let level = fixedLevel;
-        if (router) {
-          const tip = plunge ? zLow : z0 + t * (z1 - z0);
-          if (shape === "flat") level = tip;
-          else if (shape === "ball") level = tip + radius - Math.sqrt(r2 - d2);
-          else level = tip + Math.sqrt(d2) / tanHalf;
+        if (kind !== KIND_FIXED) {
+          level = plunge ? zLow : z0 + t * (z1 - z0);
+          if (kind === KIND_BALL) {
+            level += radius - Math.sqrt(r2 - d2);
+          } else if (kind === KIND_V) {
+            const d = Math.sqrt(d2);
+            if (d > tipRadius) level += (d - tipRadius) / tanHalf;
+          } else if (kind === KIND_BULLNOSE) {
+            const d = Math.sqrt(d2);
+            if (d > flatRadius) level += cornerRadius - Math.sqrt(Math.max(0, cornerR2 - (d - flatRadius) * (d - flatRadius)));
+          } else if (kind === KIND_TAPERBALL) {
+            const d = Math.sqrt(d2);
+            level += d <= taperRadius ? tipRadius - Math.sqrt(Math.max(0, tipR2 - d2)) : taperHeight + (d - taperRadius) / tanHalf;
+          }
           if (level < bottom) level = bottom;
         }
         const k = row + ii;

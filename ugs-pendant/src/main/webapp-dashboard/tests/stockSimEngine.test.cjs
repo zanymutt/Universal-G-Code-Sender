@@ -59,6 +59,59 @@ test("a V-bit's cut width follows its included angle", () => {
   assert.equal(at(sim, 10, 2.5), 0);
 });
 
+test("a bull nose is flat across its middle and rounds off at the corner radius", () => {
+  // 6 mm cutter, 1 mm corner radius: flat to 2 mm off-centre, then a quarter circle up to 3 mm.
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2)], { shape: "bullnose", diameter: 6, cornerRadius: 1, cell: 0.1, thickness: 10 });
+  sim.seek(1);
+  assert.equal(at(sim, 10, 0), -2);
+  assert.equal(at(sim, 10, 1.9), -2);
+  // 0.5 mm into the corner: the arc has risen 1 - sqrt(1 - 0.25) above the tip.
+  assert.ok(Math.abs(at(sim, 10, 2.5) - (-2 + 1 - Math.sqrt(0.75))) < 1e-4);
+  assert.equal(at(sim, 10, 3.3), 0);
+});
+
+test("a bull nose with no corner radius is a flat end mill, and with the full radius a ball nose", () => {
+  const cut = (shape, extra) => {
+    const { sim } = make([seg(0, 0, -2, 20, 0, -2)], { shape, diameter: 6, cell: 0.25, thickness: 10, ...extra });
+    sim.seek(1);
+    return Array.from({ length: 13 }, (_, i) => at(sim, 10, i * 0.25 - 1.5));
+  };
+  assert.deepEqual(cut("bullnose", { cornerRadius: 0 }), cut("flat"));
+  const ball = cut("ball");
+  const full = cut("bullnose", { cornerRadius: 3 });
+  full.forEach((h, i) => assert.ok(Math.abs(h - ball[i]) < 1e-4));
+});
+
+test("a V-bit with a flat tip cuts a flat-bottomed groove (a chamfer bit)", () => {
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2)], { shape: "v", vAngle: 90, diameter: 12, tipDiameter: 2, cell: 0.1, thickness: 10 });
+  sim.seek(1);
+  assert.equal(at(sim, 10, 0.9), -2); // inside the 1 mm tip radius
+  assert.ok(Math.abs(at(sim, 10, 2) - -1) < 1e-4); // 1 mm past the flat, a 90 degree wall has risen 1 mm
+  assert.ok(Math.abs(at(sim, 10, 3) - 0) < 1e-4);
+});
+
+test("a taper ball is a ball at the tip that blends into the cone", () => {
+  // 2 mm tip ball, 60 degree included angle, 10 mm cutter.
+  const { sim } = make([seg(0, 0, -4, 20, 0, -4)], { shape: "taperball", vAngle: 60, tipDiameter: 2, diameter: 10, cell: 0.05, thickness: 10 });
+  sim.seek(1);
+  assert.equal(at(sim, 10, 0), -4);
+  // Inside the ball: R - sqrt(R^2 - d^2) with R = 1.
+  assert.ok(Math.abs(at(sim, 10, 0.4) - (-4 + 1 - Math.sqrt(1 - 0.16))) < 1e-4);
+  // On the cone: tangent at d = cos(30), z = 1 - sin(30) above the tip, then 1 / tan(30) per mm.
+  const rt = Math.cos(Math.PI / 6);
+  const zt = 1 - Math.sin(Math.PI / 6);
+  assert.ok(Math.abs(at(sim, 10, 2) - (-4 + zt + (2 - rt) / Math.tan(Math.PI / 6))) < 1e-3);
+});
+
+test("a taper ball whose tip is as wide as the cutter is just a ball nose", () => {
+  const cut = (shape, extra) => {
+    const { sim } = make([seg(0, 0, -2, 20, 0, -2)], { shape, diameter: 6, cell: 0.25, thickness: 10, ...extra });
+    sim.seek(1);
+    return Array.from({ length: 13 }, (_, i) => at(sim, 10, i * 0.25 - 1.5));
+  };
+  assert.deepEqual(cut("taperball", { tipDiameter: 6, vAngle: 40 }), cut("ball"));
+});
+
 test("cuts are clamped at the bottom of the stock", () => {
   const { sim, grid } = make([seg(0, 0, -20, 10, 0, -20)], { thickness: 5, cell: 0.5 });
   sim.seek(1);
