@@ -59,8 +59,13 @@ type Props = {
   showSpeeds: boolean;
   realTime: boolean;
   rapidRate: number;
+  // Whether the file has messages, stops or tool changes, and whether playback
+  // holds at the stops (the switch only matters when it does).
+  hasEvents: boolean;
+  pauseAtStops: boolean;
   onSpeed: (speed: number) => void;
   onRapidRate: (rate: number) => void;
+  onPauseAtStops: (pause: boolean) => void;
 };
 
 // The button and its popover (playback speed when the bar is too narrow for its
@@ -75,7 +80,18 @@ type Props = {
 // It's rendered into .app (not the bar) so it can extend past the visualizer
 // pane, but still inside the dashboard's zoom transform so it scales with the
 // rest of the UI - which is why all the measuring here is in layout units.
-const SimulationSettings = ({ speed, speeds, showSpeeds, realTime, rapidRate, onSpeed, onRapidRate }: Props) => {
+const SimulationSettings = ({
+  speed,
+  speeds,
+  showSpeeds,
+  realTime,
+  rapidRate,
+  hasEvents,
+  pauseAtStops,
+  onSpeed,
+  onRapidRate,
+  onPauseAtStops,
+}: Props) => {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -181,6 +197,15 @@ const SimulationSettings = ({ speed, speeds, showSpeeds, realTime, rapidRate, on
               </div>
             )}
             {realTime && <RapidRateField rate={rapidRate} onChange={onRapidRate} />}
+            {hasEvents && (
+              <Form.Check
+                type="switch"
+                id="simulation-pause-at-stops"
+                label="Pause at stops and tool changes"
+                checked={pauseAtStops}
+                onChange={(event) => onPauseAtStops(event.target.checked)}
+              />
+            )}
           </div>,
           document.querySelector(".app") ?? document.body
         )}

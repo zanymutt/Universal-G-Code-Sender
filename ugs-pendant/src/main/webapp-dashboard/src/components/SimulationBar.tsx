@@ -9,6 +9,7 @@ import {
   faRotateLeft,
   faXmark,
 } from "@fortawesome/free-solid-svg-icons";
+import type { SimNotice } from "../utils/toolpathSimulation";
 import SimulationSettings from "./SimulationSettings";
 import "./SimulationBar.scss";
 
@@ -26,6 +27,10 @@ type Props = {
   progress: number;
   // The line most recently drawn (0 = nothing yet).
   line: number;
+  // A message that just went by, or the stop the playhead is held at.
+  notice: SimNotice | null;
+  hasEvents: boolean;
+  pauseAtStops: boolean;
   onPlay: () => void;
   onPause: () => void;
   onRestart: () => void;
@@ -34,6 +39,7 @@ type Props = {
   onSeek: (fraction: number) => void;
   onSpeed: (speed: number) => void;
   onRapidRate: (rate: number) => void;
+  onPauseAtStops: (pause: boolean) => void;
   onClose: () => void;
 };
 
@@ -61,6 +67,9 @@ const SimulationBar = ({
   rapidRate,
   progress,
   line,
+  notice,
+  hasEvents,
+  pauseAtStops,
   onPlay,
   onPause,
   onRestart,
@@ -69,6 +78,7 @@ const SimulationBar = ({
   onSeek,
   onSpeed,
   onRapidRate,
+  onPauseAtStops,
   onClose,
 }: Props) => {
   const [compactControls, setCompactControls] = useState(false);
@@ -89,6 +99,18 @@ const SimulationBar = ({
   }, []);
 
   return <div className="simulationBar" ref={simulationBarRef}>
+    {notice && (
+      <div
+        className={`simulationNotice${notice.paused ? " simulationNoticeStop" : ""}`}
+        role="status"
+        aria-live="polite"
+      >
+        <span aria-hidden="true">{notice.paused ? "\u23F8" : "\u2709"}</span>
+        <span className="simulationNoticeText">{notice.text}</span>
+        <span className="simulationNoticeLine">line {notice.line}</span>
+        {notice.paused && <span className="simulationNoticeHint">Press Play to continue</span>}
+      </div>
+    )}
     <div className="simulationBarRow">
       <ButtonGroup>
         <Button variant="outline-secondary" aria-label="Restart" title="Restart" onClick={onRestart}>
@@ -135,15 +157,18 @@ const SimulationBar = ({
         )}
       </div>
 
-      {(realTime || compactControls) && (
+      {(realTime || compactControls || hasEvents) && (
         <SimulationSettings
           speed={speed}
           speeds={speeds}
           showSpeeds={compactControls}
           realTime={realTime}
           rapidRate={rapidRate}
+          hasEvents={hasEvents}
+          pauseAtStops={pauseAtStops}
           onSpeed={onSpeed}
           onRapidRate={onRapidRate}
+          onPauseAtStops={onPauseAtStops}
         />
       )}
 

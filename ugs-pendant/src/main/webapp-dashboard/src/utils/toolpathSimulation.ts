@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { ToolpathPoint, ToolpathSegment } from "../services/visualizer";
+import type { ProgramEvent, ProgramEventKind } from "./programEvents";
 
 // Speed presets, as multiples of the simulation's own clock. With real timing
 // (the file carries feed rates) 1x is real time, so the presets climb steeply -
@@ -25,6 +26,21 @@ const MARKER_COLOR = "#ff7a1a";
 const ZERO_POINT: ToolpathPoint = { x: 0, y: 0, z: 0 };
 
 export type SimulationColorFn = (segment: ToolpathSegment, index: number) => THREE.Color;
+
+// What the simulation is telling the person right now: an operator message
+// that just went by, or a stop (M0, tool change) it is waiting at.
+export type SimNotice = {
+  kind: ProgramEventKind;
+  text: string;
+  line: number;
+  // True while the playhead is held at a stop; Play carries on.
+  paused: boolean;
+};
+
+// How long a message that did not stop the playhead stays up (real seconds).
+const NOTICE_SECONDS = 5;
+
+type TimedEvent = { time: number; line: number; kind: ProgramEventKind; text: string };
 
 // Plays a toolpath back in program order: everything already "cut" is drawn
 // solid, everything still to come is drawn as a dim ghost, and the segment in
@@ -61,6 +77,17 @@ export class ToolpathSimulation {
   // Playhead time at the end of each run of segments sharing a lineNumber
   // (arcs are many segments per line), for stepping line by line.
   private lineEnds: number[] = [];
+  // The file's messages, stops and tool changes, and the playhead time each
+  // one falls at (the start of the first segment on or after its line).
+  private eventSource: ProgramEvent[] = [];
+  private events: TimedEvent[] = [];
+  // Index of the next event the playhead has yet to reach. Tracked by index
+  // (not by time) so several events at one spot - an M0 right before a tool
+  // change - are each handled once.
+  private nextEvent = 0;
+  private pauseAtStops = true;
+  private notice: SimNotice | null = null;
+  private noticeAge = 0;
   // With rapids hidden: visibleBefore[i] = how many non-rapid segments precede segment i.
   private visibleBefore: Uint32Array | null = null;
   private realTiming = false;
@@ -120,6 +147,32 @@ export class ToolpathSimulation {
 
   getElapsedSeconds() {
     return this.time;
+  }
+
+  // Whether the file has anything to announce (so the settings can offer
+  // the pause switch only when it matters).
+  hasEvents() {
+    return this.events.length > 0;
+  }
+
+  // The message or stop to show, or null. The same object until it changes.
+  getNotice() {
+    return this.notice;
+  }
+
+  // The file's messages, stops and tool changes (in file order). They apply to
+  // the toolpath currently loaded; a new toolpath clears them.
+  setEvents(events: ProgramEvent[]) {
+    this.eventSource = events;
+    this.resolveEvents();
+    this.notice = null;
+  }
+
+  // Whether playback holds at stops and tool changes (as the machine would)
+  // or plays straight through, still showing what they said.
+  setPauseAtStops(pause: boolean) {
+    this.pauseAtStops = pause;
+    if (!pause && this.notice?.paused) this.notice = { ...this.notice, paused: false };
   }
 
   // Where the simulated tool is now, in the file's own coordinates (the
@@ -187,6 +240,9 @@ export class ToolpathSimulation {
     this.colorFor = colorFor;
     this.playing = false;
     this.time = 0;
+    // The old file's messages don't belong to this one; the caller sends new ones.
+    this.eventSource = [];
+    this.notice = null;
     this.computeTimes();
     this.speed = this.realTiming ? this.defaultRealSpeed() : QUICK_SPEEDS[1];
     this.markDirty();
@@ -207,6 +263,7 @@ export class ToolpathSimulation {
     const fraction = this.getProgress();
     this.computeTimes();
     this.time = fraction * this.total();
+    this.syncEventCursor();
     this.renderedTime = -1;
     this.applyPlayhead();
   }
@@ -237,7 +294,23 @@ export class ToolpathSimulation {
   play() {
     if (!this.active || this.segments.length === 0) return;
     // Pressing play at the end starts over rather than doing nothing.
-    if (this.time >= this.total()) this.time = 0;
+    if (this.time >= this.total()) {
+      this.time = 0;
+      this.syncEventCursor();
+    }
+    // Carrying on from a stop dismisses it.
+    if (this.notice?.paused) this.notice = null;
+    // Starting from the top: a message ahead of the first move ("clamp the
+    // stock") would otherwise never be passed, so it is shown now. Stops here
+    // (the first tool being fetched) never hold the start.
+    if (this.time <= 0) {
+      const opening = this.events.filter((event) => event.time <= 0 && event.kind === "message");
+      const last = opening[opening.length - 1];
+      if (last) {
+        this.notice = { kind: last.kind, text: last.text, line: last.line, paused: false };
+        this.noticeAge = 0;
+      }
+    }
     this.playing = true;
   }
 
@@ -248,6 +321,8 @@ export class ToolpathSimulation {
   restart() {
     this.time = 0;
     this.playing = false;
+    this.notice = null;
+    this.syncEventCursor();
   }
 
   setSpeed(speed: number) {
@@ -256,6 +331,8 @@ export class ToolpathSimulation {
 
   seek(fraction: number) {
     this.time = Math.min(1, Math.max(0, fraction)) * this.total();
+    this.notice = null;
+    this.syncEventCursor();
   }
 
   // Jumps to the end of the next line (or the end of the job).
@@ -263,6 +340,8 @@ export class ToolpathSimulation {
     this.playing = false;
     const next = this.lineEnds.find((end) => end > this.time + 1e-9);
     this.time = next ?? this.total();
+    this.notice = null;
+    this.syncEventCursor();
   }
 
   // Jumps to the end of the previous line (or the very start).
@@ -274,6 +353,8 @@ export class ToolpathSimulation {
       previous = end;
     }
     this.time = previous;
+    this.notice = null;
+    this.syncEventCursor();
   }
 
   // Advances playback by real elapsed seconds and moves the visuals to match.
@@ -281,6 +362,12 @@ export class ToolpathSimulation {
   // own UI state only when it needs to.
   update(deltaSeconds: number) {
     if (!this.active) return false;
+    // A message that did not stop anything fades after a few seconds. Aged
+    // before this step's events, so one announced now starts fresh.
+    if (this.notice && !this.notice.paused) {
+      this.noticeAge += deltaSeconds;
+      if (this.noticeAge > NOTICE_SECONDS) this.notice = null;
+    }
     if (this.playing) {
       const total = this.total();
       const clockScale = this.realTiming ? 1 : total / BASE_DURATION_SECONDS;
@@ -289,6 +376,7 @@ export class ToolpathSimulation {
         this.time = total;
         this.playing = false;
       }
+      this.passEvents();
     }
     return this.applyPlayhead();
   }
@@ -304,6 +392,70 @@ export class ToolpathSimulation {
 
   private total() {
     return this.cumulative[this.cumulative.length - 1];
+  }
+
+  // Works out where in playback time each event falls: just before the first
+  // segment on or after its line (or at the very end when nothing follows it).
+  private resolveEvents() {
+    const segments = this.segments;
+    const total = this.total();
+    const timed: TimedEvent[] = this.eventSource.map((event) => {
+      let low = 0;
+      let high = segments.length;
+      while (low < high) {
+        const mid = (low + high) >> 1;
+        if (segments[mid].lineNumber >= event.line) high = mid;
+        else low = mid + 1;
+      }
+      return { time: low < segments.length ? this.cumulative[low] : total, line: event.line, kind: event.kind, text: event.text };
+    });
+    // Stable: events on the same line keep file order.
+    this.events = timed
+      .map((event, order) => ({ event, order }))
+      .sort((a, b) => a.event.time - b.event.time || a.order - b.order)
+      .map((entry) => entry.event);
+    this.syncEventCursor();
+  }
+
+  // Puts the event cursor at the first event the playhead has not reached
+  // (after a jump: seek, restart, a step, a new rate).
+  private syncEventCursor() {
+    const events = this.events;
+    let low = 0;
+    let high = events.length;
+    while (low < high) {
+      const mid = (low + high) >> 1;
+      if (events[mid].time > this.time) high = mid;
+      else low = mid + 1;
+    }
+    this.nextEvent = low;
+  }
+
+  // Reacts to the events the playhead has just reached: announces messages,
+  // and holds at a stop when asked to. Stops at the same spot (an M0 with a
+  // tool change right after it) are held at together and shown as one.
+  private passEvents() {
+    const events = this.events;
+    while (this.nextEvent < events.length && events[this.nextEvent].time <= this.time) {
+      const event = events[this.nextEvent++];
+      if (event.kind === "stop" && this.pauseAtStops) {
+        let text = event.text;
+        while (
+          this.nextEvent < events.length &&
+          events[this.nextEvent].kind === "stop" &&
+          events[this.nextEvent].time === event.time
+        ) {
+          text += `; ${events[this.nextEvent++].text}`;
+        }
+        // Hold exactly at the stop; Play carries on from here.
+        this.time = event.time;
+        this.playing = false;
+        this.notice = { kind: event.kind, text, line: event.line, paused: true };
+        return;
+      }
+      this.notice = { kind: event.kind, text: event.text, line: event.line, paused: false };
+      this.noticeAge = 0;
+    }
   }
 
   private defaultRealSpeed() {
@@ -343,6 +495,7 @@ export class ToolpathSimulation {
     });
     this.cumulative = cumulative;
     this.lineEnds = lineEnds;
+    this.resolveEvents();
   }
 
   // Number of segments fully drawn: the largest i with cumulative[i] <= time.

@@ -13,14 +13,17 @@ import { sendGcode } from "../services/machine";
 import {
   DEFAULT_RAPID_RATE_MM_PER_MIN,
   QUICK_SPEEDS,
+  SimNotice,
   SimulationColorFn,
   ToolpathSimulation,
 } from "../utils/toolpathSimulation";
 import { StockModel, StockStatus, IDLE_STOCK_STATUS } from "../utils/stockModel";
 import { readStockProfiles, StockProfiles, writeStockProfiles } from "../utils/stockSettingsStore";
 import { describeRapidHits } from "../utils/rapidWarning";
+import { mergeProgramEvents, ProgramEvent, scanProgramEvents, toolChangeEvents } from "../utils/programEvents";
 import {
   buildToolRows,
+  cutterSummary,
   cutterTable,
   EMPTY_SCAN,
   scanTools,
@@ -78,6 +81,8 @@ type SimUi = {
   totalSeconds: number;
   progress: number;
   line: number;
+  notice: SimNotice | null;
+  hasEvents: boolean;
   x: number;
   y: number;
   z: number;
@@ -93,6 +98,8 @@ const INITIAL_SIM_UI: SimUi = {
   totalSeconds: 0,
   progress: 0,
   line: 0,
+  notice: null,
+  hasEvents: false,
   x: 0,
   y: 0,
   z: 0,
@@ -110,6 +117,8 @@ const snapshotSim = (sim: ToolpathSimulation): SimUi => {
     totalSeconds: sim.getTotalSeconds(),
     progress: sim.getProgress(),
     line: sim.getCurrentLine(),
+    notice: sim.getNotice(),
+    hasEvents: sim.hasEvents(),
     x: position.x,
     y: position.y,
     z: position.z,
@@ -126,6 +135,8 @@ const sameSimUi = (a: SimUi, b: SimUi) =>
   a.totalSeconds === b.totalSeconds &&
   a.progress === b.progress &&
   a.line === b.line &&
+  a.notice === b.notice &&
+  a.hasEvents === b.hasEvents &&
   a.x === b.x &&
   a.y === b.y &&
   a.z === b.z &&
@@ -138,6 +149,16 @@ const VIEW_BUTTONS: { view: ViewPreset; label: string; face: "top" | "left" | "r
   { view: "bottom", label: "Bottom", face: "bottom" },
   { view: "3d", label: "3D", face: "all" },
 ];
+
+const PAUSE_AT_STOPS_STORAGE_KEY = "ugs.dashboard.simulation.pauseAtStops";
+// On by default (the machine would stop there too); only an explicit "false" turns it off.
+const readStoredPauseAtStops = () => {
+  try {
+    return window.localStorage.getItem(PAUSE_AT_STOPS_STORAGE_KEY) !== "false";
+  } catch {
+    return true;
+  }
+};
 
 const RAPID_RATE_STORAGE_KEY = "ugs.dashboard.simulation.rapidRate";
 // Wrapped because localStorage can be missing or throw (private windows, blocked
@@ -339,15 +360,19 @@ const Visualizer3D = () => {
   const [stockStatus, setStockStatus] = useState<StockStatus>(IDLE_STOCK_STATUS);
   // The tool changes read from the loaded file's text, for the toolpath fetch
   // (the `bounds` object) they belong to.
-  const [toolScan, setToolScan] = useState<{ forBounds: Bounds | null; scan: ToolScan }>({
+  const [toolScan, setToolScan] = useState<{ forBounds: Bounds | null; scan: ToolScan; events: ProgramEvent[] }>({
     forBounds: null,
     scan: EMPTY_SCAN,
+    events: [],
   });
   const toolLineColorsRef = useRef<ToolColorFn | null>(null);
   // The stock view hides the toolpath lines unless asked, so the carved result shows.
   const pathVisible = !stockOn || stockProfiles.showPath;
   const pathVisibleRef = useRef(true);
   pathVisibleRef.current = pathVisible;
+  const [pauseAtStops, setPauseAtStops] = useState(readStoredPauseAtStops);
+  const pauseAtStopsRef = useRef(pauseAtStops);
+  pauseAtStopsRef.current = pauseAtStops;
   const [rapidRate, setRapidRate] = useState(readStoredRapidRate);
   const rapidRateRef = useRef(rapidRate);
   rapidRateRef.current = rapidRate;
@@ -434,23 +459,25 @@ const Visualizer3D = () => {
     writeStockProfiles(stockProfiles);
   }, [stockProfiles]);
 
-  // Read the loaded file's tool changes once per toolpath fetch, only while
-  // the Stock view is on. The simulation waits for it (scanReady) so it starts
-  // once with the right cutters instead of twice.
+  // Read the loaded file's tool changes (and its messages and stops) once per
+  // toolpath fetch, only while the Stock view or the simulation is on. The stock
+  // simulation waits for it (scanReady) so it starts once with the right
+  // cutters instead of twice.
+  const simActive = simUi.active;
   useEffect(() => {
-    if (!stockOn || !bounds || toolScan.forBounds === bounds) return;
+    if (!(stockOn || simActive) || !bounds || toolScan.forBounds === bounds) return;
     let cancelled = false;
     getFileContent()
-      .then(scanTools)
-      .catch(() => EMPTY_SCAN)
-      .then((scan) => {
-        if (!cancelled) setToolScan({ forBounds: bounds, scan });
+      .then((text) => ({ scan: scanTools(text), events: scanProgramEvents(text) }))
+      .catch(() => ({ scan: EMPTY_SCAN, events: [] as ProgramEvent[] }))
+      .then(({ scan, events }) => {
+        if (!cancelled) setToolScan({ forBounds: bounds, scan, events });
       });
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockOn, bounds]);
+  }, [stockOn, simActive, bounds]);
   const scanReady = toolScan.forBounds === bounds;
   const scan = scanReady ? toolScan.scan : EMPTY_SCAN;
 
@@ -484,6 +511,17 @@ const Visualizer3D = () => {
     stockOn && stockIsRouter && stockProfiles.warnRapids && stockStatus.rapidCount > 0
       ? describeRapidHits(stockStatus.rapidCount, stockStatus.rapidFirst, segmentsRef.current)
       : null;
+  // The file's messages, stops and tool changes go to the simulation, which
+  // pauses (or just announces) as the playhead passes them. Tool changes read
+  // as "T2 (Ball nose 3 mm)" using the same table the stock view uses.
+  const programEvents = useMemo(() => {
+    if (!scanReady) return [];
+    const describe = (tool: number) => {
+      const row = toolRows.find((candidate) => candidate.tool === tool && candidate.inFile && !candidate.removed);
+      return row ? `T${tool} (${cutterSummary(row.cutter)})` : `T${tool}`;
+    };
+    return mergeProgramEvents(toolChangeEvents(scan.changes, describe), toolScan.events);
+  }, [scanReady, scan, toolRows, toolScan.events]);
   const tintByTool = stockIsRouter && stockProfiles.colorByTool && toolsInUse.length >= 2;
   const lineColorsOn = stockOn && stockProfiles.showPath && tintByTool;
   const toolLineColors = useMemo<ToolColorFn | null>(() => {
@@ -562,6 +600,22 @@ const Visualizer3D = () => {
     applyGridVisibilityRef.current();
     setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
   }, [cleanView]);
+
+  // The file's messages, stops and tool changes (see programEvents above).
+  useEffect(() => {
+    simRef.current?.setEvents(programEvents);
+    setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
+  }, [programEvents]);
+
+  useEffect(() => {
+    simRef.current?.setPauseAtStops(pauseAtStops);
+    setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
+    try {
+      window.localStorage.setItem(PAUSE_AT_STOPS_STORAGE_KEY, String(pauseAtStops));
+    } catch {
+      // Not persisting is fine - it just falls back to the default next time.
+    }
+  }, [pauseAtStops]);
 
   useEffect(() => {
     simRef.current?.setRapidRate(rapidRate);
@@ -1022,6 +1076,7 @@ const Visualizer3D = () => {
 
     const simulation = new ToolpathSimulation(scene);
     simulation.setRapidRate(rapidRateRef.current);
+    simulation.setPauseAtStops(pauseAtStopsRef.current);
     simulation.setShowRapids(!cleanViewRef.current);
     simRef.current = simulation;
 
@@ -1361,6 +1416,9 @@ const Visualizer3D = () => {
             rapidRate={rapidRate}
             progress={simUi.progress}
             line={simUi.line}
+            notice={simUi.notice}
+            hasEvents={simUi.hasEvents}
+            pauseAtStops={pauseAtStops}
             onPlay={() => simControl((sim) => sim.play())}
             onPause={() => simControl((sim) => sim.pause())}
             onRestart={() => simControl((sim) => sim.restart())}
@@ -1369,6 +1427,7 @@ const Visualizer3D = () => {
             onSeek={(fraction) => simControl((sim) => sim.seek(fraction))}
             onSpeed={(speed) => simControl((sim) => sim.setSpeed(speed))}
             onRapidRate={setRapidRate}
+            onPauseAtStops={setPauseAtStops}
             onClose={exitSim}
           />
         )}
