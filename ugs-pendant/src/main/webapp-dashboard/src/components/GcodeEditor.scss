@@ -415,6 +415,14 @@
 
 .gcodeEditorCodeMirror {
   height: 100%;
+  // CodeMirror gives its panels z-index 300. Without a stacking context of its own
+  // that competes with everything else on the page - the find panel was drawn over
+  // plugin windows (40-42), the stock settings and the pane dividers - so the editor
+  // is made its own stacking context and the 300 only orders things inside it.
+  isolation: isolate;
+  // Also the container the compact find panel rules below are keyed to.
+  container-type: inline-size;
+  container-name: gcodeEditorBox;
 
   // Marks lines that won't actually run next - already sent during a job,
   // or skipped by an armed "run from" line (see dimThroughField).
@@ -444,46 +452,91 @@
     border-color: var(--dashboard-border-strong);
   }
 
+  // Always two rows, whatever the pane's width: find on the first (the field takes
+  // the slack, then the match count, previous / next / all and close), replace on
+  // the second (a modest field, Replace, Replace all, then the Aa / .* / W option
+  // toggles). CodeMirror's panel is one flat list of children with a <br> between
+  // the rows, so the rows are made with `order` and a full-width break. Every
+  // fixed-size item is small and the two fields can shrink to nothing (flex-basis
+  // 0, min-width 0), so a row never has a reason to wrap onto a third line.
   .cm-search {
     position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 6px 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 6px 8px;
+    font-size: 0.85rem;
 
-    // Find controls on the first row, replace controls on the second.
-    // CodeMirror separates them with a <br>, which a flex container ignores,
-    // so the break is made explicit: everything defaults to order 1, the
-    // replace field/buttons are order 5, and the full-width ::after at order 4
-    // sits between them.
     > * {
       order: 1;
-    }
-
-    input[name="replace"],
-    button[name="replace"],
-    button[name="replaceAll"] {
-      order: 5;
     }
 
     br {
       display: none;
     }
 
+    // "Select all matches" is hidden: it needs multiple selections (not enabled in this editor), so
+    // it did nothing visible. Replace all and the match highlighting cover what it was for.
+    button[name="select"] {
+      display: none;
+    }
+
+    // First row.
+    input[name="search"] {
+      order: 1;
+      flex: 1 1 0;
+      min-width: 0;
+    }
+
+    .cm-searchCount {
+      order: 2;
+    }
+
+    button[name="prev"] {
+      order: 3;
+    }
+
+    button[name="next"] {
+      order: 4;
+    }
+
+    &.cm-panel button[name="close"] {
+      order: 6;
+    }
+
     &::after {
       content: "";
-      order: 4;
+      order: 7;
       flex-basis: 100%;
       height: 0;
     }
 
+    // Second row.
+    // Zero basis (so it never counts toward wrapping) that grows into the slack, up to a modest size.
+    input[name="replace"] {
+      order: 8;
+      flex: 1 1 0;
+      max-width: 200px;
+      min-width: 0;
+    }
+
+    button[name="replace"] {
+      order: 9;
+    }
+
+    button[name="replaceAll"] {
+      order: 10;
+    }
+
+    label {
+      order: 11;
+    }
+
     .cm-textfield {
-      flex: 1 1 150px;
-      min-width: 120px;
-      min-height: 34px;
+      min-height: 30px;
       margin: 0;
-      padding: 4px 8px;
+      padding: 2px 8px;
       border: 1px solid var(--dashboard-border-strong);
       border-radius: 4px;
       background: var(--dashboard-surface);
@@ -497,15 +550,20 @@
     }
 
     .cm-button {
-      min-height: 34px;
+      flex: 0 0 auto;
+      min-width: 32px;
+      min-height: 30px;
       margin: 0;
-      padding: 4px 12px;
+      padding: 2px 8px;
       border: 1px solid var(--dashboard-border-strong);
       border-radius: 4px;
       background: var(--dashboard-surface-raised);
       background-image: none;
       color: var(--dashboard-text);
+      font-size: 0.8rem;
+      line-height: 1.2;
       text-transform: none;
+      white-space: nowrap;
       cursor: pointer;
 
       &:hover {
@@ -513,34 +571,75 @@
       }
     }
 
-    label {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      margin: 0;
-      color: var(--dashboard-text-muted);
-      font-size: 0.85rem;
-      white-space: nowrap;
-      cursor: pointer;
+    button[name="prev"],
+    button[name="next"] {
+      font-size: 1rem;
     }
 
-    // Sits at the end of the find row as a normal flex item. It used to be
-    // absolutely positioned in the corner, where the last checkbox label
-    // ("Whole word") ran underneath it. Qualified with .cm-panel because
-    // CodeMirror's own rule for this button is more specific than a plain
-    // .cm-search one and would otherwise win.
-    &.cm-panel button[name="close"] {
-      position: static;
-      order: 1;
+    // The Aa / .* / W options: CodeMirror's checkbox labels drawn as small toggle
+    // buttons (the real checkbox is stretched over the label, invisible, so a tap
+    // anywhere on it works and it keeps its keyboard focus).
+    label {
+      position: relative;
+      display: inline-flex;
       flex: 0 0 auto;
-      margin: 0 0 0 auto;
-      width: 34px;
-      height: 34px;
+      align-items: center;
+      justify-content: center;
+      min-width: 32px;
+      min-height: 30px;
+      margin: 0;
+      padding: 0 8px;
       border: 1px solid var(--dashboard-border-strong);
       border-radius: 4px;
       background: var(--dashboard-surface-raised);
       color: var(--dashboard-text);
-      font-size: 1.25rem;
+      font-family: var(--bs-font-monospace, monospace);
+      font-size: 0.8rem;
+      white-space: nowrap;
+      cursor: pointer;
+      user-select: none;
+
+      input[type="checkbox"] {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        opacity: 0;
+        cursor: pointer;
+      }
+
+      &:hover {
+        border-color: var(--dashboard-text-muted);
+      }
+
+      &:has(input:checked) {
+        border-color: var(--dashboard-accent);
+        background: var(--dashboard-accent);
+        color: var(--dashboard-bg);
+      }
+
+      &:has(input:focus-visible) {
+        outline: 2px solid var(--dashboard-accent);
+        outline-offset: 1px;
+      }
+    }
+
+    // Sits at the end of the find row as a normal flex item. Qualified with
+    // .cm-panel because CodeMirror's own rule for this button is more specific
+    // than a plain .cm-search one and would otherwise win.
+    &.cm-panel button[name="close"] {
+      position: static;
+      flex: 0 0 auto;
+      margin: 0;
+      width: 32px;
+      height: 30px;
+      padding: 0;
+      border: 1px solid var(--dashboard-border-strong);
+      border-radius: 4px;
+      background: var(--dashboard-surface-raised);
+      color: var(--dashboard-text);
+      font-size: 1.15rem;
       line-height: 1;
       cursor: pointer;
 
@@ -552,10 +651,13 @@
 
   // "12/345" (see searchCountPlugin in GcodeEditor.tsx)
   .cm-searchCount {
-    flex: 0 0 auto;
-    min-width: 6ch;
+    flex: 0 1 auto;
+    min-width: 3ch;
+    max-width: 11ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--dashboard-text-muted);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     font-variant-numeric: tabular-nums;
     text-align: center;
     white-space: nowrap;
@@ -576,20 +678,49 @@
     outline-color: var(--dashboard-accent);
   }
 
+  // Fingers: 44px tall controls. Widths stay modest so each row still fits a narrow pane.
   @media (any-pointer: coarse) {
     .cm-search .cm-textfield,
-    .cm-search .cm-button {
+    .cm-search .cm-button,
+    .cm-search label {
       min-height: 44px;
+    }
+
+    .cm-search .cm-button,
+    .cm-search label {
+      min-width: 40px;
     }
 
     .cm-search.cm-panel button[name="close"] {
       width: 44px;
       height: 44px;
     }
+  }
 
-    .cm-search input[type="checkbox"] {
-      width: 20px;
-      height: 20px;
+  // A narrow editor (a split pane, a phone): Replace all shrinks to "All" and the
+  // buttons give up a little padding, so the replace field keeps some room and the
+  // panel stays on its two rows. Keyed to the editor's own width (the container
+  // this block is declared on), not the viewport's.
+  @container gcodeEditorBox (max-width: 440px) {
+    .cm-search {
+      gap: 4px;
+      padding: 6px;
+    }
+
+    .cm-search .cm-button,
+    .cm-search label {
+      min-width: 30px;
+      padding-left: 6px;
+      padding-right: 6px;
+    }
+
+    .cm-search button[name="replaceAll"] {
+      font-size: 0;
+
+      &::before {
+        content: "All";
+        font-size: 0.8rem;
+      }
     }
   }
 

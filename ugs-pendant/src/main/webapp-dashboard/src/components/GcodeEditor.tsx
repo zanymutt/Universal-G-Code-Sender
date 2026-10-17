@@ -13,6 +13,7 @@ import {
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import {
   getSearchQuery,
+  closeSearchPanel,
   openSearchPanel,
   search,
   searchKeymap,
@@ -165,6 +166,33 @@ function* matchRanges(cursor: Iterator<{ from: number; to: number }>) {
   for (let result = cursor.next(); !result.done; result = cursor.next()) yield result.value;
 }
 
+// The find panel's buttons are drawn with arrows and short labels to fit a narrow pane, so each
+// one is given its full name as a tooltip and for screen readers.
+const PANEL_BUTTON_NAMES: Record<string, string> = {
+  next: "Next match (Enter)",
+  prev: "Previous match (Shift+Enter)",
+  replace: "Replace this match",
+  replaceAll: "Replace all matches",
+  close: "Close (Esc)",
+};
+const PANEL_OPTION_NAMES: Record<string, string> = {
+  case: "Match case",
+  re: "Regular expression",
+  word: "Whole word",
+};
+const nameControls = (panel: HTMLElement) => {
+  panel.querySelectorAll<HTMLElement>("button[name]").forEach((button) => {
+    const name = PANEL_BUTTON_NAMES[button.getAttribute("name") ?? ""];
+    if (!name) return;
+    button.title = name;
+    button.setAttribute("aria-label", name);
+  });
+  panel.querySelectorAll<HTMLElement>("label").forEach((label) => {
+    const name = PANEL_OPTION_NAMES[label.querySelector("input")?.getAttribute("name") ?? ""];
+    if (name) label.title = name;
+  });
+};
+
 const searchCountPlugin = ViewPlugin.fromClass(
   class {
     private timer: number | undefined;
@@ -187,6 +215,7 @@ const searchCountPlugin = ViewPlugin.fromClass(
     private render() {
       const panel = this.view.dom.querySelector<HTMLElement>(".cm-search");
       if (!panel) return;
+      nameControls(panel);
       let element = panel.querySelector<HTMLElement>(".cm-searchCount");
       if (!element) {
         element = document.createElement("span");
@@ -200,7 +229,8 @@ const searchCountPlugin = ViewPlugin.fromClass(
         query.search && query.valid
           ? countMatches(matchRanges(query.getCursor(state)), state.selection.main)
           : null;
-      const label = formatMatchCount(count, query.valid);
+      // Nothing typed yet is not an invalid search: show no count at all.
+      const label = query.search ? formatMatchCount(count, query.valid) : { text: "", state: "empty" };
       element.textContent = label.text;
       element.dataset.state = label.state;
       element.title = label.state === "found" ? "Current match / total matches" : "";
@@ -397,6 +427,8 @@ const GcodeEditor = () => {
   const [cursorLine, setCursorLine] = useState(1);
   const [showRunFromConfirm, setShowRunFromConfirm] = useState(false);
   const [showReview, setShowReview] = useState(false);
+  // Whether CodeMirror's find / replace panel is open, so the toolbar's Find button can show it and toggle it.
+  const [findOpen, setFindOpen] = useState(false);
   const [review, setReview] = useState<GcodeReviewResult | null>(null);
   const [isReviewing, setIsReviewing] = useState(false);
   const [reviewError, setReviewError] = useState<string | null>(null);
@@ -477,13 +509,14 @@ const GcodeEditor = () => {
               // it doesn't fight the review panel and run controls below.
               search({ top: true }),
               searchCountPlugin,
+              // Short labels so the panel stays on two rows in a narrow pane; searchCountPlugin
+              // adds the full names as tooltips / aria-labels.
               EditorState.phrases.of({
-                next: "Next",
-                previous: "Previous",
-                all: "All",
-                "match case": "Match case",
-                regexp: "Regex",
-                "by word": "Whole word",
+                next: "\u2193",
+                previous: "\u2191",
+                "match case": "Aa",
+                regexp: ".*",
+                "by word": "W",
                 replace: "Replace",
                 "replace all": "Replace all",
                 close: "Close",
@@ -497,6 +530,9 @@ const GcodeEditor = () => {
               currentRunLineField,
               reviewMarksField,
               EditorView.updateListener.of((update) => {
+                if (searchPanelOpen(update.state) !== searchPanelOpen(update.startState)) {
+                  setFindOpen(searchPanelOpen(update.state));
+                }
                 if (update.docChanged) {
                   setDirty(true);
                   setReviewStale(true);
@@ -636,10 +672,12 @@ const GcodeEditor = () => {
     }
   };
 
+  // The Find button is a toggle: a second press closes the panel again.
   const handleFind = () => {
     const view = viewRef.current;
     if (!view) return;
-    openSearchPanel(view);
+    if (searchPanelOpen(view.state)) closeSearchPanel(view);
+    else openSearchPanel(view);
   };
 
   useEffect(() => {
@@ -1021,16 +1059,20 @@ const GcodeEditor = () => {
         <Button
           className="gcodeEditorFind"
           variant="outline-secondary"
+          active={findOpen}
+          aria-pressed={findOpen}
           onClick={handleFind}
-          title="Find and replace (Ctrl+F)"
+          title={findOpen ? "Close find and replace" : "Find and replace (Ctrl+F)"}
         >
           <FontAwesomeIcon icon={faMagnifyingGlass} /> <span className="gcodeEditorButtonLabel">Find</span>
         </Button>
         <Button
           className="gcodeEditorReview"
           variant="outline-secondary"
-          onClick={handleReview}
-          title="Review the current editor contents for parser findings"
+          active={showReview}
+          aria-pressed={showReview}
+          onClick={showReview ? () => setShowReview(false) : handleReview}
+          title={showReview ? "Close the review" : "Review the current editor contents for parser findings"}
         >
           <FontAwesomeIcon icon={faListCheck} /> <span className="gcodeEditorButtonLabel">Review</span>
         </Button>
