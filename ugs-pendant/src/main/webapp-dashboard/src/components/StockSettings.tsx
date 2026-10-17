@@ -11,7 +11,7 @@ import { StockStatus } from "../utils/stockModel";
 import { buildToolRows, SavedTools, ToolScan } from "../utils/toolTable";
 import CutterFields from "./CutterFields";
 import NumberField from "./StockNumberField";
-import ToolTable from "./ToolTable";
+import ToolEditorPanel from "./ToolEditorPanel";
 import "./StockSettings.scss";
 
 const POPOVER_WIDTH = 280;
@@ -31,11 +31,21 @@ type Props = {
 // transform) and measured by placePopover so it always fits on screen.
 const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) => {
   const [open, setOpen] = useState(false);
+  // The tool editor is a separate floating panel: it outlives the popover so
+  // tools can be edited while the carve is in view.
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolPanelRef = useRef<HTMLDivElement>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const settings = profiles.settings[profiles.process];
   const router = profiles.process === "router";
   const toolRows = buildToolRows(scan, profiles.tools, profiles.settings.router);
+  const toolNames = toolRows.filter((row) => !row.removed).map((row) => `T${row.tool}`);
+  const removedCount = toolRows.filter((row) => row.removed).length;
+  const toolSummary =
+    toolRows.length === 0
+      ? "No tool changes in this file."
+      : `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"}${toolNames.length > 0 ? `: ${toolNames.join(", ")}` : ""}${removedCount > 0 ? ` (${removedCount} removed)` : ""}`;
 
   const update = (patch: Partial<StockSettingsValue>) =>
     onChange({
@@ -75,7 +85,13 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
-      if (!popoverRef.current?.contains(target) && !toggleRef.current?.contains(target)) setOpen(false);
+      if (
+        !popoverRef.current?.contains(target) &&
+        !toggleRef.current?.contains(target) &&
+        !toolPanelRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -108,6 +124,17 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
       >
         <FontAwesomeIcon icon={faGear} />
       </Button>
+      {toolsOpen && router && (
+        <ToolEditorPanel
+          rows={toolRows}
+          saved={profiles.tools}
+          base={settings}
+          anchorRef={popoverRef}
+          panelRef={toolPanelRef}
+          onChange={(tools: SavedTools) => onChange({ ...profiles, tools })}
+          onClose={() => setToolsOpen(false)}
+        />
+      )}
       {open &&
         createPortal(
           <div
@@ -163,14 +190,20 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
               <>
                 <div className="stockSettingsHeading">Tools</div>
                 <div className="stockSettingsHint">
-                  Tools are read from the file&apos;s T words and M6. The cutter above is used for anything not listed.
+                  Read from the file&apos;s T words and M6. The cutter above is used for anything not listed.
                 </div>
-                <ToolTable
-                  rows={toolRows}
-                  saved={profiles.tools}
-                  base={settings}
-                  onChange={(tools: SavedTools) => onChange({ ...profiles, tools })}
-                />
+                <div className="stockSettingsToolsLine">
+                  <span>{toolSummary}</span>
+                  <Button
+                    size="sm"
+                    variant={toolsOpen ? "primary" : "outline-secondary"}
+                    aria-expanded={toolsOpen}
+                    aria-haspopup="dialog"
+                    onClick={() => setToolsOpen((value) => !value)}
+                  >
+                    Edit tools&hellip;
+                  </Button>
+                </div>
                 <Form.Check
                   type="switch"
                   id="stock-color-by-tool"

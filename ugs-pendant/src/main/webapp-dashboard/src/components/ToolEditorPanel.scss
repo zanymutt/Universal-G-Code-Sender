@@ -1,0 +1,250 @@
+// The tool editor: a floating, non-blocking panel (no backdrop) placed inline by
+// ToolEditorPanel.tsx (left/top/width/max-height), fixed inside .app. One above
+// the stock settings popover (60), still under nothing it needs to cover.
+.toolEditorPanel {
+  position: fixed;
+  z-index: 61;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  overscroll-behavior: contain;
+
+  .toolEditorHeader {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: none;
+    padding: 8px 8px 8px 12px;
+    border-bottom: 1px solid var(--dashboard-border);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+
+    &:active {
+      cursor: grabbing;
+    }
+
+    .btn {
+      flex: none;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 0;
+    }
+  }
+
+  .toolEditorHeaderHint {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    color: var(--dashboard-text-subtle);
+    font-size: 0.78rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  // The scrolling part, and the container the column/card switch is keyed to:
+  // the panel can be any width, so this is not a viewport query.
+  .toolEditorBody {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 8px 12px;
+    container-type: inline-size;
+    container-name: toolEditor;
+  }
+
+  .toolEditorEmpty {
+    padding: 8px 0;
+    color: var(--dashboard-text-subtle);
+    font-size: 0.85rem;
+  }
+
+  .toolEditorGrid {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  // Wide: one grid row per tool with the same columns as the header row.
+  // .toolEditorFields is display: contents, so its cells sit in those columns.
+  .toolEditorRow {
+    display: grid;
+    grid-template-columns: 112px minmax(140px, 1.6fr) repeat(4, minmax(64px, 1fr)) 72px;
+    align-items: center;
+    column-gap: 8px;
+    padding: 4px 6px;
+    border: 1px solid var(--dashboard-border);
+    border-radius: 8px;
+  }
+
+  .toolEditorColumns {
+    padding-block: 0;
+    border-color: transparent;
+    color: var(--dashboard-text-muted);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+
+  .toolEditorRowRemoved {
+    border-style: dashed;
+    color: var(--dashboard-text-subtle);
+  }
+
+  .toolEditorIdentity {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .toolEditorBadge {
+    padding: 1px 6px;
+    border: 1px solid var(--dashboard-border);
+    border-radius: 999px;
+    color: var(--dashboard-text-subtle);
+    font-size: 0.68rem;
+    white-space: nowrap;
+  }
+
+  .toolEditorSwatch {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--dashboard-border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  .toolEditorFields {
+    display: contents;
+
+    label {
+      display: block;
+      margin: 0;
+      min-width: 0;
+    }
+  }
+
+  .toolEditorRemovedNote {
+    grid-column: 2 / 7;
+    font-size: 0.85rem;
+  }
+
+  .toolEditorCellLabel {
+    display: none;
+    margin-bottom: 2px;
+    color: var(--dashboard-text-muted);
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  .toolEditorNotApplicable {
+    display: block;
+    padding: 0 8px;
+    color: var(--dashboard-text-subtle);
+  }
+
+  .toolEditorActions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+
+    .btn {
+      min-width: 32px;
+      min-height: 32px;
+      padding: 0;
+    }
+  }
+
+  .toolEditorFooter {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--dashboard-border);
+
+    .form-control {
+      flex: 0 1 150px;
+      min-width: 0;
+    }
+
+    .btn {
+      min-height: 31px;
+    }
+  }
+
+  .toolEditorFooterSpacer {
+    flex: 1 1 auto;
+  }
+
+  // Touch: 44px targets.
+  @media (any-pointer: coarse) {
+    .toolEditorHeader .btn,
+    .toolEditorActions .btn {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .toolEditorSwatch {
+      width: 44px;
+      height: 44px;
+    }
+
+    .toolEditorBody .form-control,
+    .toolEditorBody .form-select,
+    .toolEditorFooter .form-control,
+    .toolEditorFooter .btn {
+      min-height: 44px;
+    }
+  }
+}
+
+// Narrow panel: each tool becomes a card - identity and actions on the first
+// line, the cutter fields in two labeled columns under them. The column header
+// row is not needed then.
+@container toolEditor (max-width: 640px) {
+  .toolEditorPanel {
+    .toolEditorColumns {
+      display: none;
+    }
+
+    .toolEditorRow {
+      grid-template-columns: 1fr auto;
+      row-gap: 6px;
+    }
+
+    .toolEditorFields {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-row: 2;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 8px;
+    }
+
+    .toolEditorShapeColumn {
+      grid-column: 1 / -1;
+    }
+
+    .toolEditorCellLabel {
+      display: block;
+    }
+
+    .toolEditorRemovedNote {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+  }
+}
