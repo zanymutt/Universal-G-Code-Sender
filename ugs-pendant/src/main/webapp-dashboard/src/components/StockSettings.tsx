@@ -40,10 +40,12 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
   const settings = profiles.settings[profiles.process];
   const router = profiles.process === "router";
   const toolRows = buildToolRows(scan, profiles.tools, profiles.settings.router);
-  const toolNames = toolRows.filter((row) => !row.removed).map((row) => `T${row.tool}`);
-  const removedCount = toolRows.filter((row) => row.removed).length;
+  // The summary counts what this file uses; saved tools it doesn't mention stay out of it.
+  const fileRows = toolRows.filter((row) => row.inFile);
+  const toolNames = fileRows.filter((row) => !row.removed).map((row) => `T${row.tool}`);
+  const removedCount = fileRows.filter((row) => row.removed).length;
   const toolSummary =
-    toolRows.length === 0
+    fileRows.length === 0
       ? "No tool changes in this file."
       : `${toolNames.length} tool${toolNames.length === 1 ? "" : "s"}${toolNames.length > 0 ? `: ${toolNames.join(", ")}` : ""}${removedCount > 0 ? ` (${removedCount} removed)` : ""}`;
 

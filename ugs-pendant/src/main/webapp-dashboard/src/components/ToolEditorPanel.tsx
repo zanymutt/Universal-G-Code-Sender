@@ -85,12 +85,17 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState({ width: PANEL_WIDTH, maxHeight: 600 });
   const [newTool, setNewTool] = useState("");
+  // Tools saved from an earlier file but not named in this one do nothing to the
+  // carve, so they stay out of the way unless asked for (or just added).
+  const [showSaved, setShowSaved] = useState(false);
   const drag = useRef<{ pointer: number; x: number; y: number; left: number; top: number; scale: number } | null>(null);
 
   const parsed = newTool.trim() === "" ? null : Number(newTool);
   const valid = parsed !== null && Number.isInteger(parsed) && parsed >= 0 && parsed <= MAX_TOOL_NUMBER;
   const exists = valid && rows.some((row) => row.tool === parsed);
   const anySaved = Object.keys(saved).length > 0;
+  const savedOnlyCount = rows.filter((row) => !row.inFile).length;
+  const visibleRows = showSaved ? rows : rows.filter((row) => row.inFile);
 
   const viewportOf = (element: HTMLElement) => {
     const scale = layoutScale(element);
@@ -129,6 +134,7 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
   const add = () => {
     if (!valid || exists || parsed === null) return;
     onChange(addTool(saved, parsed, base));
+    setShowSaved(true);
     setNewTool("");
   };
 
@@ -193,10 +199,10 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
       </div>
 
       <div className="toolEditorBody">
-        {rows.length === 0 ? (
+        {visibleRows.length === 0 ? (
           <div className="toolEditorEmpty">
             This file has no tool changes, so everything is cut with the cutter in the settings. Add a tool number to
-            set one up ahead of time.
+            set one up ahead of time; it takes effect when a file uses it.
           </div>
         ) : (
           <div className="toolEditorGrid" role="table" aria-label="Tools">
@@ -215,7 +221,7 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
                 <span className="visually-hidden">Actions</span>
               </span>
             </div>
-            {rows.map((row) => {
+            {visibleRows.map((row) => {
               const { cutter } = row;
               const angled = cutter.shape === "v" || cutter.shape === "taperball";
               return (
@@ -356,6 +362,16 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
         )}
       </div>
 
+      {savedOnlyCount > 0 && (
+        <Form.Check
+          type="switch"
+          id="tool-editor-show-saved"
+          className="toolEditorShowSaved"
+          label={`Show ${savedOnlyCount} saved tool${savedOnlyCount === 1 ? "" : "s"} not in this file`}
+          checked={showSaved}
+          onChange={(event) => setShowSaved(event.target.checked)}
+        />
+      )}
       <div className="toolEditorFooter">
         <Form.Control
           type="number"

@@ -168,6 +168,13 @@
     }
   }
 
+  .toolEditorShowSaved {
+    flex: none;
+    padding: 6px 12px 6px 3.1em;
+    border-top: 1px solid var(--dashboard-border);
+    font-size: 0.85rem;
+  }
+
   .toolEditorFooter {
     display: flex;
     flex: none;
