@@ -68,6 +68,18 @@ Your plugin opens as a **floating, draggable, resizable window** on top of the d
 - Your plugin can still use `fetch`/WebSockets/etc. against the network freely - it's isolated from the *dashboard's* page, not from the network. Browser storage (`localStorage` and friends) is not available to an opaque-origin page; use `getSettings`/`saveSettings`.
 - **Downloads are blocked** - `<a download>` / `Blob` URLs inside the iframe do nothing. Use `downloadFile(filename, content)`.
 
+## Authoring tips
+
+- **Scroll your own page, not the dashboard.** `element.scrollIntoView()` also scrolls every ancestor, so
+  inside the iframe it moves the dashboard itself. Use `window.scrollTo` (or set a scroller's `scrollTop`).
+- **Stay crisp at any dashboard zoom.** The dashboard can be zoomed with a transform. Avoid rounded
+  `overflow:hidden` clips around scrolling or sticky content and avoid `opacity` on text-bearing controls
+  (fade with colour instead); both can rasterize blurry at a fractional zoom.
+- **Native `<select>` pop-ups can misplace under a zoomed dashboard.** Prefer segmented buttons, or an inline
+  list (`<select size="4">`).
+- **Size to the window.** Windows are resizable down to about 220 px wide; use media or container queries
+  and test narrow.
+
 ## Talking to the dashboard
 
 Everything goes through `postMessage`. Send a `fluid-request`, get back a `fluid-response` with the same `id`:

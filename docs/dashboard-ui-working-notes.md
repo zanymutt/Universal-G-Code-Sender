@@ -109,6 +109,19 @@ temp profile directory - the user's own Chrome may be open.
 - **The packaged-app build refuses to finish while UGS is running** (and a script that skips it is easy to mistake for success): check `tasklist | grep ugsplatform` first, and after a build grep the *current* `assets/index-*.js` and `.css` named by `resources/ugs-dashboard/index.html` for something unique to the change. The CSS minifier rewrites `max-width:850px` as `width<=850px`.
 - **Previewing the online demo** needs `vite.demo.config.ts`, not `sizing-preview.config.mjs`: `VITE_DEMO` is a compile-time literal in the normal config, so setting the environment variable does nothing there.
 - **Opening a minimized plugin chip, folding a section, a hold on a quick-layout box** are all pointer-driven: the preview pane's synthetic clicks work for them, but check touch sizing (`any-pointer: coarse`) by emulating the mobile preset.
+- **Plugin pages: don't call `element.scrollIntoView()`.** It scrolls every ancestor, so inside the
+  sandboxed iframe it moved the whole dashboard. Scroll the plugin's own page with `window.scrollTo`.
+- **Fuzzy text inside a plugin at a fractional dashboard zoom** came from a rounded `overflow:hidden`
+  clip around content that gets its own compositor layer (a scrolling list, sticky headers, anything
+  painted after one), plus `opacity` on disabled buttons. Square the clip, drop sticky/opacity and fade
+  with colour mixes instead. The in-app preview pane cannot show this - ask the user to look.
+- **Native `<select>` pop-ups misplace under dashboard zoom** inside a plugin (the browser draws them
+  outside the transformed page). Use segmented buttons or an inline `<select size=N>` list.
+- **Plugin examples can be generated.** `ugs-pendant/examples/thc` comes from
+  `tools/thc-workspaces.html` in the separate THC firmware repo via `tools/make-thc-plugin.py` - change
+  the source there and regenerate, don't hand-edit the example.
+- **The online demo's `Samples/` files are fetched on demand** (`src/demo/library`, `ensureLoaded` in
+  `demoMachine.ts`) - a new endpoint that reads file text must `await ensureLoaded(path)` first.
 - **Another tool also edits this repo** (the THC plugin under `ugs-pendant/examples/thc` has had edits not
   made in these sessions). Check `git status` for unfamiliar changes and don't commit them by accident.
 

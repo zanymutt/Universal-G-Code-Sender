@@ -40,15 +40,17 @@ then open **THC Control Panel** from Plugins.
   connected, or no telemetry for more than 3 s).
 
 The layout works down to the Dashboard's smallest plugin window (about 220 px
-wide). The theme and accent follow the Dashboard; the THC address is remembered
-in the plugin's saved settings.
+wide); on a wide window the Movement and Voltage charts sit beside the entries.
+The theme and accent follow the Dashboard; the THC address is remembered in the
+plugin's saved settings.
 
 ## Saving CSV files
 
 Plugin windows are sandboxed and cannot trigger browser downloads. **Save CSV**
-(datalog) and **Save settings.csv** first ask the Dashboard to save the file
-(`Fluid.downloadFile`); a Dashboard without that method instead shows the text
-in-page with a **Copy to clipboard** button to paste into a file.
+(datalog and test-run averages) and **Save settings.csv** ask the Dashboard to
+save the file (`Fluid.downloadFile`): in Chrome or Edge on `localhost` that is a
+normal Save As dialog, elsewhere an ordinary download. A Dashboard without that
+method shows the text in-page with a **Copy to clipboard** button instead.
 
 ## Files
 
@@ -56,5 +58,8 @@ in-page with a **Copy to clipboard** button to paste into a file.
 bridge shim, plus the optional `downloadFile` wrapper) and
 `thc-panel-icon.svg`.
 
-The shared logic is generated from the standalone `tools/thc-workspaces.html`
-in the THC firmware repo, which keeps working on its own as the bench fallback.
+The files are **generated** from the standalone `tools/thc-workspaces.html` in
+the THC firmware repo (`python tools/make-thc-plugin.py <thc-workspaces.html>
+<this folder> <sdk.js>`), which keeps working on its own as the bench fallback.
+Edit that page, regenerate, then copy this folder to
+`~/.ugs/dashboard-plugins/thc/` - don't hand-edit these files.

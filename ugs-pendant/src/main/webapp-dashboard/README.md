@@ -17,6 +17,14 @@ in memory and a reload starts over.
 - Plugins: Nesting and Rotate G-code are offered, copied from
   `ugs-pendant/examples/<id>` at build time (`DEMO_PLUGINS` in
   `vite.demo.config.ts`) - so they always match the repo. svg-to-gcode is left out.
+- Sample library: nine larger programs (GANESHA.gcode and eight router/laser/plasma
+  files, plus `mountains.nc`) live in `src/demo/library` and show up under
+  `Samples/` in the demo workspace. They are not bundled: `vite.demo.config.ts`
+  copies them to `dist-demo/samples` and lists them in `__DEMO_LIBRARY__`, and
+  `demoMachine.ts` fetches one the first time it is opened. The review test covers
+  this folder too (every sample must review clean).
+- Defaults to the dark theme with the green accent unless the visitor's browser
+  has a saved choice (localStorage is shared across `zanymutt.github.io`).
 - The demo code is compiled out of the normal build (`VITE_DEMO` is `"false"` in
   `vite.config.ts`).
 
