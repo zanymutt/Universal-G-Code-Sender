@@ -100,6 +100,27 @@ public class ToolChangeInterceptorTest {
     }
 
     @Test
+    public void matches_shouldNotMatchAnM6InAComment() {
+        ToolChangeInterceptor interceptor = new ToolChangeInterceptor(() -> true);
+
+        // A comment-only line keeps its text in the original command string.
+        assertThat(interceptor.matches(new GcodeCommand("", "( M6 tool change test - air only )", "", 1))).isFalse();
+        assertThat(interceptor.matches(new GcodeCommand("( T1 M6 - 1/4 endmill )"))).isFalse();
+        assertThat(interceptor.matches(new GcodeCommand("; M6 is next"))).isFalse();
+        assertThat(interceptor.matches(new GcodeCommand("(M6) G0 X1"))).isFalse();
+        assertThat(interceptor.matches(new GcodeCommand("G0 X1 (then M6 later"))).isFalse();
+    }
+
+    @Test
+    public void matches_shouldMatchAToolChangeThatHasAComment() {
+        ToolChangeInterceptor interceptor = new ToolChangeInterceptor(() -> true);
+
+        assertThat(interceptor.matches(new GcodeCommand("T1 M6 (change tool)"))).isTrue();
+        assertThat(interceptor.matches(new GcodeCommand("", "(flip) T1 M6 ; to the V-bit", "", 1))).isTrue();
+        assertThat(interceptor.matches(new GcodeCommand("M6 T2 (unterminated"))).isTrue();
+    }
+
+    @Test
     public void matches_shouldNotMatchWhenDisabled() {
         ToolChangeInterceptor interceptor = new ToolChangeInterceptor(() -> false);
 

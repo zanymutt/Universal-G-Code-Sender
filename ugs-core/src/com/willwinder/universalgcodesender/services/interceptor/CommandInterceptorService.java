@@ -114,6 +114,20 @@ public class CommandInterceptorService implements UGSEventListener {
     }
 
     /**
+     * @return the prompt the routine is currently waiting for the operator to answer, if any
+     */
+    public Optional<InterceptorPrompt> getCurrentPrompt() {
+        return Optional.ofNullable(currentPrompt);
+    }
+
+    /**
+     * @return the command that triggered the routine that is currently active, if any
+     */
+    public Optional<GcodeCommand> getTriggerCommand() {
+        return Optional.ofNullable(triggerCommand);
+    }
+
+    /**
      * Wraps the given stream so that interception can take place while it is being streamed. Call this before
      * queueing the stream to the controller. If the service is disabled the stream is returned unwrapped.
      *
@@ -179,11 +193,17 @@ public class CommandInterceptorService implements UGSEventListener {
 
             setState(InterceptorState.RESUMING);
             restoreState(controller, stateBeforeInterception);
-            activeReader.ungate();
-            controller.getCommunicator().queueStreamForComm(activeReader);
-            controller.getCommunicator().streamCommands();
 
+            // Interception is only considered while INACTIVE, and streamCommands() below keeps pulling commands
+            // from the stream until the controller's buffer is full - for a short file that is the rest of the
+            // file. So the service must already be INACTIVE when the stream is released, otherwise a tool change
+            // right after this one would be handed to the controller untouched. The stream is still gated until
+            // ungate(), so nothing flows before then.
+            InterceptingGcodeStreamReader reader = activeReader;
             setState(InterceptorState.INACTIVE);
+            reader.ungate();
+            controller.getCommunicator().queueStreamForComm(reader);
+            controller.getCommunicator().streamCommands();
         } catch (InterceptAbortedException e) {
             LOGGER.log(Level.INFO, "Interceptor routine aborted by operator");
             cancelStream(controller);

@@ -50,6 +50,10 @@ public class ToolChangeInterceptor implements CommandInterceptor {
     // part of e.g. a comment) and not followed by a digit (so M60, M61, ... are not treated as tool changes).
     // The word may be directly followed by another word such as a tool selection, as in "M6T1" or "M06T1".
     private static final Pattern TOOL_CHANGE_PATTERN = Pattern.compile("(?i)(?<![A-Z])M0?6(?![0-9])");
+    // A parenthesized comment (an unterminated one runs to the end of the line) or a ";" comment. The original
+    // command string of a comment-only line is the comment itself, so "( M6 tool change test )" must not
+    // be taken for a tool change.
+    private static final Pattern COMMENT_PATTERN = Pattern.compile("\\([^)]*\\)?|;.*");
     private static final Duration COMMAND_TIMEOUT = Duration.ofMinutes(2);
 
     private final BooleanSupplier enabled;
@@ -64,8 +68,12 @@ public class ToolChangeInterceptor implements CommandInterceptor {
             return false;
         }
 
-        return TOOL_CHANGE_PATTERN.matcher(command.getCommandString()).find()
-                || TOOL_CHANGE_PATTERN.matcher(command.getOriginalCommandString()).find();
+        return containsToolChange(command.getCommandString())
+                || containsToolChange(command.getOriginalCommandString());
+    }
+
+    private static boolean containsToolChange(String command) {
+        return command != null && TOOL_CHANGE_PATTERN.matcher(COMMENT_PATTERN.matcher(command).replaceAll(" ")).find();
     }
 
     @Override
