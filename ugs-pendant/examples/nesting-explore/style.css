@@ -11,6 +11,47 @@
   --plugin-text-muted: #aab5bf;
   --plugin-accent: #344ac2;
 }
+/* Colors the plugin draws or highlights with, beyond the dashboard palette above. Dark is the
+   default; applyTheme (app.js) sets data-theme="light" for the dashboard's light theme. Nothing here
+   is a fixed hex in the rules or the preview drawing any more, so both themes stay readable. */
+:root {
+  --plugin-hover: color-mix(in srgb, var(--plugin-accent) 22%, var(--plugin-surface-raised));
+  --plugin-warn: #ffd28a;
+  --plugin-ok: #8ee3a9;
+  --plugin-error: #ff7777;
+  --plugin-error-text: #ffcaca;
+  --plugin-preview-text: #e6eef9;
+  --plugin-cut: #91cf9e;
+  --plugin-cut-fill: rgba(145,207,158,.14);
+  --plugin-cut-thin: #5f8a69;
+  --plugin-selected: #6ce1f3;
+  --plugin-travel: #718196;
+  --plugin-mark: #ffbf69;
+  --plugin-end: #d99bff;
+  --plugin-cross: #ff7272;
+  --plugin-knife-cut: #64a9ff;
+  --plugin-knife-move: #ffa85c;
+  --plugin-shadow: #0008;
+}
+:root[data-theme="light"] {
+  --plugin-warn: #8a5300;
+  --plugin-ok: #1b6e3c;
+  --plugin-error: #c62828;
+  --plugin-error-text: #8f1d1d;
+  --plugin-preview-text: var(--plugin-text);
+  --plugin-cut: #2e7d4a;
+  --plugin-cut-fill: rgba(46,125,74,.14);
+  --plugin-cut-thin: #1f5d36;
+  --plugin-selected: #0b7285;
+  --plugin-travel: #6b7a8c;
+  --plugin-mark: #b86a00;
+  --plugin-end: #8e44ad;
+  --plugin-cross: #c62828;
+  --plugin-knife-cut: #1565c0;
+  --plugin-knife-move: #b85c00;
+  --plugin-shadow: #0003;
+  color-scheme: light;
+}
 :root { color-scheme: dark; font: 14px system-ui, sans-serif; background: var(--plugin-bg); color: var(--plugin-text); }
 * { box-sizing: border-box; }
 html { height: 100%; }
@@ -26,7 +67,7 @@ legend { color: var(--plugin-accent); padding: 0 6px; font-weight: 600; }
 label { display: flex; flex-direction: column; gap: 5px; margin-bottom: 10px; font-size: 13px; }
 input, select, button, textarea { font: inherit; border: 1px solid var(--plugin-border-strong); border-radius: 5px; background: var(--plugin-surface-raised); color: inherit; padding: 8px; min-width: 0; }
 button { cursor: pointer; min-height: 40px; }
-button:hover:enabled { border-color: var(--plugin-accent); background: #303f58; }
+button:hover:enabled { border-color: var(--plugin-accent); background: var(--plugin-hover); }
 button:disabled { opacity: .4; cursor: default; }
 button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--plugin-accent); outline-offset: 2px; }
 select { width: 100%; }
@@ -38,11 +79,11 @@ input[type=file] { width: 100%; font-size: 12px; }
 .pair input, .pair select { width: 100%; }
 .pair label > input, .pair label > select, .pair label > .selectButton { margin-top: auto; }
 .hint { font-size: 12px; color: var(--plugin-text-muted); line-height: 1.5; overflow-wrap: anywhere; }
-.hint.warn { color: #ffd28a; }
+.hint.warn { color: var(--plugin-warn); }
 .check { flex-direction: row; align-items: center; }
 .check input { width: 18px; height: 18px; }
 .info { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.5; margin-bottom: 12px; padding: 8px 10px; background: var(--plugin-surface); border-radius: 5px; font-variant-numeric: tabular-nums; }
-output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere; }
+output { display: block; color: var(--plugin-ok); margin: 8px 0; overflow-wrap: anywhere; }
 
 .importBar { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .importBar label { flex: 1; min-width: 180px; max-width: 400px; margin-bottom: 10px; }
@@ -79,14 +120,14 @@ output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere;
 #preview:active { cursor: grabbing; }
 #preview:focus { outline: none; }
 #preview.picking, #preview.picking:active { cursor: crosshair; }
-#preview text { fill: #e6eef9; }
+#preview text { fill: var(--plugin-preview-text); }
 .previewCard > .hint { flex: none; max-height: 22%; overflow: auto; margin-bottom: 0; }
 #divider { cursor: col-resize; touch-action: none; position: relative; outline-offset: -2px; }
 #divider:after { content: ""; position: absolute; left: 4px; right: 4px; top: 0; bottom: 0; border-radius: 4px; background: var(--plugin-border); }
 #divider:hover:after, #divider:focus-visible:after { background: var(--plugin-accent); }
 .codePane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
 #message { white-space: pre-wrap; overflow-wrap: anywhere; border-left: 3px solid var(--plugin-accent); padding: 10px; background: var(--plugin-surface-raised); flex: none; max-height: 25%; overflow: auto; margin: 0 0 12px; }
-#message.error { border-color: #ff7777; color: #ffcaca; }
+#message.error { border-color: var(--plugin-error); color: var(--plugin-error-text); }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; flex: none; max-height: 35%; overflow: auto; }
 .codeLabel { flex: 1; min-height: 0; margin: 0; }
 #output.code, textarea#output { width: 100%; flex: 1; min-height: 0; height: 0; resize: none; overflow: auto; font: 12px ui-monospace, monospace; }
@@ -110,9 +151,9 @@ output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere;
 .selectBacking { display: none !important; }
 .selectButton { width: 100%; text-align: left; padding-right: 26px; position: relative; white-space: normal; overflow-wrap: anywhere; min-height: 38px; }
 .selectButton:after { content: "▾"; position: absolute; right: 8px; top: 10px; }
-.selectMenu { position: fixed; z-index: 1000; overflow: auto; overscroll-behavior: contain; background: var(--plugin-surface-raised); border: 1px solid var(--plugin-accent); border-radius: 5px; box-shadow: 0 6px 20px #0008; padding: 3px; scrollbar-gutter: stable; }
+.selectMenu { position: fixed; z-index: 1000; overflow: auto; overscroll-behavior: contain; background: var(--plugin-surface-raised); border: 1px solid var(--plugin-accent); border-radius: 5px; box-shadow: 0 6px 20px var(--plugin-shadow); padding: 3px; scrollbar-gutter: stable; }
 .selectOption { padding: 9px 10px; border-radius: 3px; white-space: normal; overflow-wrap: anywhere; cursor: pointer; min-height: 36px; }
-.selectOption:hover, .selectOption.active { background: #344b70; }
+.selectOption:hover, .selectOption.active { background: var(--plugin-hover); }
 .selectOption[aria-selected=true] { font-weight: 600; color: var(--plugin-accent); }
 .selectOption[aria-disabled=true] { opacity: .4; cursor: default; }
 
@@ -124,4 +165,4 @@ output { display: block; color: #8ee3a9; margin: 8px 0; overflow-wrap: anywhere;
 .compare tbody tr:hover { background: var(--plugin-surface-raised, #222a33); }
 .compare tr.shown { outline: 1px solid var(--plugin-accent, #91cf9e); outline-offset: -1px; }
 .compare td.better { color: var(--plugin-accent, #91cf9e); font-weight: 600; }
-.compare td.worse { color: #ff7272; font-weight: 600; }
+.compare td.worse { color: var(--plugin-cross); font-weight: 600; }

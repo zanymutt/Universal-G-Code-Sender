@@ -102,3 +102,14 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: va
 @media (min-width: 851px) and (max-width: 1000px) {
   .app { grid-template-columns: minmax(200px, 250px) minmax(260px, 1fr); }
 }
+
+/* Dropdowns (dropdowns.js): the select is hidden and replaced by a button, and its list is drawn inside this
+   page, so it scales with the dashboard's zoom instead of the browser's native pop-up, which does not. */
+.selectBacking { display: none !important; }
+.selectButton { width: 100%; text-align: left; padding-right: 26px; position: relative; white-space: normal; overflow-wrap: anywhere; min-height: 38px; }
+.selectButton:after { content: "▾"; position: absolute; right: 8px; top: 10px; }
+.selectMenu { position: fixed; z-index: 1000; overflow: auto; overscroll-behavior: contain; background: var(--plugin-surface-raised); border: 1px solid var(--plugin-accent); border-radius: 5px; box-shadow: 0 6px 20px #0008; padding: 3px; scrollbar-gutter: stable; }
+.selectOption { padding: 9px 10px; border-radius: 3px; white-space: normal; overflow-wrap: anywhere; color: var(--plugin-text); cursor: pointer; min-height: 36px; }
+.selectOption:hover, .selectOption.active { background: color-mix(in srgb, var(--plugin-accent) 28%, var(--plugin-surface-raised)); }
+.selectOption[aria-selected=true] { font-weight: 600; color: var(--plugin-accent); }
+.selectOption[aria-disabled=true] { opacity: .4; cursor: default; }

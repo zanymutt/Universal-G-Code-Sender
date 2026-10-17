@@ -19,4 +19,6 @@ The preview shows cutting paths in green, rapid travel in dashed orange, and the
 
 The original G-code is retained until an explicit save action. Expression-bearing lines and controller/macro moves are kept unchanged; ordinary G0–G3 XY motion and I/J arc offsets are transformed together. Rapid G0 travel remains visible and is transformed with the program, but object-center and output-origin bounds use cutting motion only (G1/G2/G3), falling back to travel only when no cutting motion exists. The plugin does not automatically rewrite the first or last rapid move to `(0, 0)`; preserving those moves avoids changing the program's intended approach and park behavior.
 
+The Transform-around and Origin dropdowns are drawn by `dropdowns.js` (the same one the Nesting and SVG plugins use) instead of the browser's native `<select>` pop-up, which the browser draws outside the page and so misplaces when the dashboard is zoomed. The `<select>` elements stay in the page, hidden, as the source of truth: set one from code, then call `window.Dropdowns?.refresh()`.
+
 Run `node rotate.test.cjs` for the parser and transform checks. A physical machine run has not been validated; inspect the generated file and verify the selected work origin and machine clearance before cutting.

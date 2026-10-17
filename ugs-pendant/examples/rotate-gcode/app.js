@@ -101,6 +101,8 @@
     $("origin").value = state.settings.origin;
     $("customX").value = String(state.settings.customOrigin.x);
     $("customY").value = String(state.settings.customOrigin.y);
+    // The dropdown buttons show the selects' values; setting .value fires no event, so tell them.
+    window.Dropdowns?.refresh();
   }
 
   function formatNumber(value) {
@@ -263,6 +265,7 @@
     $("customX").value = formatNumber(sourcePoint[0]);
     $("customY").value = formatNumber(sourcePoint[1]);
     $("origin").value = "custom";
+    window.Dropdowns?.refresh();
     setPicking(false);
     requestTransform();
   }

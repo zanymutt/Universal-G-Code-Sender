@@ -285,11 +285,11 @@
     const size = fit([...frame, a]);
     const partSize = Math.max(...entries.map(entry => Math.max(entry.src.bbox.maxX - entry.src.bbox.minX, entry.src.bbox.maxY - entry.src.bbox.minY) * entry.src.mmPerUnit));
     const font = Math.max(partSize * 0.09, size * 0.012);
-    el('rect', { x: 0, y: -f.h, width: f.w, height: f.h, fill: 'none', stroke: '#718196', 'stroke-width': 1, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, svg);
+    el('rect', { x: 0, y: -f.h, width: f.w, height: f.h, fill: 'none', stroke: 'var(--plugin-travel)', 'stroke-width': 1, 'stroke-dasharray': '6 4', 'vector-effect': 'non-scaling-stroke' }, svg);
     // Travel: work zero -> first cut -> ... -> last cut -> work zero (the program's park move).
     let prev = a;
     const travel = el('g', {}, svg);
-    const dash = (from, to) => el('line', { x1: from.x, y1: -from.y, x2: to.x, y2: -to.y, stroke: '#ffbf69', 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.6, 'vector-effect': 'non-scaling-stroke' }, travel);
+    const dash = (from, to) => el('line', { x1: from.x, y1: -from.y, x2: to.x, y2: -to.y, stroke: 'var(--plugin-mark)', 'stroke-width': 1, 'stroke-dasharray': '4 4', opacity: 0.6, 'vector-effect': 'non-scaling-stroke' }, travel);
     for (const item of geo.sequence) { const start = outputPoint(item.start), end = outputPoint(item.end); dash(prev, start); prev = end; }
     dash(prev, a);
     for (const p of geo.parts) {
@@ -297,23 +297,23 @@
       for (const c of p.contours) {
         const points = c.pts.map(outputPoint);
         if (c.top) {
-          el('polygon', { points: pointList(points), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
+          el('polygon', { points: pointList(points), fill: 'var(--plugin-cut-fill)', stroke: 'var(--plugin-cut)', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, g);
         } else {
-          el('polyline', { points: pointList(points), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
+          el('polyline', { points: pointList(points), fill: 'none', stroke: 'var(--plugin-cut-thin)', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, g);
         }
       }
     }
     for (const item of geo.sequence) {
       const start = outputPoint(item.start);
       const g = el('g', { 'data-cut': item.seq }, svg);
-      el('circle', { cx: start.x, cy: -start.y, r: size * 0.005, fill: '#ffbf69' }, g);
+      el('circle', { cx: start.x, cy: -start.y, r: size * 0.005, fill: 'var(--plugin-mark)' }, g);
       const t = el('text', { x: start.x + font * 0.35, y: -start.y - font * 0.5, 'font-size': font, 'pointer-events': 'none' }, g);
       t.textContent = String(item.seq);
       const part = geo.parts[item.part];
       const file = entries[item.sourceIndex];
       el('title', {}, g).textContent = `Cut ${item.seq} · ${file?.name || 'file'} · ${item.internal ? 'inner' : 'outer'} cut · rotated ${fmt(part.angle, 2)}°`;
     }
-    el('path', { d: `M ${a.x - size * 0.02} ${-a.y} H ${a.x + size * 0.02} M ${a.x} ${-a.y - size * 0.02} V ${-a.y + size * 0.02}`, stroke: '#ff7272', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, svg);
+    el('path', { d: `M ${a.x - size * 0.02} ${-a.y} H ${a.x + size * 0.02} M ${a.x} ${-a.y - size * 0.02} V ${-a.y + size * 0.02}`, stroke: 'var(--plugin-cross)', 'stroke-width': 2, 'vector-effect': 'non-scaling-stroke' }, svg);
   }
   function drawPart(svg) {
     const gap = Math.max(...entries.map(entry => Math.max(entry.src.bbox.maxX - entry.src.bbox.minX, entry.src.bbox.maxY - entry.src.bbox.minY) * entry.src.mmPerUnit)) * 0.35;
@@ -332,10 +332,10 @@
     const size = fit(all);
     shapes.forEach(({ entry, contours, first }) => {
       contours.forEach(c => {
-        if (c.top) el('polygon', { points: pointList(c.pts), fill: 'rgba(145,207,158,.14)', stroke: '#91cf9e', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
-        else el('polyline', { points: pointList(c.pts), fill: 'none', stroke: '#5f8a69', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, svg);
+        if (c.top) el('polygon', { points: pointList(c.pts), fill: 'var(--plugin-cut-fill)', stroke: 'var(--plugin-cut)', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, svg);
+        else el('polyline', { points: pointList(c.pts), fill: 'none', stroke: 'var(--plugin-cut-thin)', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, svg);
       });
-      el('circle', { cx: first.x, cy: -first.y, r: size * 0.008, fill: '#ffbf69' }, svg);
+      el('circle', { cx: first.x, cy: -first.y, r: size * 0.008, fill: 'var(--plugin-mark)' }, svg);
     });
     $('summary').textContent = `${entries.length} file${entries.length === 1 ? '' : 's'} loaded · nest to generate the combined layout`;
   }
@@ -533,6 +533,8 @@
     root.setProperty('--plugin-text', theme.colors.text);
     root.setProperty('--plugin-text-muted', theme.colors.textMuted);
     root.setProperty('--plugin-accent', theme.colors.accent);
+    // Selects the light or dark set of the extra colors in style.css.
+    document.documentElement.dataset.theme = theme.mode === 'light' ? 'light' : 'dark';
   }
   if (window.parent !== window) {
     host('getTheme').then(applyTheme).catch(() => {});

@@ -152,6 +152,8 @@ document.documentElement.style.setProperty("--my-bg", theme.colors.background);
 
 Subscribe to `"theme"` (see `on(event, callback)` below) to keep a plugin window in sync if the person changes the theme or accent color while it's open. See the rotate-gcode example's `sdk.js`/`app.js` for a plugin that uses this to drive its own CSS custom properties.
 
+A plugin that colors things beyond these tokens (a drawing, a warning, a hover) should not hard-code them: they read fine on one theme and vanish on the other. Key a second set off `theme.mode` instead - set `data-theme` on `<html>` in the same place the `--plugin-*` tokens are set, and declare the extra colors once for dark and once under `:root[data-theme="light"]` (SVG attributes may use `var(--token)`). `nesting` and `svg-to-gcode` do this in `style.css` and `applyTheme`.
+
 ### `on(event, callback)` / `off(event, callback)`
 
 Subscribe to live events. Event names: `"status"` (a status snapshot, same shape as `getStatus()`, pushed whenever it changes), `"line"` (raw text the controller sends back over serial - `ok`, `error:9`, alarm text, everything, unfiltered), and `"theme"` (same shape as `getTheme()`'s return value, pushed whenever the person changes the dashboard's theme or accent color).
