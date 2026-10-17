@@ -237,16 +237,17 @@ test("changing the rapid rate keeps events at the same spot in the program", () 
   close(sim.getElapsedSeconds(), 10 + 1); // the cut, then the 100 mm rapid at 6000 mm/min
 });
 
-test("a message ahead of the first move is shown when playback starts, and a stop there does not hold it", () => {
+test("what the file says ahead of the first move (a message, the first tool change) is shown when playback starts, and never holds it", () => {
   const sim = playing(events());
   sim.setEvents([
     { line: 1, kind: "message", text: "Clamp the stock" },
-    { line: 1, kind: "stop", text: "Tool change: T1" },
+    { line: 1, kind: "stop", text: "Tool change: T1 (Flat 6 mm)" },
   ]);
   assert.equal(sim.getNotice(), null);
   sim.play();
-  assert.equal(sim.getNotice().text, "Clamp the stock");
+  assert.equal(sim.getNotice().text, "Clamp the stock; Tool change: T1 (Flat 6 mm)");
   assert.equal(sim.getNotice().paused, false);
+  assert.equal(sim.getNotice().kind, "message");
   sim.update(3);
   assert.equal(sim.isPlaying(), true);
   close(sim.getElapsedSeconds(), 3);
@@ -278,4 +279,14 @@ test("stepping back over a stop lets playback hold at it again", () => {
   sim.update(30);
   close(sim.getElapsedSeconds(), 10);
   assert.equal(sim.getNotice().paused, true);
+});
+
+test("a lone first tool change is announced at the start too, then fades without stopping playback", () => {
+  const sim = playing(events());
+  sim.setEvents([{ line: 1, kind: "stop", text: "Tool change: T1 (Flat 6 mm)" }]);
+  sim.play();
+  assert.equal(sim.getNotice().text, "Tool change: T1 (Flat 6 mm)");
+  sim.update(6);
+  assert.equal(sim.getNotice(), null);
+  assert.equal(sim.isPlaying(), true);
 });

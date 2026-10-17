@@ -300,14 +300,19 @@ export class ToolpathSimulation {
     }
     // Carrying on from a stop dismisses it.
     if (this.notice?.paused) this.notice = null;
-    // Starting from the top: a message ahead of the first move ("clamp the
-    // stock") would otherwise never be passed, so it is shown now. Stops here
-    // (the first tool being fetched) never hold the start.
+    // Starting from the top: whatever the file says ahead of the first move
+    // ("clamp the stock", the first tool change) would otherwise never be
+    // passed, so it is shown now, together. Nothing here holds the start: a
+    // simulation that opens with a pause every time would only be in the way.
     if (this.time <= 0) {
-      const opening = this.events.filter((event) => event.time <= 0 && event.kind === "message");
-      const last = opening[opening.length - 1];
-      if (last) {
-        this.notice = { kind: last.kind, text: last.text, line: last.line, paused: false };
+      const opening = this.events.filter((event) => event.time <= 0);
+      if (opening.length > 0) {
+        this.notice = {
+          kind: "message",
+          text: opening.map((event) => event.text).join("; "),
+          line: opening[0].line,
+          paused: false,
+        };
         this.noticeAge = 0;
       }
     }
