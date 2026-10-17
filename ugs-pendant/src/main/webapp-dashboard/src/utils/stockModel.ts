@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { packToolpath, StockGrid, StockSettings } from "./stockSimEngine";
+import { MAX_TOOL_SLOTS, packToolpath, StockGrid, StockSettings } from "./stockSimEngine";
 import type { StockWorkerRequest, StockWorkerResponse } from "./stockSim.worker";
 
 // The simulated block of material, drawn in the visualizer scene. The heightfield
@@ -63,6 +63,9 @@ const FRAGMENT_SHADER = /* glsl */ `
   uniform vec3 uSideColor;
   uniform vec3 uBurnColor;
   uniform vec3 uLight;
+  uniform sampler2D uOwner;
+  uniform float uTint;
+  uniform vec3 uToolColors[${MAX_TOOL_SLOTS + 1}];
   varying vec2 vCell;
   varying float vShade;
 
@@ -88,6 +91,11 @@ const FRAGMENT_SHADER = /* glsl */ `
       float cut = uTop - h;
       float burnt = uBurn * step(1e-4, cut) * (0.35 + 0.65 * clamp(cut / max(0.5 * (uTop - uBottom), 1e-6), 0.0, 1.0));
       base = mix(base, uBurnColor, burnt * 0.9);
+      // Several tools: tint what each one cut in that tool's color.
+      if (uTint > 0.5 && cut > 1e-4) {
+        int slot = int(texelFetch(uOwner, c, 0).r * 255.0 + 0.5);
+        if (slot > 0) base = mix(base, uToolColors[slot], 0.6);
+      }
       float light = 0.38 + 0.75 * max(dot(n, normalize(uLight)), 0.0);
       gl_FragColor = vec4(base * light, 1.0);
     #endif
@@ -110,6 +118,13 @@ export class StockModel {
   private inFlight = false;
   private sentKey = "";
   private heights: THREE.DataTexture | null = null;
+  private ownerTexture: THREE.DataTexture | null = null;
+  private uniforms: Record<string, THREE.IUniform> | null = null;
+  // Tool numbers in slot order (slot n + 1 = toolNumbers[n]); the colors to
+  // draw them in; and whether the cut is tinted at all.
+  private toolNumbers: number[] = [];
+  private toolColors: Record<number, string> = {};
+  private tint = false;
   private surface: THREE.Mesh | null = null;
   private skirt: THREE.Mesh | null = null;
   private status: StockStatus = IDLE_STOCK_STATUS;
@@ -132,7 +147,7 @@ export class StockModel {
 
   // Starts (or restarts) a simulation of this toolpath. Cheap to call again
   // for settings changes: the previous job is abandoned.
-  load(segments: ToolpathLike, settings: StockSettings) {
+  load(segments: ToolpathLike, settings: StockSettings, segmentTools?: Int32Array) {
     this.stopWorker();
     this.clearMeshes();
     this.grid = null;
@@ -154,12 +169,21 @@ export class StockModel {
     this.burn = settings.process === "laser" ? 1 : 0;
     this.inFlight = false;
     this.sentKey = "";
-    const packed = packToolpath(segments);
+    const packed = packToolpath(segments, segmentTools);
     this.setStatus({ ...IDLE_STOCK_STATUS, state: "computing", inches: packed.inches });
     worker.onmessage = (event: MessageEvent<StockWorkerResponse>) => this.receive(jobId, event.data);
     worker.onerror = () => this.setStatus({ ...this.status, state: "error" });
     const request: StockWorkerRequest = { type: "load", jobId, packed, settings };
-    worker.postMessage(request, [packed.coords.buffer, packed.rapid.buffer, packed.power.buffer]);
+    worker.postMessage(request, [packed.coords.buffer, packed.rapid.buffer, packed.power.buffer, packed.tool.buffer]);
+  }
+
+  // Which colors to draw each tool's cut in, and whether to tint at all. Only
+  // changes how the finished result is painted, so it never restarts the
+  // simulation.
+  setToolColors(colors: Record<number, string>, tint: boolean) {
+    this.toolColors = colors;
+    this.tint = tint;
+    this.applyToolColors();
   }
 
   // Shows the stock as it is after `segments` toolpath segments have run, plus
@@ -208,6 +232,7 @@ export class StockModel {
       case "ready":
         this.grid = message.grid;
         this.segmentCount = message.segmentCount;
+        this.toolNumbers = message.toolNumbers;
         this.buildMeshes(message.grid);
         this.setStatus({
           ...this.status,
@@ -225,7 +250,7 @@ export class StockModel {
         });
         break;
       case "heights":
-        this.applyHeights(message.heights);
+        this.applyHeights(message.heights, message.owner);
         if (message.done) {
           this.inFlight = false;
           this.setStatus({ ...this.status, state: "ready", progress: 1 });
@@ -236,11 +261,33 @@ export class StockModel {
     }
   }
 
-  private applyHeights(heights: Float32Array) {
+  private applyToolColors() {
+    const uniforms = this.uniforms;
+    if (!uniforms) return;
+    const colors = uniforms.uToolColors.value as THREE.Vector3[];
+    const scratch = new THREE.Color();
+    colors.forEach((slot) => slot.set(0, 0, 0));
+    // A tool with no color (deleted from the table) is drawn in the wood's own
+    // color, i.e. not tinted.
+    this.toolNumbers.forEach((tool, n) => {
+      const hex = this.toolColors[tool];
+      if (hex) scratch.set(hex);
+      else scratch.copy(TOP_COLOR);
+      colors[Math.min(n + 1, MAX_TOOL_SLOTS)].set(scratch.r, scratch.g, scratch.b);
+    });
+    uniforms.uTint.value = this.tint && this.toolNumbers.length >= 2 ? 1 : 0;
+  }
+
+  private applyHeights(heights: Float32Array, owner: Uint8Array | null) {
     const texture = this.heights;
     if (!texture) return;
     texture.image.data = heights;
     texture.needsUpdate = true;
+    const ownerTexture = this.ownerTexture;
+    if (owner && ownerTexture && (ownerTexture.image.data?.length ?? 0) === owner.length) {
+      ownerTexture.image.data = owner;
+      ownerTexture.needsUpdate = true;
+    }
     this.group.visible = this.enabled;
   }
 
@@ -255,6 +302,9 @@ export class StockModel {
     this.skirt = null;
     this.heights?.dispose();
     this.heights = null;
+    this.ownerTexture?.dispose();
+    this.ownerTexture = null;
+    this.uniforms = null;
   }
 
   private buildMeshes(grid: StockGrid) {
@@ -270,7 +320,24 @@ export class StockModel {
     texture.needsUpdate = true;
     this.heights = texture;
 
-    const uniforms = {
+    // Which tool cut each sample: a full-size map only when the file has two or
+    // more tools, else a single texel the shader never reads.
+    const tools = this.toolNumbers.length >= 2;
+    const ownerTexture = new THREE.DataTexture(
+      new Uint8Array(tools ? nx * ny : 1),
+      tools ? nx : 1,
+      tools ? ny : 1,
+      THREE.RedFormat,
+      THREE.UnsignedByteType
+    );
+    ownerTexture.minFilter = THREE.NearestFilter;
+    ownerTexture.magFilter = THREE.NearestFilter;
+    ownerTexture.generateMipmaps = false;
+    ownerTexture.unpackAlignment = 1;
+    ownerTexture.needsUpdate = true;
+    this.ownerTexture = ownerTexture;
+
+    const uniforms: Record<string, THREE.IUniform> = {
       uHeights: { value: texture },
       uOrigin: { value: new THREE.Vector2(ox, oy) },
       uCell: { value: cell },
@@ -283,7 +350,12 @@ export class StockModel {
       uSideColor: { value: new THREE.Vector3(SIDE_COLOR.r, SIDE_COLOR.g, SIDE_COLOR.b) },
       uBurnColor: { value: new THREE.Vector3(BURN_COLOR.r, BURN_COLOR.g, BURN_COLOR.b) },
       uLight: { value: new THREE.Vector3(-0.45, -0.55, 0.85) },
+      uOwner: { value: ownerTexture },
+      uTint: { value: 0 },
+      uToolColors: { value: Array.from({ length: MAX_TOOL_SLOTS + 1 }, () => new THREE.Vector3()) },
     };
+    this.uniforms = uniforms;
+    this.applyToolColors();
     // Surface: one vertex per sample, only (x, y) stored - the shader supplies z.
     const positions = new Float32Array(nx * ny * 2);
     for (let j = 0; j < ny; j++) {

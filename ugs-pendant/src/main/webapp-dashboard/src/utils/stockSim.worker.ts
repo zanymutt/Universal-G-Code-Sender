@@ -11,8 +11,10 @@ export type StockWorkerRequest =
 
 export type StockWorkerResponse =
   | { type: "empty"; jobId: number }
-  | { type: "ready"; jobId: number; grid: StockGrid; segmentCount: number }
-  | { type: "heights"; jobId: number; index: number; heights: Float32Array; done: boolean }
+  // toolNumbers[n] is the tool recorded as slot n + 1 in a "heights" owner map.
+  | { type: "ready"; jobId: number; grid: StockGrid; segmentCount: number; toolNumbers: number[] }
+  // owner is null when the file cuts with fewer than two tools.
+  | { type: "heights"; jobId: number; index: number; heights: Float32Array; owner: Uint8Array | null; done: boolean }
   | { type: "progress"; jobId: number; index: number; target: number };
 
 type WorkerScope = {
@@ -39,7 +41,12 @@ let pumping = false;
 const postHeights = (index: number, done: boolean) => {
   if (!simulator) return;
   const copy = new Float32Array(simulator.getHeights());
-  scope.postMessage({ type: "heights", jobId, index, heights: copy, done }, [copy.buffer]);
+  const owner = simulator.getOwner();
+  const ownerCopy = owner ? new Uint8Array(owner) : null;
+  scope.postMessage(
+    { type: "heights", jobId, index, heights: copy, owner: ownerCopy, done },
+    ownerCopy ? [copy.buffer, ownerCopy.buffer] : [copy.buffer]
+  );
 };
 
 const yieldToInbox = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -103,7 +110,13 @@ scope.onmessage = (event) => {
       return;
     }
     simulator = new StockSimulator(message.packed, message.settings, grid);
-    scope.postMessage({ type: "ready", jobId, grid, segmentCount: simulator.segmentCount });
+    scope.postMessage({
+      type: "ready",
+      jobId,
+      grid,
+      segmentCount: simulator.segmentCount,
+      toolNumbers: simulator.toolNumbers,
+    });
     return;
   }
   if (message.type === "seek" && message.jobId === jobId && simulator) {

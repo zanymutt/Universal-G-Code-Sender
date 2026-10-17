@@ -16,8 +16,7 @@ export type StockShape = "flat" | "ball" | "bullnose" | "v" | "taperball";
 
 // All lengths are in millimetres here whatever units the file uses; the
 // simulator converts to the file's own units.
-export type StockSettings = {
-  process: StockProcess;
+export type CutterSpec = {
   shape: StockShape;
   // Router: cutter diameter. Laser/plasma: kerf (the width of the cut).
   diameter: number;
@@ -29,6 +28,13 @@ export type StockSettings = {
   // V-bit / chamfer: diameter of the flat at the tip (0 = a sharp point).
   // Taper ball: diameter of the ball at the tip.
   tipDiameter: number;
+};
+
+export type StockSettings = CutterSpec & {
+  process: StockProcess;
+  // Router only: the cutter for each tool number in the file. A segment whose
+  // tool isn't listed (or that has none) is cut with the settings above.
+  tools?: Record<number, CutterSpec>;
   // Stock extends this far beyond the toolpath's own footprint, per side.
   margin: number;
   // 0 = automatic (router: deepest cut plus a little; laser/plasma: 3 mm).
@@ -82,6 +88,8 @@ export type PackedToolpath = {
   rapid: Uint8Array;
   // The S word in effect for the segment (laser power); 0 when none.
   power: Float32Array;
+  // The tool number in effect for the segment, -1 when none is chosen.
+  tool: Int32Array;
   inches: boolean;
 };
 
@@ -93,7 +101,7 @@ type SegmentLike = {
   inches?: boolean;
 };
 
-export const packToolpath = (segments: SegmentLike[]): PackedToolpath => {
+export const packToolpath = (segments: SegmentLike[], tools?: Int32Array): PackedToolpath => {
   const coords = new Float32Array(segments.length * 6);
   const rapid = new Uint8Array(segments.length);
   const power = new Float32Array(segments.length);
@@ -108,7 +116,8 @@ export const packToolpath = (segments: SegmentLike[]): PackedToolpath => {
     rapid[i] = segment.rapid ? 1 : 0;
     power[i] = segment.spindleSpeed && segment.spindleSpeed > 0 ? segment.spindleSpeed : 0;
   });
-  return { coords, rapid, power, inches: segments.length > 0 && segments[0].inches === true };
+  const tool = tools && tools.length === segments.length ? tools.slice() : new Int32Array(segments.length).fill(-1);
+  return { coords, rapid, power, tool, inches: segments.length > 0 && segments[0].inches === true };
 };
 
 export type StockGrid = {
@@ -154,16 +163,16 @@ type ToolModel = {
   fullPower: number;
 };
 
-const toolModel = (packed: PackedToolpath, settings: StockSettings): ToolModel => {
+const toolModel = (packed: PackedToolpath, settings: StockSettings, cutter: CutterSpec = settings): ToolModel => {
   const units = packed.inches ? 1 / MM_PER_INCH : 1;
   let maxPower = 0;
   for (let i = 0; i < packed.power.length; i++) if (packed.power[i] > maxPower) maxPower = packed.power[i];
-  const half = (Math.min(150, Math.max(10, settings.vAngle)) / 2) * (Math.PI / 180);
-  const radius = Math.max(settings.diameter, 0.01) * units * 0.5;
-  const tipRadius = Math.min(Math.max(settings.tipDiameter, 0) * units * 0.5, radius);
+  const half = (Math.min(150, Math.max(10, cutter.vAngle)) / 2) * (Math.PI / 180);
+  const radius = Math.max(cutter.diameter, 0.01) * units * 0.5;
+  const tipRadius = Math.min(Math.max(cutter.tipDiameter, 0) * units * 0.5, radius);
   let kind = KIND_FIXED; // Laser and plasma have no profile.
   if (settings.process === "router") {
-    kind = { flat: KIND_FLAT, ball: KIND_BALL, bullnose: KIND_BULLNOSE, v: KIND_V, taperball: KIND_TAPERBALL }[settings.shape];
+    kind = { flat: KIND_FLAT, ball: KIND_BALL, bullnose: KIND_BULLNOSE, v: KIND_V, taperball: KIND_TAPERBALL }[cutter.shape];
     // A tip ball as wide as the cutter leaves no taper: it is just a ball nose.
     if (kind === KIND_TAPERBALL && tipRadius >= radius) kind = KIND_BALL;
   }
@@ -171,13 +180,37 @@ const toolModel = (packed: PackedToolpath, settings: StockSettings): ToolModel =
     process: settings.process,
     kind,
     radius,
-    cornerRadius: Math.min(Math.max(settings.cornerRadius, 0) * units, radius),
+    cornerRadius: Math.min(Math.max(cutter.cornerRadius, 0) * units, radius),
     tipRadius,
     halfAngle: half,
     tanHalf: Math.tan(half),
     hasPower: maxPower > 0,
     fullPower: settings.fullPower > 0 ? settings.fullPower : maxPower > 0 ? maxPower : 1,
   };
+};
+
+// Most distinct tools whose cuts are told apart (slot 0 is "no tool of its
+// own"); tools past this share the last slot. Matches the palette in the
+// stock shader.
+export const MAX_TOOL_SLOTS = 31;
+
+// The cutter for every tool number the file actually cuts with, and the slot
+// each one is drawn in. Only router work has tools: a laser or plasma "tool"
+// is just the kerf.
+const toolModels = (packed: PackedToolpath, settings: StockSettings, base: ToolModel) => {
+  const models = new Map<number, ToolModel>();
+  const slots = new Map<number, number>();
+  const numbers: number[] = [];
+  if (settings.process !== "router") return { models, slots, numbers };
+  for (let i = 0; i < packed.tool.length; i++) {
+    const tool = packed.tool[i];
+    if (tool < 0 || slots.has(tool) || packed.rapid[i]) continue;
+    slots.set(tool, Math.min(slots.size + 1, MAX_TOOL_SLOTS));
+    numbers.push(tool);
+    const cutter = settings.tools?.[tool];
+    models.set(tool, cutter ? toolModel(packed, settings, cutter) : base);
+  }
+  return { models, slots, numbers };
 };
 
 const cuts = (tool: ToolModel, packed: PackedToolpath, i: number) => {
@@ -211,7 +244,9 @@ export const planStockGrid = (packed: PackedToolpath, settings: StockSettings): 
   }
   if (!Number.isFinite(minX)) return null;
 
-  const pad = Math.max(settings.margin, 0) * units + tool.radius;
+  let widest = tool.radius;
+  for (const model of toolModels(packed, settings, tool).models.values()) widest = Math.max(widest, model.radius);
+  const pad = Math.max(settings.margin, 0) * units + widest;
   const width = maxX - minX + 2 * pad;
   const height = maxY - minY + 2 * pad;
   const maxCells = Math.min(MAX_MAX_CELLS, Math.max(MIN_MAX_CELLS, settings.maxCells || DEFAULT_STOCK_SETTINGS.maxCells));
@@ -247,11 +282,21 @@ export class StockSimulator {
   readonly segmentCount: number;
   private readonly packed: PackedToolpath;
   private readonly tool: ToolModel;
+  // The cutter for each tool number the file cuts with (router only), and the
+  // slot that tool is recorded in `owner` under.
+  private readonly toolModels: Map<number, ToolModel>;
+  private readonly toolSlots: Map<number, number>;
+  // The tool numbers in slot order: slot n + 1 is toolNumbers[n].
+  readonly toolNumbers: number[];
   private readonly heights: Float32Array;
+  // Which tool last lowered each sample (0 = untouched or no tool of its own);
+  // only kept when the file cuts with two or more tools.
+  private readonly owner: Uint8Array | null;
   private index = 0;
   private readonly step: number;
   // snapshots[k] = the heights after k * step segments (k = 0 is the untouched block).
   private readonly snapshots: Float32Array[] = [];
+  private readonly ownerSnapshots: Uint8Array[] = [];
   // The in-progress segment that was stamped part-way on top of `index`, if any.
   // It's always a subset of what the full segment will stamp, so moving forward
   // needs no cleanup; only moving back (or less far into it) has to restore.
@@ -268,14 +313,25 @@ export class StockSimulator {
     // up to ~1.4 cells wide at worst).
     tool.radius = Math.max(tool.radius, grid.cell * 0.71);
     this.tool = tool;
+    const { models, slots, numbers } = toolModels(packed, settings, tool);
+    for (const model of models.values()) model.radius = Math.max(model.radius, grid.cell * 0.71);
+    this.toolModels = models;
+    this.toolSlots = slots;
+    this.toolNumbers = numbers;
     this.segmentCount = packed.rapid.length;
     this.heights = new Float32Array(grid.nx * grid.ny);
     this.heights.fill(grid.top);
-    const bytesPerSnapshot = this.heights.byteLength;
+    this.owner = numbers.length >= 2 ? new Uint8Array(grid.nx * grid.ny) : null;
+    const bytesPerSnapshot = this.heights.byteLength + (this.owner ? this.owner.byteLength : 0);
     const affordable = Math.max(1, Math.floor(MAX_SNAPSHOT_BYTES / bytesPerSnapshot));
     const snapshotCount = Math.min(MAX_SNAPSHOTS, affordable);
     this.step = Math.max(1, Math.ceil(this.segmentCount / snapshotCount));
+    this.pushSnapshot();
+  }
+
+  private pushSnapshot() {
     this.snapshots.push(this.heights.slice());
+    if (this.owner) this.ownerSnapshots.push(this.owner.slice());
   }
 
   // How many segments have been applied.
@@ -289,6 +345,12 @@ export class StockSimulator {
     return this.heights;
   }
 
+  // Which tool slot cut each sample, or null when the file has fewer than two
+  // tools. Same layout and lifetime as getHeights.
+  getOwner() {
+    return this.owner;
+  }
+
   // Moves the stock to the state after `target` whole segments, plus the first
   // `fraction` (0..1) of the segment that comes next - the one being cut now.
   seek(target: number, fraction = 0) {
@@ -300,6 +362,7 @@ export class StockSimulator {
       const known = this.snapshots.length - 1;
       const k = Math.min(Math.floor(to / this.step), known);
       this.heights.set(this.snapshots[k]);
+      if (this.owner) this.owner.set(this.ownerSnapshots[k]);
       this.index = k * this.step;
       this.partialIndex = -1;
     }
@@ -307,7 +370,7 @@ export class StockSimulator {
       this.stampSegment(this.index);
       this.index++;
       if (this.index % this.step === 0 && this.snapshots.length === this.index / this.step) {
-        this.snapshots.push(this.heights.slice());
+        this.pushSnapshot();
       }
     }
     if (part > 0) {
@@ -320,7 +383,11 @@ export class StockSimulator {
   }
 
   private stampSegment(i: number, fraction = 1) {
-    const { packed, tool, grid, heights } = this;
+    const { packed, grid, heights, owner } = this;
+    // The cutter in effect for this segment: its own tool's, else the default.
+    const toolNumber = packed.tool[i];
+    const tool = (toolNumber >= 0 ? this.toolModels.get(toolNumber) : undefined) ?? this.tool;
+    const slot = owner && toolNumber >= 0 ? (this.toolSlots.get(toolNumber) ?? 0) : 0;
     if (!cuts(tool, packed, i)) return;
     const o = i * 6;
     const x0 = packed.coords[o];
@@ -397,7 +464,10 @@ export class StockSimulator {
           if (level < bottom) level = bottom;
         }
         const k = row + ii;
-        if (level < heights[k]) heights[k] = level;
+        if (level < heights[k]) {
+          heights[k] = level;
+          if (owner) owner[k] = slot;
+        }
       }
     }
   }

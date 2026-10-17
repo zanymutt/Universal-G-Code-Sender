@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { Button, ButtonGroup } from "react-bootstrap";
@@ -8,6 +8,7 @@ import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
 import { uiActions } from "../store/uiSlice";
 import { getToolpath, ToolpathSegment } from "../services/visualizer";
+import { getFileContent } from "../services/fileContent";
 import { sendGcode } from "../services/machine";
 import {
   DEFAULT_RAPID_RATE_MM_PER_MIN,
@@ -17,6 +18,16 @@ import {
 } from "../utils/toolpathSimulation";
 import { StockModel, StockStatus, IDLE_STOCK_STATUS } from "../utils/stockModel";
 import { readStockProfiles, StockProfiles, writeStockProfiles } from "../utils/stockSettingsStore";
+import {
+  buildToolRows,
+  cutterTable,
+  EMPTY_SCAN,
+  scanTools,
+  segmentToolNumbers,
+  ToolScan,
+  toolColors,
+  toolsUsed,
+} from "../utils/toolTable";
 import SimulationBar from "./SimulationBar";
 import StockSettings from "./StockSettings";
 import ViewCubeIcon from "./ViewCubeIcon";
@@ -146,9 +157,20 @@ const readStoredRapidRate = () => {
 // scratch color for the ramp, so callers must copy the channels out right away
 // (both do) rather than hold on to it.
 const orderScratch = new THREE.Color();
-const segmentBaseColor = (segment: ToolpathSegment, index: number, count: number, byOrder: boolean) => {
+// The Stock view can also color cutting moves by the tool in effect (see
+// toolLineColors below); "color by order" still wins when it is on.
+type ToolColorFn = (index: number) => THREE.Color | null;
+const segmentBaseColor = (
+  segment: ToolpathSegment,
+  index: number,
+  count: number,
+  byOrder: boolean,
+  toolColor: ToolColorFn | null = null
+) => {
   if (segment.rapid) return RAPID_COLOR;
   if (byOrder) return orderScratch.setHSL(0.66 * (1 - index / Math.max(1, count - 1)), 0.85, 0.55);
+  const tool = toolColor ? toolColor(index) : null;
+  if (tool) return tool;
   return segment.arc ? ARC_COLOR : CUT_COLOR;
 };
 const ORDER_GRADIENT = "linear-gradient(90deg, hsl(238,85%,55%), hsl(180,85%,55%), hsl(119,85%,55%), hsl(59,85%,55%), hsl(0,85%,55%))";
@@ -240,7 +262,8 @@ const buildToolpathGeometry = (
   highlightLine: number,
   completedThroughLine: number,
   colorByOrder: boolean,
-  hideRapids: boolean
+  hideRapids: boolean,
+  toolColor: ToolColorFn | null = null
 ) => {
   const highlightCommand = highlightLine;
 
@@ -266,7 +289,7 @@ const buildToolpathGeometry = (
         ? HIGHLIGHT_COLOR
         : segment.lineNumber < completedThroughLine
           ? COMPLETED_COLOR
-          : segmentBaseColor(segment, i, segments.length, colorByOrder);
+          : segmentBaseColor(segment, i, segments.length, colorByOrder, toolColor);
     colors[offset] = color.r;
     colors[offset + 1] = color.g;
     colors[offset + 2] = color.b;
@@ -313,6 +336,13 @@ const Visualizer3D = () => {
   stockOnRef.current = stockOn;
   const [stockProfiles, setStockProfiles] = useState<StockProfiles>(readStockProfiles);
   const [stockStatus, setStockStatus] = useState<StockStatus>(IDLE_STOCK_STATUS);
+  // The tool changes read from the loaded file's text, for the toolpath fetch
+  // (the `bounds` object) they belong to.
+  const [toolScan, setToolScan] = useState<{ forBounds: Bounds | null; scan: ToolScan }>({
+    forBounds: null,
+    scan: EMPTY_SCAN,
+  });
+  const toolLineColorsRef = useRef<ToolColorFn | null>(null);
   // The stock view hides the toolpath lines unless asked, so the carved result shows.
   const pathVisible = !stockOn || stockProfiles.showPath;
   const pathVisibleRef = useRef(true);
@@ -396,6 +426,70 @@ const Visualizer3D = () => {
   // fetch here, since it's already set well before that file exists on disk.
   const toolpathVersion = useAppSelector((state) => state.ui.toolpathVersion);
 
+  const stockSettings = stockProfiles.settings[stockProfiles.process];
+  const stockIsRouter = stockProfiles.process === "router";
+
+  useEffect(() => {
+    writeStockProfiles(stockProfiles);
+  }, [stockProfiles]);
+
+  // Read the loaded file's tool changes once per toolpath fetch, only while
+  // the Stock view is on. The simulation waits for it (scanReady) so it starts
+  // once with the right cutters instead of twice.
+  useEffect(() => {
+    if (!stockOn || !bounds || toolScan.forBounds === bounds) return;
+    let cancelled = false;
+    getFileContent()
+      .then(scanTools)
+      .catch(() => EMPTY_SCAN)
+      .then((scan) => {
+        if (!cancelled) setToolScan({ forBounds: bounds, scan });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockOn, bounds]);
+  const scanReady = toolScan.forBounds === bounds;
+  const scan = scanReady ? toolScan.scan : EMPTY_SCAN;
+
+  // The tool in effect at each segment, the table the user sees (the file's
+  // tools plus their edits), and what the simulator needs from it.
+  const segmentTools = useMemo(
+    () => segmentToolNumbers(segmentsRef.current, scan.changes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scan, bounds]
+  );
+  const toolsInUse = useMemo(
+    () => toolsUsed(segmentTools, (index) => segmentsRef.current[index]?.rapid === true),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [segmentTools]
+  );
+  const toolRows = useMemo(
+    () => buildToolRows(scan, stockProfiles.tools, stockProfiles.settings.router),
+    [scan, stockProfiles.tools, stockProfiles.settings.router]
+  );
+  const toolSpecsKey = JSON.stringify(cutterTable(toolRows));
+  const toolColorsKey = JSON.stringify(toolColors(toolRows));
+  // Only the cutters go to the simulator: a color change must not restart it.
+  const engineSettings = useMemo(
+    () => (stockIsRouter ? { ...stockSettings, tools: JSON.parse(toolSpecsKey) } : stockSettings),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [stockSettings, stockIsRouter, toolSpecsKey]
+  );
+  const tintByTool = stockIsRouter && stockProfiles.colorByTool && toolsInUse.length >= 2;
+  const lineColorsOn = stockOn && stockProfiles.showPath && tintByTool;
+  const toolLineColors = useMemo<ToolColorFn | null>(() => {
+    if (!lineColorsOn) return null;
+    const colors = new Map<number, THREE.Color>();
+    for (const [tool, hex] of Object.entries(JSON.parse(toolColorsKey) as Record<string, string>)) {
+      colors.set(Number(tool), new THREE.Color(hex));
+    }
+    return (index) => (segmentTools.length === segmentsRef.current.length ? (colors.get(segmentTools[index]) ?? null) : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lineColorsOn, toolColorsKey, segmentTools]);
+  toolLineColorsRef.current = toolLineColors;
+
   // Disposes/replaces just the toolpath geometry in the scene, from whatever
   // segments are passed in - shared by the fetch effect (fresh segments) and
   // the recolor effect below (the cached, already-fetched ones), so neither
@@ -419,7 +513,8 @@ const Visualizer3D = () => {
       liveHighlightLine,
       completedThroughLine,
       colorByOrderRef.current,
-      cleanViewRef.current
+      cleanViewRef.current,
+      toolLineColorsRef.current
     );
     const material = new THREE.LineBasicMaterial({ vertexColors: true });
     const toolpathLines = new THREE.LineSegments(geometry, material);
@@ -439,20 +534,21 @@ const Visualizer3D = () => {
       applyToolpathGeometry(segmentsRef.current);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveHighlightLine, completedThroughLine, colorByOrder, cleanView]);
+  }, [liveHighlightLine, completedThroughLine, colorByOrder, cleanView, toolLineColors]);
 
   // One color function for both the main toolpath's base colors and the
   // simulation's copy, so "color by order" looks the same in either.
   const simColorFor = (order: boolean): SimulationColorFn => {
     const count = segmentsRef.current.length;
-    return (segment, index) => segmentBaseColor(segment, index, count, order);
+    const toolColor = toolLineColorsRef.current;
+    return (segment, index) => segmentBaseColor(segment, index, count, order, toolColor);
   };
 
   useEffect(() => {
     simRef.current?.setColorFor(simColorFor(colorByOrder));
     setSimUi((prev) => (simRef.current ? snapshotSim(simRef.current) : prev));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [colorByOrder]);
+  }, [colorByOrder, toolLineColors]);
 
   useEffect(() => {
     simRef.current?.setShowRapids(!cleanView);
@@ -470,11 +566,6 @@ const Visualizer3D = () => {
     }
   }, [rapidRate]);
 
-  const stockSettings = stockProfiles.settings[stockProfiles.process];
-
-  useEffect(() => {
-    writeStockProfiles(stockProfiles);
-  }, [stockProfiles]);
 
   // (Re)starts the stock simulation when it's switched on, its cutter/stock
   // settings change, or a different toolpath has loaded (bounds is set once
@@ -483,10 +574,18 @@ const Visualizer3D = () => {
     const stock = stockRef.current;
     if (!stock) return;
     stock.setEnabled(stockOn);
-    if (stockOn) stock.load(segmentsRef.current, stockSettings);
+    // Until the file's tools have been read, show nothing rather than a result
+    // for the wrong cutters.
+    if (stockOn) stock.load(scanReady ? segmentsRef.current : [], engineSettings, scanReady ? segmentTools : undefined);
     else setStockStatus(IDLE_STOCK_STATUS);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockOn, stockSettings, bounds]);
+  }, [stockOn, engineSettings, bounds, scanReady, segmentTools]);
+
+  // Tinting the cut only changes how the result is painted, so it never
+  // restarts the simulation.
+  useEffect(() => {
+    stockRef.current?.setToolColors(JSON.parse(toolColorsKey), tintByTool);
+  }, [toolColorsKey, tintByTool, stockOn]);
 
   // Which point in the job the material is shown at: the simulation's
   // playhead while it's up, the last completed line during a real run, and
@@ -1156,7 +1255,15 @@ const Visualizer3D = () => {
             <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faCube} /></span>
             <span className="visualizer3DButtonLabel">Stock</span>
           </Button>
-          {stockOn && <StockSettings profiles={stockProfiles} status={stockStatus} onChange={setStockProfiles} />}
+          {stockOn && (
+            <StockSettings
+              profiles={stockProfiles}
+              status={stockStatus}
+              scan={scan}
+              toolsUsed={toolsInUse.length}
+              onChange={setStockProfiles}
+            />
+          )}
           <Button
             variant={colorByOrder ? "primary" : "outline-primary"}
             disabled={!bounds}

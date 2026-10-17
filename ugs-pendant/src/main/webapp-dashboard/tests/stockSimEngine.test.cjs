@@ -6,8 +6,10 @@ const ts = require("typescript");
 const vm = require("node:vm");
 
 const source = fs.readFileSync(path.join(__dirname, "../src/utils/stockSimEngine.ts"), "utf8");
-const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-const sandbox = { exports: {}, Math, Float32Array, Uint8Array, Number, Infinity };
+const compiled = ts.transpileModule(source, {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+}).outputText;
+const sandbox = { exports: {}, Math, Float32Array, Uint8Array, Int32Array, Map, Number, Infinity };
 vm.runInNewContext(compiled, sandbox);
 const { DEFAULT_STOCK_SETTINGS, autoCellSize, packToolpath, planStockGrid, StockSimulator } = sandbox.exports;
 
@@ -253,4 +255,92 @@ test("the cell limit is configurable: more cells keep a finer grid on a big part
   assert.ok(large.nx * large.ny <= 8_000_000);
   assert.ok(large.cell < small.cell);
   assert.equal(small.coarsened, true);
+});
+
+const makeTools = (segments, tools, over = {}) => {
+  const packed = packToolpath(segments, new Int32Array(tools));
+  const s = settings(over);
+  const grid = planStockGrid(packed, s);
+  return { packed, grid, sim: grid && new StockSimulator(packed, s, grid) };
+};
+const ownerAt = (sim, x, y) => {
+  const g = sim.grid;
+  const i = Math.round((x - g.ox) / g.cell);
+  const j = Math.round((y - g.oy) / g.cell);
+  return sim.getOwner()[j * g.nx + i];
+};
+const FLAT2 = { shape: "flat", diameter: 2, vAngle: 60, cornerRadius: 1, tipDiameter: 0 };
+const FLAT6 = { shape: "flat", diameter: 6, vAngle: 60, cornerRadius: 1, tipDiameter: 0 };
+
+test("each tool cuts with its own cutter, and segments without a tool use the default", () => {
+  const { sim } = makeTools(
+    [seg(0, 0, -2, 20, 0, -2), seg(0, 20, -2, 20, 20, -2), seg(0, 40, -2, 20, 40, -2)],
+    [1, 2, -1],
+    { diameter: 4, cell: 0.25, thickness: 10, tools: { 1: FLAT2, 2: FLAT6 } }
+  );
+  sim.seek(3);
+  assert.equal(at(sim, 10, 0.9), -2); // tool 1: 2 mm wide
+  assert.equal(at(sim, 10, 1.6), 0);
+  assert.equal(at(sim, 10, 22.9), -2); // tool 2: 6 mm wide
+  assert.equal(at(sim, 10, 23.6), 0);
+  assert.equal(at(sim, 10, 41.9), -2); // no tool: the default 4 mm
+  assert.equal(at(sim, 10, 42.6), 0);
+});
+
+test("the stock grid is padded for the widest tool, not just the default cutter", () => {
+  const { grid } = makeTools([seg(0, 0, -2, 20, 0, -2), seg(0, 10, -2, 20, 10, -2)], [1, 2], {
+    diameter: 2,
+    margin: 0,
+    cell: 0.25,
+    tools: { 1: FLAT2, 2: { ...FLAT6, diameter: 10 } },
+  });
+  assert.ok(grid.ox <= -5 + 1e-9, `ox ${grid.ox}`);
+});
+
+test("the owner map records which tool cut each sample, and the last one to lower it wins", () => {
+  const { sim } = makeTools(
+    [seg(0, 0, -1, 20, 0, -1), seg(0, 0, -3, 20, 0, -3), seg(0, 10, -1, 20, 10, -1)],
+    [4, 9, 4],
+    { diameter: 2, cell: 0.25, thickness: 10, tools: {} }
+  );
+  assert.deepEqual(Array.from(sim.toolNumbers), [4, 9]);
+  sim.seek(3);
+  assert.equal(ownerAt(sim, 10, 0), 2); // tool 9 went deeper over tool 4's pass
+  assert.equal(ownerAt(sim, 10, 10), 1);
+  assert.equal(ownerAt(sim, 10, 5), 0); // never touched
+});
+
+test("one tool (or none) keeps no owner map", () => {
+  const { sim } = makeTools([seg(0, 0, -1, 20, 0, -1), seg(0, 5, -1, 20, 5, -1)], [3, 3], { cell: 0.25, thickness: 10 });
+  assert.equal(sim.getOwner(), null);
+  assert.deepEqual(Array.from(sim.toolNumbers), [3]);
+});
+
+test("seeking back restores the owner map with the heights", () => {
+  const segments = [];
+  const tools = [];
+  for (let n = 0; n < 40; n++) {
+    segments.push(seg(0, n * 3, -1, 10, n * 3, -1));
+    tools.push(n % 2 === 0 ? 1 : 2);
+  }
+  const { sim } = makeTools(segments, tools, { diameter: 2, cell: 0.5, thickness: 5, tools: {} });
+  sim.seek(40);
+  assert.equal(ownerAt(sim, 5, 117), 2);
+  sim.seek(10);
+  assert.equal(ownerAt(sim, 5, 117), 0);
+  assert.equal(ownerAt(sim, 5, 27), 2);
+  sim.seek(40);
+  assert.equal(ownerAt(sim, 5, 117), 2);
+});
+
+test("laser and plasma ignore tools entirely", () => {
+  const { sim } = makeTools([seg(0, 0, 0, 20, 0, 0), seg(0, 10, 0, 20, 10, 0)], [1, 2], {
+    process: "plasma",
+    diameter: 1,
+    cell: 0.25,
+    thickness: 3,
+    tools: { 1: FLAT6, 2: FLAT6 },
+  });
+  assert.equal(sim.getOwner(), null);
+  assert.equal(sim.toolNumbers.length, 0);
 });

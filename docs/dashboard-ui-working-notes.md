@@ -122,6 +122,7 @@ temp profile directory - the user's own Chrome may be open.
   the source there and regenerate, don't hand-edit the example.
 - **The online demo's `Samples/` files are fetched on demand** (`src/demo/library`, `ensureLoaded` in
   `demoMachine.ts`) - a new endpoint that reads file text must `await ensureLoaded(path)` first.
+- **The mock backend numbers toolpath segments differently from real UGS.** Real `ToolpathSegment.lineNumber` is the file's 1-based line (comments and blanks counted); `ugs-pendant/mock-backend/server.mjs` uses a 0-based count of non-blank, non-comment lines. Anything that maps segments to file lines (the stock tool table) is wrong in the mock - check it in the online demo build (`vite.demo.config.ts`) or real UGS. In the demo dev server (`vite --config vite.demo.config.ts`) the `Samples/` files are not served (they are copied at build time), so load one by importing it with `?raw` and POSTing it to `/api/v1/files/saveFileContentAs?filename=...` from the page.
 - **Another tool also edits this repo** (the THC plugin under `ugs-pendant/examples/thc` has had edits not
   made in these sessions). Check `git status` for unfamiliar changes and don't commit them by accident.
 

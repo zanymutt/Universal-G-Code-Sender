@@ -5,72 +5,37 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faGear } from "@fortawesome/free-solid-svg-icons";
 import { layoutRect, layoutScale } from "../utils/layoutRect";
 import { placePopover } from "../utils/placePopover";
-import {
-  autoCellSize,
-  StockProcess,
-  StockSettings as StockSettingsValue,
-  StockShape,
-} from "../utils/stockSimEngine";
+import { autoCellSize, StockProcess, StockSettings as StockSettingsValue } from "../utils/stockSimEngine";
 import { StockProfiles } from "../utils/stockSettingsStore";
 import { StockStatus } from "../utils/stockModel";
+import { buildToolRows, SavedTools, ToolScan } from "../utils/toolTable";
+import CutterFields from "./CutterFields";
+import NumberField from "./StockNumberField";
+import ToolTable from "./ToolTable";
 import "./StockSettings.scss";
 
 const POPOVER_WIDTH = 280;
 
-// Keeps its own text while typing so clearing the box to retype doesn't fight
-// the committed value; only valid numbers within range are committed upward.
-const NumberField = ({
-  label,
-  value,
-  min,
-  step,
-  hint,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  step: number;
-  hint?: string;
-  onChange: (value: number) => void;
-}) => {
-  const [text, setText] = useState(String(value));
-  useEffect(() => setText(String(value)), [value]);
-  return (
-    <Form.Group className="stockSettingsField">
-      <Form.Label>{label}</Form.Label>
-      <Form.Control
-        type="number"
-        inputMode="decimal"
-        min={min}
-        step={step}
-        value={text}
-        onChange={(event) => {
-          setText(event.target.value);
-          const next = Number(event.target.value);
-          if (event.target.value !== "" && Number.isFinite(next) && next >= min) onChange(next);
-        }}
-      />
-      {hint && <div className="stockSettingsHint">{hint}</div>}
-    </Form.Group>
-  );
-};
-
 type Props = {
   profiles: StockProfiles;
   status: StockStatus;
+  // The tool changes found in the loaded file, and how many distinct tools
+  // actually cut (the tool colors only matter with two or more).
+  scan: ToolScan;
+  toolsUsed: number;
   onChange: (profiles: StockProfiles) => void;
 };
 
 // The Stock view's cutter and stock settings. Same placement approach as
 // SimulationSettings: rendered into .app (inside the dashboard's zoom
 // transform) and measured by placePopover so it always fits on screen.
-const StockSettings = ({ profiles, status, onChange }: Props) => {
+const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) => {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
   const settings = profiles.settings[profiles.process];
   const router = profiles.process === "router";
+  const toolRows = buildToolRows(scan, profiles.tools, profiles.settings.router);
 
   const update = (patch: Partial<StockSettingsValue>) =>
     onChange({
@@ -164,63 +129,15 @@ const StockSettings = ({ profiles, status, onChange }: Props) => {
               </Form.Select>
             </Form.Group>
 
-            {router && (
-              <Form.Group>
-                <Form.Label>Cutter shape</Form.Label>
-                <Form.Select
-                  value={settings.shape}
-                  onChange={(event) => {
-                    const shape = event.target.value as StockShape;
-                    // A taper ball needs a tip ball; a zero tip would just be a sharp cone.
-                    update(shape === "taperball" && settings.tipDiameter === 0 ? { shape, tipDiameter: 1 } : { shape });
-                  }}
-                >
-                  <option value="flat">Flat end mill</option>
-                  <option value="ball">Ball nose</option>
-                  <option value="bullnose">Bull nose (corner radius)</option>
-                  <option value="v">V-bit / chamfer</option>
-                  <option value="taperball">Taper ball nose</option>
-                </Form.Select>
-              </Form.Group>
-            )}
-            <NumberField
-              label={router ? "Cutter diameter (mm)" : "Kerf width (mm)"}
-              value={settings.diameter}
-              min={0.01}
-              step={router ? 0.5 : 0.05}
-              onChange={(diameter) => update({ diameter })}
-            />
-            {router && settings.shape === "bullnose" && (
+            {router ? (
+              <CutterFields cutter={settings} onChange={update} />
+            ) : (
               <NumberField
-                label="Corner radius (mm)"
-                value={settings.cornerRadius}
-                min={0}
-                step={0.25}
-                hint="0 is a flat end mill; half the diameter is a ball nose."
-                onChange={(cornerRadius) => update({ cornerRadius })}
-              />
-            )}
-            {router && (settings.shape === "v" || settings.shape === "taperball") && (
-              <NumberField
-                label={settings.shape === "v" ? "V-bit included angle (deg)" : "Taper included angle (deg)"}
-                value={settings.vAngle}
-                min={10}
-                step={5}
-                onChange={(vAngle) => update({ vAngle })}
-              />
-            )}
-            {router && (settings.shape === "v" || settings.shape === "taperball") && (
-              <NumberField
-                label={settings.shape === "v" ? "Tip flat diameter (mm)" : "Tip ball diameter (mm)"}
-                value={settings.tipDiameter}
-                min={0}
-                step={0.1}
-                hint={
-                  settings.shape === "v"
-                    ? "0 is a sharp point; a flat tip makes a chamfer bit."
-                    : "The ball at the end of the tapered cutter."
-                }
-                onChange={(tipDiameter) => update({ tipDiameter })}
+                label="Kerf width (mm)"
+                value={settings.diameter}
+                min={0.01}
+                step={0.05}
+                onChange={(diameter) => update({ diameter })}
               />
             )}
             {profiles.process === "laser" && (
@@ -241,6 +158,31 @@ const StockSettings = ({ profiles, status, onChange }: Props) => {
               checked={profiles.showPath}
               onChange={(event) => onChange({ ...profiles, showPath: event.target.checked })}
             />
+
+            {router && (
+              <>
+                <div className="stockSettingsHeading">Tools</div>
+                <div className="stockSettingsHint">
+                  Tools are read from the file&apos;s T words and M6. The cutter above is used for anything not listed.
+                </div>
+                <ToolTable
+                  rows={toolRows}
+                  saved={profiles.tools}
+                  base={settings}
+                  onChange={(tools: SavedTools) => onChange({ ...profiles, tools })}
+                />
+                <Form.Check
+                  type="switch"
+                  id="stock-color-by-tool"
+                  label="Color the cut by tool"
+                  checked={profiles.colorByTool}
+                  onChange={(event) => onChange({ ...profiles, colorByTool: event.target.checked })}
+                />
+                {toolsUsed < 2 && (
+                  <div className="stockSettingsHint">Colors show once the file cuts with two or more tools.</div>
+                )}
+              </>
+            )}
 
             <div className="stockSettingsHeading">Stock</div>
             <NumberField

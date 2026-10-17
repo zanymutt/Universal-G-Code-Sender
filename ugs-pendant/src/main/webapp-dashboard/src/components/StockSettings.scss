@@ -39,6 +39,115 @@
     font-size: 0.78rem;
     line-height: 1.3;
   }
+
+  // The tool table: a row per tool (swatch, name, actions), and under an open
+  // row the same cutter fields as the default cutter.
+  .toolTable {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .toolTableRow {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px;
+    border: 1px solid var(--dashboard-border);
+    border-radius: 8px;
+  }
+
+  .toolTableRowRemoved {
+    border-style: dashed;
+
+    .toolTableName {
+      color: var(--dashboard-text-subtle);
+    }
+  }
+
+  .toolTableLine {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .btn {
+      flex: none;
+      min-width: 32px;
+      min-height: 32px;
+      padding: 0;
+    }
+  }
+
+  .toolTableSwatch {
+    flex: none;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 1px solid var(--dashboard-border);
+    border-radius: 6px;
+    background: none;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+  }
+
+  .toolTableName {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    font-size: 0.85rem;
+    line-height: 1.2;
+  }
+
+  .toolTableSummary {
+    color: var(--dashboard-text-muted);
+    font-size: 0.78rem;
+    overflow-wrap: anywhere;
+  }
+
+  .toolTableEditor {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--dashboard-border);
+  }
+
+  .toolTableAdd {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .form-control {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .btn {
+      flex: none;
+      min-height: 31px;
+    }
+  }
+
+  @media (any-pointer: coarse) {
+    .toolTableLine .btn,
+    .toolTableAdd .btn {
+      min-width: 44px;
+      min-height: 44px;
+    }
+
+    .toolTableSwatch {
+      width: 44px;
+      height: 44px;
+    }
+
+    .toolTableAdd .form-control {
+      min-height: 44px;
+    }
+  }
 }
 
 // Top right of the viewport, left of the zoom control.
