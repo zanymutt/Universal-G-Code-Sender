@@ -72,14 +72,17 @@ test("the table and the color switch round-trip through storage; old saves get t
   store.value = JSON.stringify({ process: "router", settings: {} });
   const old = readStockProfiles();
   assert.equal(old.colorByTool, true);
+  assert.equal(old.warnRapids, true);
   assert.equal(JSON.stringify(old.tools), "{}");
 
   writeStockProfiles({
     ...DEFAULT_STOCK_PROFILES,
     colorByTool: false,
+    warnRapids: false,
     tools: { 2: { removed: true }, 3: { color: "#00ff00" } },
   });
   const back = plain(readStockProfiles());
   assert.equal(back.colorByTool, false);
+  assert.equal(back.warnRapids, false);
   assert.deepEqual(back.tools, { 2: { removed: true }, 3: { color: "#00ff00" } });
 });

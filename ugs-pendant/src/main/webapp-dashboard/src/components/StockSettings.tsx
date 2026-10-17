@@ -189,6 +189,16 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
             />
 
             {router && (
+              <Form.Check
+                type="switch"
+                id="stock-warn-rapids"
+                label="Warn when a rapid cuts into the stock"
+                checked={profiles.warnRapids}
+                onChange={(event) => onChange({ ...profiles, warnRapids: event.target.checked })}
+              />
+            )}
+
+            {router && (
               <>
                 <div className="stockSettingsHeading">Tools</div>
                 <div className="stockSettingsHint">

@@ -17,6 +17,8 @@ export type StockProfiles = {
   // Router: tint what each tool cut in that tool's color when a file uses
   // two or more tools.
   colorByTool: boolean;
+  // Router: warn when a rapid (G0) move runs the cutter through uncut material.
+  warnRapids: boolean;
   // Router: what the user changed in the tool table, by tool number.
   tools: SavedTools;
   settings: Record<StockProcess, StockSettings>;
@@ -28,6 +30,7 @@ export const DEFAULT_STOCK_PROFILES: StockProfiles = {
   process: "router",
   showPath: false,
   colorByTool: true,
+  warnRapids: true,
   tools: {},
   settings: {
     router: { ...DEFAULT_STOCK_SETTINGS, process: "router", shape: "flat", diameter: 6, cell: 0.5 },
@@ -103,6 +106,7 @@ export const readStockProfiles = (): StockProfiles => {
       process: PROCESSES.includes(parsed.process as StockProcess) ? (parsed.process as StockProcess) : "router",
       showPath: parsed.showPath === true,
       colorByTool: parsed.colorByTool !== false,
+      warnRapids: parsed.warnRapids !== false,
       tools: sanitizeSavedTools(parsed.tools, settings.router),
       settings,
     };

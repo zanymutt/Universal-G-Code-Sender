@@ -13,8 +13,17 @@ export type StockWorkerResponse =
   | { type: "empty"; jobId: number }
   // toolNumbers[n] is the tool recorded as slot n + 1 in a "heights" owner map.
   | { type: "ready"; jobId: number; grid: StockGrid; segmentCount: number; toolNumbers: number[] }
-  // owner is null when the file cuts with fewer than two tools.
-  | { type: "heights"; jobId: number; index: number; heights: Float32Array; owner: Uint8Array | null; done: boolean }
+  // owner is null when the file cuts with fewer than two tools. rapidHits: the
+  // rapid moves so far that cut into material (segment indices, first few).
+  | {
+      type: "heights";
+      jobId: number;
+      index: number;
+      heights: Float32Array;
+      owner: Uint8Array | null;
+      rapidHits: { count: number; first: number[] };
+      done: boolean;
+    }
   | { type: "progress"; jobId: number; index: number; target: number };
 
 type WorkerScope = {
@@ -44,7 +53,7 @@ const postHeights = (index: number, done: boolean) => {
   const owner = simulator.getOwner();
   const ownerCopy = owner ? new Uint8Array(owner) : null;
   scope.postMessage(
-    { type: "heights", jobId, index, heights: copy, owner: ownerCopy, done },
+    { type: "heights", jobId, index, heights: copy, owner: ownerCopy, rapidHits: simulator.getRapidHits(), done },
     ownerCopy ? [copy.buffer, ownerCopy.buffer] : [copy.buffer]
   );
 };

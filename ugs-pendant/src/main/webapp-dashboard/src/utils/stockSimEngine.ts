@@ -137,6 +137,8 @@ export type StockGrid = {
 const MAX_SNAPSHOT_BYTES = 160 * 1024 * 1024;
 const MAX_SNAPSHOTS = 40;
 const MM_PER_INCH = 25.4;
+// How much material a rapid may stand in, in grid cells, before it counts as cutting into it.
+const RAPID_TOLERANCE_CELLS = 1;
 const AUTO_EXTRA_DEPTH_MM = 3;
 const AUTO_THROUGH_THICKNESS_MM = 3;
 
@@ -297,6 +299,12 @@ export class StockSimulator {
   // snapshots[k] = the heights after k * step segments (k = 0 is the untouched block).
   private readonly snapshots: Float32Array[] = [];
   private readonly ownerSnapshots: Uint8Array[] = [];
+  // Rapid (G0) moves found cutting into material that was still there, by
+  // segment index. Only router work has any: a laser or plasma rapid is just
+  // travel with the beam off. Found while stamping forward and kept across
+  // rewinds (re-stamping reaches the same answer), so it is filtered by the
+  // current position when read.
+  private readonly rapidHits = new Set<number>();
   // The in-progress segment that was stamped part-way on top of `index`, if any.
   // It's always a subset of what the full segment will stamp, so moving forward
   // needs no cleanup; only moving back (or less far into it) has to restore.
@@ -345,6 +353,20 @@ export class StockSimulator {
     return this.heights;
   }
 
+  // Rapid moves, among the segments applied so far, that cut into the stock,
+  // in program order: how many in all, and the first `limit` of them.
+  getRapidHits(limit = 50) {
+    const hits: number[] = [];
+    let count = 0;
+    for (const index of this.rapidHits) {
+      if (index >= this.index) continue;
+      count++;
+      hits.push(index);
+    }
+    hits.sort((a, b) => a - b);
+    return { count, first: hits.slice(0, limit) };
+  }
+
   // Which tool slot cut each sample, or null when the file has fewer than two
   // tools. Same layout and lifetime as getHeights.
   getOwner() {
@@ -388,7 +410,14 @@ export class StockSimulator {
     const toolNumber = packed.tool[i];
     const tool = (toolNumber >= 0 ? this.toolModels.get(toolNumber) : undefined) ?? this.tool;
     const slot = owner && toolNumber >= 0 ? (this.toolSlots.get(toolNumber) ?? 0) : 0;
-    if (!cuts(tool, packed, i)) return;
+    // A rapid never cuts, but on a router it is checked (once, when the whole
+    // move has been applied) for running through material that is still there.
+    const rapidCheck = packed.rapid[i] === 1;
+    if (rapidCheck) {
+      if (tool.process !== "router" || fraction < 1) return;
+    } else if (!cuts(tool, packed, i)) {
+      return;
+    }
     const o = i * 6;
     const x0 = packed.coords[o];
     const y0 = packed.coords[o + 1];
@@ -431,6 +460,11 @@ export class StockSimulator {
     const taperHeight = tipRadius * (1 - Math.sin(tool.halfAngle));
     const tipR2 = tipRadius * tipRadius;
     const cornerR2 = cornerRadius * cornerRadius;
+    // Material left standing above the cutter by less than this is the
+    // heightfield's own approximation (a sloped cut is stamped by each cell's
+    // closest point, so it leaves up to about slope x cell standing that the
+    // real cutter would have cleared), not a hit.
+    const hitTolerance = Math.max(0.001 * (packed.inches ? 1 / MM_PER_INCH : 1), cell * RAPID_TOLERANCE_CELLS);
 
     for (let j = j0; j <= j1; j++) {
       const py = oy + j * cell;
@@ -464,6 +498,13 @@ export class StockSimulator {
           if (level < bottom) level = bottom;
         }
         const k = row + ii;
+        if (rapidCheck) {
+          if (heights[k] - level > hitTolerance) {
+            this.rapidHits.add(i);
+            return;
+          }
+          continue;
+        }
         if (level < heights[k]) {
           heights[k] = level;
           if (owner) owner[k] = slot;

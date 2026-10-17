@@ -18,6 +18,7 @@ import {
 } from "../utils/toolpathSimulation";
 import { StockModel, StockStatus, IDLE_STOCK_STATUS } from "../utils/stockModel";
 import { readStockProfiles, StockProfiles, writeStockProfiles } from "../utils/stockSettingsStore";
+import { describeRapidHits } from "../utils/rapidWarning";
 import {
   buildToolRows,
   cutterTable,
@@ -477,6 +478,12 @@ const Visualizer3D = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [stockSettings, stockIsRouter, toolSpecsKey]
   );
+  // Rapid (G0) moves that cut into uncut material, as the simulation has found
+  // them so far; named by file line.
+  const rapidWarning =
+    stockOn && stockIsRouter && stockProfiles.warnRapids && stockStatus.rapidCount > 0
+      ? describeRapidHits(stockStatus.rapidCount, stockStatus.rapidFirst, segmentsRef.current)
+      : null;
   const tintByTool = stockIsRouter && stockProfiles.colorByTool && toolsInUse.length >= 2;
   const lineColorsOn = stockOn && stockProfiles.showPath && tintByTool;
   const toolLineColors = useMemo<ToolColorFn | null>(() => {
@@ -1329,6 +1336,11 @@ const Visualizer3D = () => {
             {stockStatus.state === "computing" && `Calculating stock… ${Math.round(stockStatus.progress * 100)}%`}
             {stockStatus.state === "empty" && "Nothing in this toolpath cuts the stock."}
             {stockStatus.state === "error" && "Couldn't start the stock simulation."}
+          </div>
+        )}
+        {rapidWarning && (
+          <div className="visualizer3DStockWarning" role="status" title={rapidWarning.title}>
+            <span aria-hidden="true">&#9888;</span> {rapidWarning.text}
           </div>
         )}
         {colorByOrder && (

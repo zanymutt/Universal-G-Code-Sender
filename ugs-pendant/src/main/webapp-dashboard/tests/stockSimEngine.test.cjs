@@ -344,3 +344,96 @@ test("laser and plasma ignore tools entirely", () => {
   assert.equal(sim.getOwner(), null);
   assert.equal(sim.toolNumbers.length, 0);
 });
+
+const rapid = (x0, y0, z0, x1, y1, z1) => seg(x0, y0, z0, x1, y1, z1, { rapid: true });
+const hitsOf = (sim) => JSON.parse(JSON.stringify(sim.getRapidHits()));
+
+test("a rapid plunge into untouched material is flagged", () => {
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2), rapid(20, 0, -2, 20, 4, -2), rapid(10, 5, 5, 10, 5, -3)], {
+    diameter: 4,
+    cell: 0.25,
+    thickness: 10,
+  });
+  sim.seek(3);
+  const hits = hitsOf(sim);
+  assert.equal(hits.count, 2); // the sideways rapid into virgin stock and the plunge
+  assert.deepEqual(hits.first, [1, 2]);
+});
+
+test("a rapid outside the stock's footprint is not judged", () => {
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2), rapid(100, 100, 5, 100, 100, -5)], { diameter: 4, cell: 0.25, thickness: 10 });
+  sim.seek(2);
+  assert.equal(hitsOf(sim).count, 0);
+});
+
+test("rapids in the air, or through space the cutter already cleared, are not flagged", () => {
+  const { sim } = make(
+    [
+      seg(0, 0, -2, 20, 0, -2),
+      rapid(20, 0, -2, 20, 0, 5), // straight back up out of the cut
+      rapid(20, 0, 5, 0, 0, 5), // across in the air
+      rapid(0, 0, 5, 0, 0, -2), // back down into the slot it already cut
+      rapid(0, 0, -2, 20, 0, -2), // along the cleared slot
+    ],
+    { diameter: 4, cell: 0.25, thickness: 10 }
+  );
+  sim.seek(5);
+  assert.equal(hitsOf(sim).count, 0);
+});
+
+test("rapid hits only count up to where the stock has been advanced, and survive a rewind", () => {
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2), rapid(20, 0, -2, 20, 4, -2), seg(20, 4, -2, 0, 4, -2)], {
+    diameter: 4,
+    cell: 0.25,
+    thickness: 10,
+  });
+  sim.seek(1);
+  assert.equal(hitsOf(sim).count, 0);
+  sim.seek(3);
+  assert.equal(hitsOf(sim).count, 1);
+  sim.seek(1);
+  assert.equal(hitsOf(sim).count, 0); // not reached yet at this position
+  sim.seek(3);
+  assert.equal(hitsOf(sim).count, 1);
+});
+
+test("a rapid part-way through is not judged until it has fully run", () => {
+  const { sim } = make([seg(0, 0, -2, 20, 0, -2), rapid(20, 0, -2, 20, 4, -2)], { diameter: 4, cell: 0.25, thickness: 10 });
+  sim.seek(1, 0.5);
+  assert.equal(hitsOf(sim).count, 0);
+});
+
+test("laser and plasma rapids are just travel", () => {
+  const { sim } = make([seg(0, 0, 0, 20, 0, 0), rapid(20, 0, 0, 20, 10, 0)], {
+    process: "plasma",
+    diameter: 1,
+    cell: 0.25,
+    thickness: 3,
+  });
+  sim.seek(2);
+  assert.equal(hitsOf(sim).count, 0);
+});
+
+test("retracting straight up from the end of a sloped ball-nose cut is not flagged", () => {
+  // A relief pass that ends on a slope, then G0 Z up: the heightfield stamps a
+  // sloped cut a little shallower than the real ball, which must not read as a hit.
+  const { sim } = make([seg(0, 0, -1, 10, 0, -3), seg(10, 0, -3, 12, 0, -3.5), rapid(12, 0, -3.5, 12, 0, 5)], {
+    shape: "ball",
+    diameter: 6,
+    cell: 0.5,
+    thickness: 10,
+  });
+  sim.seek(3);
+  assert.equal(hitsOf(sim).count, 0);
+});
+
+test("a rapid that gouges more than a cell's worth of stock is still flagged on a ball nose", () => {
+  const { sim } = make([seg(0, 0, -3, 20, 0, -3), rapid(20, 0, -3, 20, 4, -3)], {
+    shape: "ball",
+    diameter: 6,
+    cell: 0.5,
+    thickness: 10,
+  });
+  sim.seek(2);
+  assert.equal(hitsOf(sim).count, 1);
+});

@@ -15,9 +15,21 @@ export type StockStatus = {
   coarsened: boolean;
   cell: number;
   inches: boolean;
+  // Rapid moves, so far, that cut into material: how many, and the segment
+  // indices of the first few (into the toolpath that was loaded).
+  rapidCount: number;
+  rapidFirst: number[];
 };
 
-export const IDLE_STOCK_STATUS: StockStatus = { state: "idle", progress: 0, coarsened: false, cell: 0, inches: false };
+export const IDLE_STOCK_STATUS: StockStatus = {
+  state: "idle",
+  progress: 0,
+  coarsened: false,
+  cell: 0,
+  inches: false,
+  rapidCount: 0,
+  rapidFirst: [],
+};
 
 type ToolpathLike = Parameters<typeof packToolpath>[0];
 
@@ -253,7 +265,13 @@ export class StockModel {
         this.applyHeights(message.heights, message.owner);
         if (message.done) {
           this.inFlight = false;
-          this.setStatus({ ...this.status, state: "ready", progress: 1 });
+          this.setStatus({
+            ...this.status,
+            state: "ready",
+            progress: 1,
+            rapidCount: message.rapidHits.count,
+            rapidFirst: message.rapidHits.first,
+          });
           // The position moved on while that was computing.
           this.requestIfNeeded();
         }
