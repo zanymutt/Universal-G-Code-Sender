@@ -5,6 +5,7 @@ import settingsReducer from "./settingsSlice";
 import fileStatusReducer from "./fileStatusSlice";
 import consoleReducer from "./consoleSlice";
 import alarmReducer from "./alarmSlice";
+import interceptorReducer from "./interceptorSlice";
 import macrosReducer from "./macrosSlice";
 import uiReducer from "./uiSlice";
 import themeReducer from "./themeSlice";
@@ -20,6 +21,7 @@ const rootReducer = combineReducers({
   fileStatus: fileStatusReducer,
   console: consoleReducer,
   alarm: alarmReducer,
+  interceptor: interceptorReducer,
   macros: macrosReducer,
   ui: uiReducer,
   theme: themeReducer,

@@ -20,6 +20,9 @@ import {AlarmEvent} from "../model/AlarmEvent.ts";
 import {ConsoleMessageEvent} from "../model/ConsoleMessageEvent.ts";
 import {FileStateEvent} from "../model/FileStateEvent.ts";
 import {uiActions} from "./uiSlice.ts";
+import {interceptorActions} from "./interceptorSlice.ts";
+import {getInterceptorStatus} from "../services/interceptor.ts";
+import {InterceptorStatus} from "../model/InterceptorStatus.ts";
 
 // The currently-connected socket, if any - lets setVerboseEnabled (dispatched
 // well after the "connect" action that created this) reach it directly,
@@ -103,6 +106,15 @@ export const socketMiddleware: ThunkMiddleware<RootState, Action, void> =
             // already connected could get stuck showing "disconnected" until
             // something on the machine changed.
             store.dispatch(fetchStatus());
+            // A tool change can already be waiting for an answer (the page was loaded or the
+            // connection came back after it started); the socket only pushes changes.
+            getInterceptorStatus()
+                .then((status) => {
+                    if (activeSocket === socket) store.dispatch(interceptorActions.setInterceptorStatus(status));
+                })
+                .catch(() => {
+                    // An older backend has no such endpoint - there is just nothing to show.
+                });
             hasRefetchedStatusAfterConnect = false;
             // Verbose opt-in is per-connection on the server (EventsSocket.java
             // forgets it on close) - re-assert it after every reconnect so the
@@ -151,6 +163,8 @@ export const socketMiddleware: ThunkMiddleware<RootState, Action, void> =
                         text: (ugsEvent.event as ConsoleMessageEvent).message,
                     }),
                 );
+            } else if (ugsEvent.eventType === "InterceptorStateEvent") {
+                store.dispatch(interceptorActions.setInterceptorStatus(ugsEvent.event as InterceptorStatus));
             } else if (ugsEvent.eventType === "AlarmEvent") {
                 store.dispatch(alarmActions.setAlarm((ugsEvent.event as AlarmEvent).alarm));
             } else if (ugsEvent.eventType === "FileStateEvent") {

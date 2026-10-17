@@ -32,6 +32,8 @@ import com.willwinder.universalgcodesender.model.UnitUtils;
 import com.willwinder.universalgcodesender.model.events.ControllerStatusEvent;
 import com.willwinder.universalgcodesender.pendantui.BackendProvider;
 import com.willwinder.universalgcodesender.pendantui.v1.model.Event;
+import com.willwinder.universalgcodesender.pendantui.v1.model.InterceptorStatus;
+import com.willwinder.universalgcodesender.services.interceptor.InterceptorStateEvent;
 import com.willwinder.universalgcodesender.utils.Settings;
 import jakarta.websocket.ClientEndpoint;
 import jakarta.websocket.OnClose;
@@ -174,6 +176,15 @@ public class EventsSocket implements UGSEventListener, MessageListener {
             ControllerStatus currentStatus = convertToPreferredUnits(controllerStatusEvent.getStatus(), settings.getPreferredUnits());
             ControllerStatus previousStatus = convertToPreferredUnits(controllerStatusEvent.getPreviousStatus(), settings.getPreferredUnits());
             return gson.toJson(new Event(new ControllerStatusEvent(currentStatus, previousStatus))).replace(":NaN", ":null");
+        }
+
+        // The interceptor's prompt and trigger command are transient on the event itself (they are not
+        // meant to be serialized as is), so send the dashboard its own view of it, which carries them.
+        if (evt instanceof InterceptorStateEvent interceptorEvent) {
+            JsonObject wrapper = new JsonObject();
+            wrapper.addProperty("eventType", InterceptorStateEvent.class.getSimpleName());
+            wrapper.add("event", gson.toJsonTree(InterceptorStatus.of(interceptorEvent)));
+            return gson.toJson(wrapper);
         }
 
         return gson.toJson(new Event(evt));

@@ -84,3 +84,24 @@ test("toolpathFrom drops earlier lines and adds a plunge from above the first ke
   assert.deepEqual(plain(path.slice(1).map((s) => s.lineNumber)), [3, 4]);
   assert.equal(toolpathFrom(program, 1), program.segments);
 });
+
+const toolChanges = (text) =>
+  plain(parseGcode(text).commands.flatMap((c) => c.effects.filter((e) => e.kind === "toolChange").map((e) => [c.line, e.tool])));
+
+test("M6 is a tool change effect that names the tool on its line, or the one selected before it", () => {
+  assert.deepEqual(toolChanges("G0 Z5\nT1 M6\nG0 X1\nM6 T2\nT3\nG0 X2\nM06\n"), [
+    [2, 1],
+    [4, 2],
+    [7, 3],
+  ]);
+});
+
+test("a T word alone only selects the tool; an M6 with no T word ever given has no tool; M60 is not a tool change", () => {
+  assert.deepEqual(toolChanges("T4\nG0 X1\n"), []);
+  assert.deepEqual(toolChanges("G0 X1\nM6\n"), [[2, null]]);
+  assert.deepEqual(toolChanges("G0 X1\nM60\n"), []);
+});
+
+test("a tool change in a comment is not one", () => {
+  assert.deepEqual(toolChanges("(T1 M6)\n; T2 M6\nG0 X1\n"), []);
+});

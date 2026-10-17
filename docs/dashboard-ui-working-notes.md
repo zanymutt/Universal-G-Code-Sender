@@ -126,6 +126,17 @@ temp profile directory - the user's own Chrome may be open.
 - **Another tool also edits this repo** (the THC plugin under `ugs-pendant/examples/thc` has had edits not
   made in these sessions). Check `git status` for unfamiliar changes and don't commit them by accident.
 
+## Running the Java tests without the web build
+
+`ugs-pendant`'s Maven build runs the whole frontend build in an active-by-default profile. For a Java-only test run, switch it off and build the modules it depends on in the same reactor, e.g.:
+
+```
+./mvnw -o -pl ugs-pendant -am test -P '!create-pendant-web-ui' -Dtest=InterceptorResourceTest -Dsurefire.failIfNoSpecifiedTests=false
+./mvnw -o -pl ugs-core test -Dtest=CommandInterceptorServiceTest
+```
+
+Use the portable JDK (see above). Mockito inline mocks work on it; EasyMock is what the pendant tests use.
+
 ## Verifying a behaviour change
 
 - State a hypothesis, then make a control that would disprove it (the editor scroll bug was *not* the

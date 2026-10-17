@@ -4,6 +4,7 @@ import { FileStateEvent } from "./FileStateEvent";
 import {CommandEvent} from "./CommandEvent.ts";
 import {AlarmEvent} from "./AlarmEvent.ts";
 import {ConsoleMessageEvent} from "./ConsoleMessageEvent.ts";
+import {InterceptorStatus} from "./InterceptorStatus.ts";
 
 type UGSControllerStatusEvent = {
   eventType: "ControllerStatusEvent",
@@ -35,10 +36,15 @@ type UGSConsoleMessageEvent = {
   event: ConsoleMessageEvent;
 };
 
+type UGSInterceptorStateEvent = {
+  eventType: "InterceptorStateEvent";
+  event: InterceptorStatus;
+};
+
 export type UGSEvent = {
   eventType:  "SettingChangedEvent";
 } | {
   // The server's reply to the client's periodic keepalive "ping" - carries
   // no event payload, just its arrival is the point (see socketMiddleware.ts).
   eventType: "Pong";
-} | UGSCommandEvent | UGSControllerStatusEvent | UGSControllerStateEvent | UGSFileStateEvent | UGSAlarmEvent | UGSConsoleMessageEvent;
+} | UGSCommandEvent | UGSControllerStatusEvent | UGSControllerStateEvent | UGSFileStateEvent | UGSAlarmEvent | UGSConsoleMessageEvent | UGSInterceptorStateEvent;

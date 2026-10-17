@@ -9,6 +9,7 @@ import CenterPaneLayout from "../components/CenterPaneLayoutDemo";
 import RightRail from "../components/RightRail";
 import JobBar from "../components/JobBar";
 import AlarmModal from "../components/AlarmModal";
+import ToolChangePrompt from "../components/ToolChangePrompt";
 import PluginManagerProvider from "../components/PluginManager";
 import DemoBanner from "../demo/DemoBanner";
 import { isDemo } from "../demo/isDemo";
@@ -78,6 +79,7 @@ const Dashboard = () => {
         <JobBar />
 
         {status.state === "ALARM" && <AlarmModal />}
+        <ToolChangePrompt />
         </div>
       </div>
     </PluginManagerProvider>

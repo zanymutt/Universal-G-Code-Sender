@@ -580,6 +580,10 @@ const server = createServer((req, res) => {
     return;
   }
   if (p === "/api/v1/visualizer/getToolpath") return json(res, gcodeToSegments(files[activeFile] ?? "", armedRunFromCommand));
+  // The tool change UGS runs for an M6 in a job: this mock never streams a job, so nothing is ever
+  // intercepted - it only answers like a backend with nothing waiting (the online demo simulates it).
+  if (p === "/api/v1/interceptor") return json(res, { state: "INACTIVE" });
+  if (p === "/api/v1/interceptor/respond") return json(res, { errorMessage: "Nothing is waiting for an answer" }, 409);
 
   json(res, { error: "not found" }, 404);
 });

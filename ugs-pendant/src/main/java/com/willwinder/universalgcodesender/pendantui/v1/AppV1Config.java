@@ -25,6 +25,7 @@ import com.willwinder.universalgcodesender.pendantui.html.StaticResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.CustomOpenApiResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.FilesResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.GcodeReviewResource;
+import com.willwinder.universalgcodesender.pendantui.v1.resources.InterceptorResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.MachineResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.MacrosResource;
 import com.willwinder.universalgcodesender.pendantui.v1.resources.PluginsResource;
@@ -51,6 +52,7 @@ public class AppV1Config extends ResourceConfig {
         register(GcodeReviewResource.class);
         register(VisualizerResource.class);
         register(ProbeResource.class);
+        register(InterceptorResource.class);
         register(PluginsResource.class);
         register(MultiPartFeature.class);
         register(WadlFeature.class);

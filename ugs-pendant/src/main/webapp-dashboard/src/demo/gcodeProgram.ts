@@ -25,7 +25,10 @@ export type Effect =
   | { kind: "spindle"; mode: "M3" | "M4" | "M5" }
   | { kind: "spindleSpeed"; value: number }
   | { kind: "coolant"; mode: "M7" | "M8" | "M9" }
-  | { kind: "modal"; field: ModalField; value: string };
+  | { kind: "modal"; field: ModalField; value: string }
+  // M6: UGS stops the job here and runs its tool change (see demoMachine.ts). `tool` is the T word
+  // on the line, or the last one selected before it; null when none was ever given.
+  | { kind: "toolChange"; tool: number | null };
 
 export type Command = {
   line: number;
@@ -82,6 +85,7 @@ export function parseGcode(text: string, options: ParseOptions = {}): Program {
   let inches = false;
   let plane = 17;
   let feed = 0;
+  let pendingTool: number | null = null;
 
   text.split(/\r?\n/).forEach((raw, index) => {
     const lineNumber = index + 1;
@@ -93,6 +97,8 @@ export function parseGcode(text: string, options: ParseOptions = {}): Program {
     let dwellSeconds = 0;
     let machineCoords = false;
     let sawDwell = false;
+    let lineTool: number | null = null;
+    let sawToolChange = false;
 
     for (const match of line.matchAll(WORD)) {
       const letter = match[1].toUpperCase();
@@ -105,6 +111,8 @@ export function parseGcode(text: string, options: ParseOptions = {}): Program {
         effects.push({ kind: "spindleSpeed", value });
       } else if (letter === "P") {
         dwellSeconds = value;
+      } else if (letter === "T") {
+        lineTool = Math.round(value);
       } else if (letter === "G") {
         const code = Math.round(value * 10) / 10;
         if (code >= 0 && code <= 3) motion = code;
@@ -125,8 +133,13 @@ export function parseGcode(text: string, options: ParseOptions = {}): Program {
         const code = Math.round(value);
         if (code === 3 || code === 4 || code === 5) effects.push({ kind: "spindle", mode: `M${code}` as "M3" | "M4" | "M5" });
         else if (code === 7 || code === 8 || code === 9) effects.push({ kind: "coolant", mode: `M${code}` as "M7" | "M8" | "M9" });
+        else if (code === 6) sawToolChange = true;
       }
     }
+
+    // A T word only selects; M6 (on the same line or later) is what changes the tool.
+    if (lineTool !== null) pendingTool = lineTool;
+    if (sawToolChange) effects.push({ kind: "toolChange", tool: pendingTool });
 
     const cmdSegments: Segment[] = [];
     const hasMove = axes.X !== undefined || axes.Y !== undefined || axes.Z !== undefined;

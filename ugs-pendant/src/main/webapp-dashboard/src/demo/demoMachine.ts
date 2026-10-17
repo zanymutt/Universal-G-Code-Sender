@@ -223,6 +223,10 @@ const applyEffect = (effect: Effect) => {
     case "modal":
       status[effect.field] = effect.value;
       break;
+    case "toolChange":
+      // Only a running job is stopped by an M6 (a command typed in the console goes to the controller).
+      if (activity === "job") beginToolChange(effect.tool);
+      break;
   }
 };
 
@@ -250,6 +254,12 @@ type Motion = {
 let queue: Motion[] = [];
 let activity: Activity = "idle";
 let paused = false;
+// The tool change UGS runs for an M6 (see "the tool change UGS performs" below): its latest status,
+// whether the job is held back by it, and the timer that moves it along. Declared here, with the
+// rest of the machine's state, because updateState() reads `holding` from the first call on.
+let interceptor: InterceptorView = { state: "INACTIVE" };
+let holding = false;
+let interceptorTimer: number | undefined;
 let tickTimer: number | undefined;
 let lastTick = 0;
 let lastProgressEvent = 0;
@@ -284,7 +294,8 @@ const estimateSeconds = (motions: Motion[], from: Vec): number => {
 
 const stateName = () => {
   if (status.state === "DISCONNECTED") return "DISCONNECTED";
-  if (activity === "idle") return "IDLE";
+  // While UGS runs a tool change the controller itself is idle: the job is held back in UGS.
+  if (holding || activity === "idle") return "IDLE";
   if (paused) return "HOLD";
   return { jog: "JOG", mdi: "RUN", job: "RUN", home: "HOME", idle: "IDLE" }[activity];
 };
@@ -335,7 +346,7 @@ const tick = () => {
   const now = performance.now();
   const dt = Math.min(0.25, (now - lastTick) / 1000);
   lastTick = now;
-  if (paused || queue.length === 0) return;
+  if (paused || holding || queue.length === 0) return;
 
   let budget = dt;
   if (job) {
@@ -349,6 +360,9 @@ const tick = () => {
     if (!motion.started) {
       motion.started = true;
       motion.effect?.();
+      // An M6 just stopped the job: the rest of this tick's time goes unused, and the motion
+      // finishes (and the job goes on) once the tool change is over.
+      if (holding) break;
       if (motion.target) motion.machineTarget = toMachine(motion.target);
       status.feedSpeed = motion.rapid ? RAPID_MM_PER_MIN : Math.round((motion.feed * (motion.overridable ? status.overrides.feed : 100)) / 100);
     }
@@ -413,6 +427,7 @@ const enqueue = (kind: Activity, motions: Motion[]) => {
 
 const stopMotion = () => {
   stopContinuousJog(false);
+  resetInterceptor();
   queue = [];
   if (tickTimer !== undefined) {
     window.clearInterval(tickTimer);
@@ -449,6 +464,105 @@ const resumeMotion = () => {
   if (job) fileStatus.sendState = "RUNNING";
   updateState();
   broadcastStatus();
+};
+
+// --- the tool change UGS performs for an M6 -----------------------------------------------------
+// The real backend stops the stream at an M6, finishes what was already sent, moves up and stops the
+// spindle, then waits twice for the operator (change the tool, then "ready to resume?") before it
+// carries on. It announces each step as an "InterceptorStateEvent" and takes the answers on
+// POST /api/v1/interceptor/respond; this does the same with the simulated job.
+
+type InterceptorState = "INACTIVE" | "PENDING" | "RUNNING" | "WAITING_FOR_USER" | "RESUMING" | "FAILED";
+type InterceptorView = {
+  state: InterceptorState;
+  previousState?: InterceptorState | null;
+  prompt?: { stepId: string; options: string[] } | null;
+  triggerCommand?: string | null;
+  toolNumber?: number | null;
+};
+
+const STEP_CHANGE_TOOL = "toolChange.changeTool";
+const STEP_CONTINUE = "toolChange.continue";
+const INTERCEPTOR_STEP_MS = 450;
+
+const setInterceptor = (next: Omit<InterceptorView, "previousState">) => {
+  interceptor = { ...next, previousState: interceptor.state };
+  emit({ eventType: "InterceptorStateEvent", event: interceptor });
+};
+
+const setHolding = (value: boolean) => {
+  holding = value;
+  if (!value) lastTick = performance.now();
+  updateState();
+  broadcastStatus();
+};
+
+const resetInterceptor = () => {
+  if (interceptorTimer !== undefined) {
+    window.clearTimeout(interceptorTimer);
+    interceptorTimer = undefined;
+  }
+  const wasActive = interceptor.state !== "INACTIVE";
+  holding = false;
+  if (wasActive) setInterceptor({ state: "INACTIVE" });
+};
+
+const afterStep = (action: () => void) => {
+  interceptorTimer = window.setTimeout(() => {
+    interceptorTimer = undefined;
+    action();
+  }, INTERCEPTOR_STEP_MS);
+};
+
+const beginToolChange = (tool: number | null) => {
+  const trigger = { triggerCommand: tool === null ? "M6" : `T${tool} M6`, toolNumber: tool };
+  setInterceptor({ ...trigger, state: "PENDING" });
+  setHolding(true);
+  afterStep(() => {
+    // Safe height and spindle off, as UGS does before it asks for the tool change.
+    applyEffect({ kind: "spindle", mode: "M5" });
+    setInterceptor({ ...trigger, state: "RUNNING" });
+    afterStep(() =>
+      setInterceptor({
+        ...trigger,
+        state: "WAITING_FOR_USER",
+        prompt: { stepId: STEP_CHANGE_TOOL, options: ["CONTINUE", "ABORT"] },
+      })
+    );
+  });
+};
+
+// The answer to POST /api/v1/interceptor/respond: the new status, or an error like the backend's.
+const respondToInterceptor = (response: string | undefined): DemoResponse => {
+  if (response !== "CONTINUE" && response !== "SKIP" && response !== "ABORT") {
+    return json({ errorMessage: "Missing response" }, 400);
+  }
+  if (response === "ABORT") {
+    if (interceptor.state === "INACTIVE") return json({ errorMessage: "There is nothing to abort" }, 409);
+    stopMotion();
+    return json(interceptor);
+  }
+  if (interceptor.state !== "WAITING_FOR_USER") return json({ errorMessage: "Nothing is waiting for an answer" }, 409);
+  const prompt = interceptor.prompt;
+  if (!prompt || !prompt.options.includes(response)) {
+    return json({ errorMessage: `The current step does not accept ${response}` }, 400);
+  }
+
+  const trigger = { triggerCommand: interceptor.triggerCommand, toolNumber: interceptor.toolNumber };
+  if (prompt.stepId === STEP_CHANGE_TOOL) {
+    setInterceptor({
+      ...trigger,
+      state: "WAITING_FOR_USER",
+      prompt: { stepId: STEP_CONTINUE, options: ["CONTINUE", "ABORT"] },
+    });
+  } else {
+    setInterceptor({ ...trigger, state: "RESUMING" });
+    afterStep(() => {
+      setInterceptor({ state: "INACTIVE" });
+      setHolding(false);
+    });
+  }
+  return json(interceptor);
 };
 
 // --- building motions ------------------------------------------------------------
@@ -885,6 +999,12 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
         },
       });
     }
+
+    // the tool change UGS runs for an M6 in a job
+    case "/api/v1/interceptor":
+      return json(interceptor);
+    case "/api/v1/interceptor/respond":
+      return respondToInterceptor((parseBody() as { response?: string }).response);
 
     // files
     case "/api/v1/files/getFileStatus":

@@ -1,0 +1,65 @@
+// The tool change prompt: a panel at the top centre of the dashboard, fixed inside .app (portal), above the
+// Stock popover (60) and its tool editor (61) and the plugin windows (40-42), below Bootstrap's modals. No
+// backdrop - the rest of the page stays usable while the tool is being changed.
+.toolChangePrompt {
+  position: fixed;
+  z-index: 70;
+  top: 72px;
+  left: 50%;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  width: min(520px, calc(100% - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--dashboard-bg);
+  border: 1px solid #f59e0b;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--dashboard-text);
+}
+
+.toolChangePromptHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toolChangePromptTitle {
+  font-size: 1.1rem;
+  font-weight: 700;
+}
+
+.toolChangePromptMessage {
+  color: var(--dashboard-text-muted);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.toolChangeHelpers,
+.toolChangeActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.toolChangeHelpers {
+  padding-top: 2px;
+}
+
+.toolChangeActions {
+  justify-content: flex-end;
+}
+
+.toolChangePromptError {
+  color: #f87171;
+  font-size: 0.85rem;
+}
+
+@media (any-pointer: coarse) {
+  .toolChangePrompt .btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
