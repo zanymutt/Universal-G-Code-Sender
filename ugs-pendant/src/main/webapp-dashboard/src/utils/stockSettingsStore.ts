@@ -29,7 +29,7 @@ export const DEFAULT_STOCK_PROFILES: StockProfiles = {
 };
 
 const PROCESSES: StockProcess[] = ["router", "laser", "plasma"];
-const SHAPES = ["flat", "ball", "v"];
+const SHAPES = ["flat", "ball", "bullnose", "v", "taperball"];
 
 const finite = (value: unknown, fallback: number, min: number, max: number) =>
   typeof value === "number" && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback;
@@ -41,6 +41,8 @@ export const sanitizeStockSettings = (raw: Partial<StockSettings> | undefined, b
   shape: SHAPES.includes(raw?.shape as string) ? (raw?.shape as StockSettings["shape"]) : base.shape,
   diameter: finite(raw?.diameter, base.diameter, 0.01, 200),
   vAngle: finite(raw?.vAngle, base.vAngle, 10, 150),
+  cornerRadius: finite(raw?.cornerRadius, base.cornerRadius, 0, 100),
+  tipDiameter: finite(raw?.tipDiameter, base.tipDiameter, 0, 200),
   margin: finite(raw?.margin, base.margin, 0, 500),
   thickness: finite(raw?.thickness, base.thickness, 0, 1000),
   topZ: finite(raw?.topZ, base.topZ, -1000, 1000),

@@ -169,11 +169,17 @@ const StockSettings = ({ profiles, status, onChange }: Props) => {
                 <Form.Label>Cutter shape</Form.Label>
                 <Form.Select
                   value={settings.shape}
-                  onChange={(event) => update({ shape: event.target.value as StockShape })}
+                  onChange={(event) => {
+                    const shape = event.target.value as StockShape;
+                    // A taper ball needs a tip ball; a zero tip would just be a sharp cone.
+                    update(shape === "taperball" && settings.tipDiameter === 0 ? { shape, tipDiameter: 1 } : { shape });
+                  }}
                 >
                   <option value="flat">Flat end mill</option>
                   <option value="ball">Ball nose</option>
-                  <option value="v">V-bit</option>
+                  <option value="bullnose">Bull nose (corner radius)</option>
+                  <option value="v">V-bit / chamfer</option>
+                  <option value="taperball">Taper ball nose</option>
                 </Form.Select>
               </Form.Group>
             )}
@@ -184,13 +190,37 @@ const StockSettings = ({ profiles, status, onChange }: Props) => {
               step={router ? 0.5 : 0.05}
               onChange={(diameter) => update({ diameter })}
             />
-            {router && settings.shape === "v" && (
+            {router && settings.shape === "bullnose" && (
               <NumberField
-                label="V-bit included angle (deg)"
+                label="Corner radius (mm)"
+                value={settings.cornerRadius}
+                min={0}
+                step={0.25}
+                hint="0 is a flat end mill; half the diameter is a ball nose."
+                onChange={(cornerRadius) => update({ cornerRadius })}
+              />
+            )}
+            {router && (settings.shape === "v" || settings.shape === "taperball") && (
+              <NumberField
+                label={settings.shape === "v" ? "V-bit included angle (deg)" : "Taper included angle (deg)"}
                 value={settings.vAngle}
                 min={10}
                 step={5}
                 onChange={(vAngle) => update({ vAngle })}
+              />
+            )}
+            {router && (settings.shape === "v" || settings.shape === "taperball") && (
+              <NumberField
+                label={settings.shape === "v" ? "Tip flat diameter (mm)" : "Tip ball diameter (mm)"}
+                value={settings.tipDiameter}
+                min={0}
+                step={0.1}
+                hint={
+                  settings.shape === "v"
+                    ? "0 is a sharp point; a flat tip makes a chamfer bit."
+                    : "The ball at the end of the tapered cutter."
+                }
+                onChange={(tipDiameter) => update({ tipDiameter })}
               />
             )}
             {profiles.process === "laser" && (
