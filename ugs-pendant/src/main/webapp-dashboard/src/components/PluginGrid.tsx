@@ -1,16 +1,12 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Button } from "react-bootstrap";
+import { useState } from "react";
+import { Button, Modal } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTableCells, faThumbtack } from "@fortawesome/free-solid-svg-icons";
 import type { PluginInfo } from "../services/plugins";
-import { layoutRect, layoutScale } from "../utils/layoutRect";
-import { placePopover } from "../utils/placePopover";
 import { filterPlugins, isPinned, TileMode } from "../utils/pluginPins";
 import PluginBadge from "./PluginBadge";
 import "./PluginGrid.scss";
 
-const POPOVER_WIDTH = 380;
 // Past this many plugins a search box is worth its row.
 const SEARCH_FROM = 6;
 
@@ -24,68 +20,13 @@ type Props = {
   onOpen: (plugin: PluginInfo) => void;
 };
 
-// A button beside the Plugins heading that pops out every installed plugin in a
-// grid, with a pin on each. Pinned plugins are the ones the rail shows; the
-// rest are only here. Measured and placed with placePopover, rendered into .app
-// (inside the zoom transform) exactly like SimulationSettings, so it fits on a
-// short screen and is never clipped by the rail's own scrolling.
+// A button beside the Plugins heading that opens every installed plugin in a
+// dialog, with a pin on each - the same kind of overlay as the macro editor.
+// Pinned plugins are the ones the rail shows; the rest are only here. The cards
+// flow into two columns when the dialog is wide enough.
 const PluginGrid = ({ plugins, unpinned, states, mode, onMode, onTogglePin, onOpen }: Props) => {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const toggleRef = useRef<HTMLButtonElement>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-
-  const place = () => {
-    const toggle = toggleRef.current;
-    const popover = popoverRef.current;
-    if (!toggle || !popover) return;
-    const scale = layoutScale(toggle);
-    const anchor = layoutRect(toggle);
-    popover.style.maxHeight = "none";
-    popover.style.overflowY = "visible";
-    popover.style.width = `${POPOVER_WIDTH}px`;
-    const placement = placePopover(
-      { left: anchor.left, top: anchor.top, right: anchor.left + anchor.width, bottom: anchor.top + anchor.height },
-      { width: POPOVER_WIDTH, height: popover.scrollHeight },
-      { width: window.innerWidth / scale, height: window.innerHeight / scale }
-    );
-    popover.style.left = `${placement.left}px`;
-    popover.style.top = `${placement.top}px`;
-    popover.style.width = `${placement.width}px`;
-    if (placement.maxHeight !== null) {
-      popover.style.maxHeight = `${placement.maxHeight}px`;
-      popover.style.overflowY = "auto";
-    }
-    popover.style.visibility = "visible";
-  };
-
-  useLayoutEffect(() => {
-    if (open) place();
-  });
-
-  useEffect(() => {
-    if (!open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      const target = event.target as Node;
-      if (!popoverRef.current?.contains(target) && !toggleRef.current?.contains(target)) setOpen(false);
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("pointerdown", onPointerDown, true);
-    document.addEventListener("keydown", onKeyDown);
-    window.addEventListener("resize", place);
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(place);
-    if (toggleRef.current) observer?.observe(toggleRef.current);
-    if (popoverRef.current) observer?.observe(popoverRef.current);
-    return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true);
-      document.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("resize", place);
-      observer?.disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
   const shown = filterPlugins(plugins, query);
   const pinnedCount = plugins.filter((plugin) => isPinned(unpinned, plugin.id)).length;
@@ -93,7 +34,6 @@ const PluginGrid = ({ plugins, unpinned, states, mode, onMode, onTogglePin, onOp
   return (
     <>
       <Button
-        ref={toggleRef}
         size="sm"
         variant="outline-secondary"
         className="pluginGridToggle"
@@ -108,34 +48,22 @@ const PluginGrid = ({ plugins, unpinned, states, mode, onMode, onTogglePin, onOp
       >
         <FontAwesomeIcon icon={faTableCells} />
       </Button>
-      {open &&
-        createPortal(
-          <div ref={popoverRef} className="pluginGrid" role="dialog" aria-label="All plugins" style={{ visibility: "hidden" }}>
-            <div className="pluginGridHeader">
-              <span className="pluginGridTitle">
-                All plugins <span className="pluginGridCount">{pinnedCount} of {plugins.length} pinned</span>
-              </span>
-              <span className="pluginGridModes" role="group" aria-label="Rail style">
-                <Button
-                  size="sm"
-                  variant={mode === "names" ? "secondary" : "outline-secondary"}
-                  aria-pressed={mode === "names"}
-                  onClick={() => onMode("names")}
-                >
-                  Names
-                </Button>
-                <Button
-                  size="sm"
-                  variant={mode === "icons" ? "secondary" : "outline-secondary"}
-                  aria-pressed={mode === "icons"}
-                  onClick={() => onMode("icons")}
-                >
-                  Icons
-                </Button>
-              </span>
-            </div>
-
-            {plugins.length >= SEARCH_FROM && (
+      <Modal
+        show={open}
+        onHide={() => setOpen(false)}
+        centered
+        scrollable
+        dialogClassName="pluginGridDialog"
+        aria-label="All plugins"
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>
+            All plugins <span className="pluginGridCount">{pinnedCount} of {plugins.length} pinned</span>
+          </Modal.Title>
+        </Modal.Header>
+        <Modal.Body className="pluginGrid">
+          <div className="pluginGridToolbar">
+            {plugins.length >= SEARCH_FROM ? (
               <input
                 type="search"
                 className="form-control form-control-sm pluginGridSearch"
@@ -144,7 +72,28 @@ const PluginGrid = ({ plugins, unpinned, states, mode, onMode, onTogglePin, onOp
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
               />
+            ) : (
+              <span className="pluginGridSearch" />
             )}
+            <span className="pluginGridModes" role="group" aria-label="Rail style">
+              <Button
+                size="sm"
+                variant={mode === "names" ? "secondary" : "outline-secondary"}
+                aria-pressed={mode === "names"}
+                onClick={() => onMode("names")}
+              >
+                Names
+              </Button>
+              <Button
+                size="sm"
+                variant={mode === "icons" ? "secondary" : "outline-secondary"}
+                aria-pressed={mode === "icons"}
+                onClick={() => onMode("icons")}
+              >
+                Icons
+              </Button>
+            </span>
+          </div>
 
             <div className="pluginGridCards">
               {shown.length === 0 && <p className="pluginGridNone">No plugin matches.</p>}
@@ -183,10 +132,9 @@ const PluginGrid = ({ plugins, unpinned, states, mode, onMode, onTogglePin, onOp
                 );
               })}
             </div>
-            <p className="pluginGridHint">Pinned plugins show on the rail. Others open from here.</p>
-          </div>,
-          document.querySelector(".app") ?? document.body
-        )}
+          <p className="pluginGridHint">Pinned plugins show on the rail. Others open from here.</p>
+        </Modal.Body>
+      </Modal>
     </>
   );
 };

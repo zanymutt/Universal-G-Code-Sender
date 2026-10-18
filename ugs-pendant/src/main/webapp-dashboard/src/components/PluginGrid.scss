@@ -1,35 +1,14 @@
-// Placed inline by PluginGrid.tsx (left/top/width/max-height), fixed inside
-// .app. Above the plugin windows (40/41) and their tray (42), like the
-// simulation settings popover.
+// The all-plugins dialog (PluginGrid.tsx): a react-bootstrap Modal like the
+// macro editor's, so it sits above the plugin windows without a z-index of its own.
 .pluginGridToggle {
   flex: 0 0 auto;
   padding: 2px 8px;
   line-height: 1;
 }
 
-.pluginGrid {
-  position: fixed;
-  z-index: 60;
-  box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px;
-  border-radius: 10px;
-  background: var(--dashboard-bg);
-  border: 1px solid var(--dashboard-border);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  overscroll-behavior: contain;
-  color: var(--dashboard-text);
-
-  .pluginGridHeader {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-  }
-
-  .pluginGridTitle { font-weight: 700; }
+// Wide enough for two columns of cards; narrower screens get one.
+.pluginGridDialog {
+  max-width: min(860px, 96vw);
 
   .pluginGridCount {
     margin-left: 6px;
@@ -37,13 +16,36 @@
     font-size: 0.8rem;
     font-weight: 400;
   }
+}
 
-  .pluginGridModes { display: inline-flex; gap: 4px; }
+.pluginGrid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--dashboard-text);
+
+  // Stays put while the cards scroll under it.
+  .pluginGridToolbar {
+    position: sticky;
+    top: calc(var(--bs-modal-padding, 1rem) * -1);
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: calc(var(--bs-modal-padding, 1rem) * -1) calc(var(--bs-modal-padding, 1rem) * -1) 0;
+    padding: var(--bs-modal-padding, 1rem) var(--bs-modal-padding, 1rem) 8px;
+    // Same as .modal-content (bootstrap.scss), so the cards scroll under it cleanly.
+    background: var(--dashboard-bg);
+  }
+
+  .pluginGridSearch { flex: 1 1 auto; min-width: 0; }
+
+  .pluginGridModes { flex: 0 0 auto; display: inline-flex; gap: 4px; }
 
   .pluginGridCards {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 8px;
   }
 
   .pluginGridNone,
