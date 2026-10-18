@@ -4,7 +4,7 @@ Version 0.7.1 imports SVG and ASCII 2D DXF, including passive drag-knife compens
 
 ## Endpoint joining for pen plotting (0.7.1)
 
-**Join separate open-path endpoints** is off by default under **Quality**. Enable it and choose an **Endpoint join tolerance** to keep a pen down between separate open paths whose endpoints are close enough. This makes a continuous path, reversing a neighboring path where needed. If two endpoints are not identical, the generated line includes the tiny bridge between them. The original artwork is never changed.
+**Join separate open-path endpoints** is off by default under **Quality**. Enable it and choose an **Endpoint join tolerance** from 0 to 5 mm to keep a pen down between separate open paths whose endpoints are close enough. This makes a continuous path, reversing a neighboring path where needed. If two endpoints are not identical, the generated line includes the tiny bridge between them. The original artwork is never changed.
 
 Joining is deliberately conservative: it only joins endpoint clusters containing exactly two endpoints from different open paths. A cluster with three or more nearby endpoints is treated as a branch and is reported but left unjoined, as are paths that merely cross in their middles. It applies before ordering, start selection, individual reversal and toolpath generation; each combined contour receives a name such as `path22/6 + 1 joined`. It works for SVG and DXF, saves in presets, and requires Reimport after changing the control.
 
