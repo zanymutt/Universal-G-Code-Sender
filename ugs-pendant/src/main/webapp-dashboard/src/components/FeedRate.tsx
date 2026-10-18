@@ -1,6 +1,6 @@
 import { ButtonGroup, ToggleButton } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
-import { FEED_RATE_OPTIONS } from "../utils/jogPresets";
+import { sortedPresets } from "../utils/jogPresets";
 import "./FeedRate.scss";
 
 type Props = {
@@ -8,10 +8,9 @@ type Props = {
   onChange: (value: number) => void;
 };
 
-const options = FEED_RATE_OPTIONS;
-
 const FeedRate = ({ value, onChange }: Props) => {
   const units = useAppSelector((state) => state.settings.preferredUnits);
+  const options = sortedPresets(useAppSelector((state) => state.jogPresets.feed));
 
   return (
     <div className="feedRate">

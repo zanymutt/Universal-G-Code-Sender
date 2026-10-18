@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { IconDefinition } from "@fortawesome/fontawesome-svg-core";
-import { faArrowLeft, faCheck, faGamepad, faKeyboard, faSun } from "@fortawesome/free-solid-svg-icons";
+import { faArrowLeft, faCheck, faGamepad, faKeyboard, faSun, faSliders } from "@fortawesome/free-solid-svg-icons";
 import { Button } from "react-bootstrap";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useAppSelector } from "../hooks/useAppSelector";
@@ -11,6 +11,7 @@ import { ACCENT_PRESET_ORDER, ACCENT_PRESETS } from "../theme/accentPresets";
 import { uiActions } from "../store/uiSlice";
 import { nextTabIndex } from "../utils/tabNav";
 import GamepadSettings from "../components/GamepadSettings";
+import JogPresetSettings from "../components/JogPresetSettings";
 import KeyboardSettings from "../components/KeyboardSettings";
 import "./SettingsPage.scss";
 
@@ -22,6 +23,7 @@ const THEME_OPTIONS: { value: DashboardTheme; label: string }[] = [
 // Add a tab here (and a branch in the panel below) to grow the page.
 const TABS: { id: string; label: string; icon: IconDefinition }[] = [
   { id: "appearance", label: "Appearance", icon: faSun },
+  { id: "jog", label: "Jog presets", icon: faSliders },
   { id: "keyboard", label: "Keyboard", icon: faKeyboard },
   { id: "gamepad", label: "Game controller", icon: faGamepad },
 ];
@@ -176,6 +178,7 @@ const SettingsPage = () => {
         aria-labelledby={`settings-tab-${activeTab}`}
       >
         {activeTab === "appearance" && <AppearanceSettings />}
+        {activeTab === "jog" && <JogPresetSettings />}
         {activeTab === "keyboard" && <KeyboardSettings />}
         {activeTab === "gamepad" && <GamepadSettings />}
       </div>

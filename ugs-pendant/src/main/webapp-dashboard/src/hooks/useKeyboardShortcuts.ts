@@ -15,7 +15,7 @@ import {
   isTypingTarget,
 } from "../utils/keyBindings";
 import { ActionCommand, commandFor, isCommandAvailable } from "../utils/dashboardActions";
-import { FEED_RATE_OPTIONS, STEP_SIZE_OPTIONS, stepPreset } from "../utils/jogPresets";
+import { stepPreset } from "../utils/jogPresets";
 
 // Window event JobBar listens for, so Start goes through the same "unsaved
 // editor text" warning as clicking the button.
@@ -34,19 +34,19 @@ export const runActionCommand = (command: ActionCommand, state: RootState, dispa
       quiet(jog(command.x, command.y, command.z));
       return;
     case "step": {
-      const { settings } = state;
+      const { settings, jogPresets } = state;
       if (command.axis === "xy") {
-        const next = stepPreset(STEP_SIZE_OPTIONS, settings.jogStepSizeXY, command.dir);
+        const next = stepPreset(jogPresets.xy, settings.jogStepSizeXY, command.dir);
         dispatch(setSettings({ ...settings, jogStepSizeXY: next }));
       } else if (settings.useZStepSize) {
-        const next = stepPreset(STEP_SIZE_OPTIONS, settings.jogStepSizeZ, command.dir);
+        const next = stepPreset(jogPresets.z, settings.jogStepSizeZ, command.dir);
         dispatch(setSettings({ ...settings, jogStepSizeZ: next }));
       }
       return;
     }
     case "feed": {
-      const { settings } = state;
-      const next = stepPreset(FEED_RATE_OPTIONS, settings.jogFeedRate, command.dir);
+      const { settings, jogPresets } = state;
+      const next = stepPreset(jogPresets.feed, settings.jogFeedRate, command.dir);
       dispatch(setSettings({ ...settings, jogFeedRate: next }));
       return;
     }

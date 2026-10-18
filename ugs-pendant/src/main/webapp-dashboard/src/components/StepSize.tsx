@@ -1,6 +1,6 @@
 import { ButtonGroup, ToggleButton } from "react-bootstrap";
 import { useAppSelector } from "../hooks/useAppSelector";
-import { STEP_SIZE_OPTIONS } from "../utils/jogPresets";
+import { sortedPresets } from "../utils/jogPresets";
 import "./StepSize.scss";
 
 type Props = {
@@ -10,10 +10,10 @@ type Props = {
   onChange: (value: number) => void;
 };
 
-const options = STEP_SIZE_OPTIONS;
-
 const StepSize = ({ name, label, value, onChange }: Props) => {
   const units = useAppSelector((state) => state.settings.preferredUnits);
+  const row = useAppSelector((state) => state.jogPresets[name === "z" ? "z" : "xy"]);
+  const options = sortedPresets(row);
 
   return (
     <div className="stepSize">

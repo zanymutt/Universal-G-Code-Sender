@@ -11,6 +11,7 @@ import uiReducer from "./uiSlice";
 import themeReducer from "./themeSlice";
 import accentReducer from "./accentSlice";
 import keyBindingsReducer from "./keyBindingsSlice";
+import jogPresetsReducer from "./jogPresetsSlice";
 
 import { socketMiddleware } from "./socketMiddleware";
 
@@ -27,6 +28,7 @@ const rootReducer = combineReducers({
   theme: themeReducer,
   accent: accentReducer,
   keyBindings: keyBindingsReducer,
+  jogPresets: jogPresetsReducer,
 });
 
 export const store = configureStore({

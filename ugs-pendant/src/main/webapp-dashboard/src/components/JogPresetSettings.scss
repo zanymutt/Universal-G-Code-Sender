@@ -1,0 +1,46 @@
+.jogPresetRows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.jogPresetRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  .jogPresetUnit {
+    color: var(--dashboard-text-muted);
+    font-weight: 400;
+  }
+}
+
+// Six slots share the row equally, so it fits a phone-width pane.
+.jogPresetSlots {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 560px;
+}
+
+.jogPresetInput {
+  min-width: 0;
+  min-height: 40px;
+  padding: 4px 6px;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 6px;
+  background: var(--dashboard-surface);
+  color: var(--dashboard-text);
+  text-align: center;
+  font: inherit;
+
+  &:focus {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 0;
+  }
+
+  &.jogPresetInvalid {
+    border-color: var(--bs-danger, #dc3545);
+  }
+}
