@@ -767,6 +767,7 @@ function render(f) {
   });
 
   updateAvgWarn(f);
+  if (pendingLoad) checkPendingLoad(false);
   if (!document.querySelector('.tabPanel[data-panel="active"]').hidden) renderActiveSettings();
   if (spEditing) updateSpDelta();   // the THC's value can change under an open editor
   $('raw').textContent = JSON.stringify(f, null, 2);
@@ -855,6 +856,11 @@ function updateRecBadge() {
   const badge = $('recBadge');
   badge.hidden = !recording;
   if (recording) badge.textContent = '● REC · ' + csvRows.length + ' rows · tap to stop';
+  // Operate shows the same state on the Datalog card instead (the bar is hidden there).
+  $('datalogCard').classList.toggle('recording', recording);
+  $('recInfo').hidden = !recording;
+  if (recording) $('recInfo').textContent = '● REC · ' + csvRows.length + ' rows';
+  $('downloadLogBtn').classList.toggle('hasData', csvRows.length > 0);
 }
 $('recBadge').onclick = () => setRecording(false);
 
@@ -1029,13 +1035,11 @@ function activeFieldCell(group, f, raw) {
     formatPresetField(f.kind, raw) + unit + '</td>';
 }
 
-// Name of the loaded preset that equals what the THC is running (testRun
-// ignored, a preset never carries it), false if none does, null if none loaded.
+// Name of the loaded preset that equals what the THC is running (testRun and
+// calibration offset ignored, a preset never carries it), false if none does, null if none loaded.
 function matchingPresetName() {
   if (!latest || parsedPresets.length === 0) return null;
-  const same = (p) => ['thc', 'movement', 'voltage', 'sync'].every((g) =>
-    FIELDS[g].every((f) => f.key === 'testRun' || (p[g] && p[g][f.key] === latest[g][f.key])));
-  const hit = parsedPresets.find(same);
+  const hit = parsedPresets.find((p) => presetDiffs(p).length === 0);
   return hit ? hit.name : false;
 }
 
@@ -1068,7 +1072,7 @@ function renderActiveSettings(force) {
   html += '</table>';
   el.innerHTML = html;
   const m = matchingPresetName();
-  note.textContent = (m === null ? '' : m ? 'Matches loaded preset "' + m + '". ' : 'Differs from every loaded preset. ') +
+  note.textContent = (m === null ? '' : m ? 'Matches loaded preset "' + m + '" (calibration offset ignored). ' : 'Differs from every loaded preset (calibration offset ignored). ') +
     'Tap a section or a value to open the tab that changes it.';
 }
 
@@ -1434,12 +1438,56 @@ $('presetSelect').onchange = () => renderPresetPreview(parsedPresets[selectedPre
 $('prevPresetBtn').onclick = () => selectPresetIndex(selectedPresetIndex() - 1);
 $('nextPresetBtn').onclick = () => selectPresetIndex(selectedPresetIndex() + 1);
 
+let toastTimer = null;
+function toast(msg, warn) {
+  const el = $('toast');
+  el.textContent = msg;
+  el.classList.toggle('warn', !!warn);
+  el.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.hidden = true; }, warn ? 8000 : 4000);
+}
+
+// Settings that don't count when comparing a preset with the live THC:
+// testRun is never part of a preset, and the calibration offset changes every
+// time Calibrate is pressed.
+const MATCH_IGNORE = ['testRun', 'calibrationOffset'];
+
+// Labels of the fields where the live THC differs from preset p.
+function presetDiffs(p) {
+  const out = [];
+  ['thc', 'movement', 'voltage', 'sync'].forEach((g) => FIELDS[g].forEach((f) => {
+    if (MATCH_IGNORE.includes(f.key)) return;
+    if (!(p[g] && p[g][f.key] === latest[g][f.key])) out.push(f.label);
+  }));
+  return out;
+}
+
+// A preset load is only reported as done once the THC's own telemetry shows
+// every value, so the message means "the THC has it", not "we sent it".
+let pendingLoad = null;
+function checkPendingLoad(timedOut) {
+  if (!pendingLoad || !latest) return;
+  const diffs = presetDiffs(pendingLoad.preset);
+  if (diffs.length === 0) {
+    toast('✓ "' + pendingLoad.preset.name + '" loaded - the THC confirms all settings');
+  } else if (timedOut) {
+    toast('"' + pendingLoad.preset.name + '" sent, but the THC still differs in: ' + diffs.slice(0, 4).join(', ') + (diffs.length > 4 ? ' +' + (diffs.length - 4) + ' more' : ''), true);
+  } else {
+    return;
+  }
+  clearTimeout(pendingLoad.timer);
+  pendingLoad = null;
+}
+
 $('loadPresetBtn').onclick = () => {
   const preset = parsedPresets[selectedPresetIndex()];
   if (!preset) return;
   const interlocked = latest && (latest.statusLEDs.arcOk || latest.statusLEDs.coolantOn || latest.inTHCCut || latest.inTestRun);
   const loadPreset = () => {
     if (send({ thc: preset.thc, movement: preset.movement, voltage: preset.voltage, sync: preset.sync })) {
+      if (pendingLoad) clearTimeout(pendingLoad.timer);
+      pendingLoad = { preset, timer: setTimeout(() => checkPendingLoad(true), 5000) };
       $('presetStatus').textContent = 'Sent "' + preset.name + '" - check the live values on the Settings tabs for the THC\'s own echo before cutting.';
     }
   };

@@ -425,6 +425,21 @@ body[data-view=link] .view[data-view=link] { display: block; }
 .datalogActions button { min-height: 58px; font-size: 17px; font-weight: 600; }
 .recBadge { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 6px; min-height: 38px; border: 2px solid var(--plugin-danger); border-radius: 8px; background: var(--plugin-danger-soft); color: var(--plugin-danger); font-weight: 700; font-size: 13px; font-variant-numeric: tabular-nums; }
 .recBadge[hidden] { display: none; }
+/* Operate page: the REC state lives on the Datalog card itself (red outline +
+   tint, count in its title line) so nothing above it changes height. The pinned
+   bar stays for Settings / Link. */
+body[data-view=operate] .recBadge { display: none; }
+#datalogCard.recording { border-color: var(--plugin-danger); box-shadow: 0 0 0 1px var(--plugin-danger); background: var(--plugin-danger-soft); }
+#datalogCard.recording .cardHeader { border-bottom-color: var(--plugin-danger); }
+#datalogCard.recording .cardHeader h2 { color: var(--plugin-danger); }
+.recInfo { color: var(--plugin-danger); font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums; }
+.recInfo[hidden] { display: none; }
+/* Save CSV turns green once there is a log to save. */
+#downloadLogBtn.hasData { border-color: var(--plugin-good); box-shadow: 0 0 0 1px var(--plugin-good); }
+/* Brief, non-blocking confirmation (preset loaded etc). */
+.toast { position: fixed; z-index: 50; left: 8px; right: 8px; bottom: 8px; margin: 0 auto; max-width: 480px; padding: 9px 12px; border: 1px solid var(--plugin-good); border-radius: 8px; background: var(--plugin-surface-raised); color: var(--plugin-text); font-size: 13px; font-weight: 600; box-shadow: 0 6px 20px rgba(0, 0, 0, .4); }
+.toast.warn { border-color: var(--plugin-warn); }
+.toast[hidden] { display: none; }
 .datalogActions button.recording { background: var(--plugin-danger); border-color: var(--plugin-danger); color: rgba(0, 0, 0, .78); }
 .avgActions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
 .avgActions button { flex: 1 1 auto; font-size: 13px; }

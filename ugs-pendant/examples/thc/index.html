@@ -27,6 +27,7 @@
       <span class="v lockTag" id="stripLock" title="Interlock">--</span>
     </div>
   </div>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <div id="offlineBar" class="offlineBar" role="status" hidden></div>
 
   <main class="views">
@@ -76,8 +77,8 @@
         </div>
       </div>
 
-      <div class="card">
-        <header class="cardHeader"><h2>Datalog</h2></header>
+      <div class="card" id="datalogCard">
+        <header class="cardHeader"><h2>Datalog</h2><span class="recInfo" id="recInfo" hidden></span></header>
         <div class="cardBody">
           <div class="row datalogActions">
             <button id="recordBtn">Start recording</button>
