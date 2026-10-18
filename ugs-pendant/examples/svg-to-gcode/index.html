@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>SVG / DXF to G-code</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>SVG / DXF to G-code <small>Preview · 0.7.0</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
+<header><h1>SVG / DXF to G-code <small>Preview · 0.7.1</small></h1><p>Plot, cut or trace vector paths. Finish every pass on a path before moving on.</p>
 <div class="importBar"><label>SVG or DXF file<input id="file" type="file" accept=".svg,.dxf,image/svg+xml,application/dxf,image/vnd.dxf"></label><button id="example">Load example artwork</button></div></header>
 <div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
@@ -75,6 +75,9 @@
 <p class="hint">Merges nearby samples only when the replacement stays within half the curve tolerance. Endpoints are retained; not every short move can be removed safely.</p>
 <label>Endpoint equality (mm; 0 = off)<input id="equalDistance" type="number" value="0.01" min="0" max="1" step="0.001"></label>
 <p class="hint">Closes a single path when its start and end are this close. Does not join separate paths. Use 0 to preserve intentional tiny openings.</p>
+<label class="check"><input id="joinEndpoints" type="checkbox">Join separate open-path endpoints</label>
+<label>Endpoint join tolerance (mm)<input id="joinDistance" type="number" value="0.01" min="0" max="1" step="0.001" disabled></label>
+<p class="hint">For pen plotting, joins a pair of endpoints from different open paths when they are this close, so the pen stays down. A tiny bridge is drawn if the endpoints do not exactly coincide. Branches with three or more nearby endpoints are left unchanged. Reimport to apply.</p>
 <button id="reimport" disabled>Reimport with these settings</button>
 <p class="hint">Reimport applies the controls above and clears manual starts and directions. Original files are unchanged. Import distances are measured before artwork scaling.</p>
 <label>Output simplification tolerance (mm; 0 = off)<input id="outputTolerance" type="number" value="0.01" min="0" max="1" step="0.001"></label>

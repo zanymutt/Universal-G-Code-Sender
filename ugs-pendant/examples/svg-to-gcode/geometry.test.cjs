@@ -42,5 +42,30 @@ test('Merge handles a closed seam, preserves minimum geometry and does not join 
  const tiny=[v(0,0),v(.0001,0),v(0,.0001)];assert.equal(G.mergeNearby(tiny,true,.001).length,3);
  const p=prepared('M0 0 L10 0');p.items.push({...p.items[0],d:'M10.0001 0 L20 0'});p.options={...opts,mergeDistance:.001};assert.equal(G.run(p).paths.length,2);
 });
+test('Endpoint joining chains only unambiguous separate open paths and reverses when needed',()=>{
+ const p=prepared('M0 0 L10 0');
+ p.items.push({...p.items[0],d:'M20 0 L10.005 0',name:'second'},{...p.items[0],d:'M20.006 0 L30 0',name:'third'});
+ p.options={...opts,cleanup:0,joinEndpoints:true,joinDistance:.01};
+ const d=G.run(p);assert.equal(d.paths.length,1);assert(!d.paths[0].closed);assert.equal(d.paths[0].name,'test + 2 joined');
+ assert.deepEqual(d.paths[0].points.map(p=>Number(p.x.toFixed(3))),[0,10,10.005,20,20.006,30]);
+ assert(d.warnings.some(w=>w.includes('Joined 2 separate open-path endpoint pair')));
+});
+
+test('Endpoint joining follows a full chain when source order starts with its middle segment',()=>{
+ const point=(x,y)=>({x,y,tin:{x:1,y:0},tout:{x:1,y:0}});
+ const result=G.joinOpenEndpoints([
+  {id:'middle',name:'middle',closed:false,points:[point(10,0),point(20,0)]},
+  {id:'left',name:'left',closed:false,points:[point(0,0),point(10,0)]},
+  {id:'right',name:'right',closed:false,points:[point(20,0),point(30,0)]}
+ ],.01);
+ assert.equal(result.paths.length,1);
+ assert.deepEqual(result.paths[0].points.map(p=>p.x),[0,10,20,30]);
+});
+test('Endpoint joining closes an unambiguous loop but leaves branches and disabled joining alone',()=>{
+ const square=prepared('M0 0 L10 0');square.items.push({...square.items[0],d:'M10 0 L10 10'},{...square.items[0],d:'M10 10 L0 10'},{...square.items[0],d:'M0 10 L0 0'});
+ square.options={...opts,cleanup:0,joinEndpoints:true,joinDistance:.001};const loop=G.run(square);assert.equal(loop.paths.length,1);assert(loop.paths[0].closed);
+ const branch=prepared('M0 0 L10 0');branch.items.push({...branch.items[0],d:'M10 0 L20 0'},{...branch.items[0],d:'M10 0 L10 10'});branch.options={...opts,cleanup:0,joinEndpoints:true,joinDistance:.001};const b=G.run(branch);assert.equal(b.paths.length,3);assert(b.warnings.some(w=>w.includes('branching endpoint cluster')));
+ const off=prepared('M0 0 L10 0');off.items.push({...off.items[0],d:'M10 0 L20 0'});off.options={...opts,cleanup:0,joinEndpoints:false,joinDistance:.001};assert.equal(G.run(off).paths.length,2);
+});
 console.log(checks+' geometry/corner checks passed');
 

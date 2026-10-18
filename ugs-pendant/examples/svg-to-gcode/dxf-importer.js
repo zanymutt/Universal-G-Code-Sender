@@ -41,10 +41,11 @@
     const out=[];for(const tag of tags){if(tag[0]===0)out.push({type:tag[1],tags:[]});else if(out.length)out.at(-1).tags.push(tag);}return out;
   }
   function options(o){
-    const v={spacing:.5,cleanup:0,curveSegments:12,tolerance:.01,equalDistance:0,mergeDistance:.001,...o};
-    for(const [k,min,max]of [['spacing',.02,5],['cleanup',0,1],['tolerance',.001,1],['equalDistance',0,1],['mergeDistance',0,.1],['curveSegments',1,1000]]){
+    const v={spacing:.5,cleanup:0,curveSegments:12,tolerance:.01,equalDistance:0,mergeDistance:.001,joinEndpoints:false,joinDistance:.01,...o};
+    for(const [k,min,max]of [['spacing',.02,5],['cleanup',0,1],['tolerance',.001,1],['equalDistance',0,1],['mergeDistance',0,.1],['joinDistance',0,1],['curveSegments',1,1000]]){
       if(!Number.isFinite(v[k])||v[k]<min||v[k]>max)throw Error('Invalid '+k+'; expected '+min+' to '+max+'.');
     }
+    if(typeof v.joinEndpoints!=='boolean')throw Error('Endpoint joining must be on or off.');
     if(!Number.isInteger(v.curveSegments))throw Error('Curve segments must be an integer.');return v;
   }
   const distance=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);

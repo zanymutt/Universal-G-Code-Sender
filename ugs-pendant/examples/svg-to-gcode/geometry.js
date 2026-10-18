@@ -113,6 +113,45 @@
       for(let i=0;i<result.length-(closed?0:1);i++){const a=result[i],b=result[(i+1)%result.length];const ia=indices.get(a),ib=indices.get(b),between=[];for(let k=(ia+1)%points.length;k!==ib;k=(k+1)%points.length){between.push(points[k]);if(between.length>points.length)break;}if(between.filter(p=>!removedJogs.has(p)).some(p=>p.tin&&p.tout&&Math.abs(p.tin.x*p.tout.y-p.tin.y*p.tout.x)>1e-6||p.tin&&p.tout&&p.tin.x*p.tout.x+p.tin.y*p.tout.y<0)){const v=unit({x:b.x-a.x,y:b.y-a.y});a.tout=v;b.tin=v;}}
       return result;
     }
+    // Join only unambiguous pairs of endpoints from separate open paths.
+    // An endpoint cluster with three or more members is a branch, so leave it
+    // alone rather than guessing which strokes a pen should connect.
+    function joinOpenEndpoints(paths,tolerance=0){
+      if(!tolerance)return {paths,joins:0,ambiguous:0};
+      const endpoints=[];
+      paths.forEach((path,index)=>{if(!path.closed){endpoints.push({index,end:0,point:path.points[0]},{index,end:1,point:path.points.at(-1)});}});
+      const parent=endpoints.map((_,i)=>i),find=i=>{while(parent[i]!==i){parent[i]=parent[parent[i]];i=parent[i];}return i;};
+      const union=(a,b)=>{a=find(a);b=find(b);if(a!==b)parent[b]=a;};
+      for(let a=0;a<endpoints.length;a++)for(let b=a+1;b<endpoints.length;b++)if(endpoints[a].index!==endpoints[b].index&&dist(endpoints[a].point,endpoints[b].point)<=tolerance)union(a,b);
+      const clusters=new Map();endpoints.forEach((endpoint,i)=>{const root=find(i);if(!clusters.has(root))clusters.set(root,[]);clusters.get(root).push(endpoint);});
+      const key=e=>e.index+':'+e.end,links=new Map();let ambiguous=0;
+      for(const cluster of clusters.values()){
+        if(cluster.length===2&&cluster[0].index!==cluster[1].index){links.set(key(cluster[0]),cluster[1]);links.set(key(cluster[1]),cluster[0]);}
+        else if(cluster.length>1)ambiguous++;
+      }
+      const used=new Set(),joined=[];
+      const oriented=(path,forward)=>forward?path.points.map(p=>({...p})):path.points.slice().reverse().map(p=>({...p,tin:p.tout,tout:p.tin}));
+    const hasFreeEnd=index=>!paths[index].closed&&(!links.has(index+':0')||!links.has(index+':1'));
+    // Start chains at an exterior endpoint. Source order can otherwise begin
+    // at a middle segment and split one continuous chain into two outputs.
+    const traversalOrder=paths.map((_,index)=>index).sort((a,b)=>Number(hasFreeEnd(b))-Number(hasFreeEnd(a)));
+    for(const first of traversalOrder){
+        if(used.has(first)||paths[first].closed){if(!used.has(first)&&paths[first].closed){used.add(first);joined.push(paths[first]);}continue;}
+        const startForward=!links.has(first+':0')||links.has(first+':1');
+        let index=first,forward=startForward,closed=false,points=[],names=[];
+        while(!used.has(index)){
+          used.add(index);const path=paths[index],next=oriented(path,forward);names.push(path.name);
+          if(points.length&&dist(points.at(-1),next[0])<=1e-10){points.at(-1).tout=next[0].tout;points.push(...next.slice(1));}
+          else points.push(...next);
+          const exit={index,end:forward?1:0},link=links.get(key(exit));
+          if(!link)break;
+          if(link.index===first){closed=true;break;}
+          index=link.index;forward=link.end===0;
+        }
+        const path=paths[first];joined.push({...path,name:names.length===1?path.name:names[0]+' + '+(names.length-1)+' joined',closed,points});
+      }
+      return {paths:joined,joins:links.size/2,ambiguous};
+    }
     function* sample(item,o){
       const m=item.matrix,world=p=>({x:m[0]*p.x+m[2]*p.y+m[4],y:item.height-(m[1]*p.x+m[3]*p.y+m[5])});
       const vector=v=>unit({x:m[0]*v.x+m[2]*v.y,y:-m[1]*v.x-m[3]*v.y});
@@ -159,15 +198,19 @@
         if(r.gapClosed)warnings.push('Closed a same-path endpoint gap within '+options.equalDistance+' mm.');
         paths.push({id:'p'+paths.length,name:items[i].name,closed:r.closed,points:r.points});
       }
+      const endpointJoin=joinOpenEndpoints(paths,options.joinEndpoints?options.joinDistance:0);
+      paths.splice(0,paths.length,...endpointJoin.paths);
       if(!paths.length)throw Error('No supported visible vector paths found.');
       if(mergedCount)warnings.push(`Merged ${mergedCount} nearby vertices (maximum group size ${options.mergeDistance} mm).`);
       if(removed)warnings.push(`Short-move cleanup removed ${removed} redundant points.`);
-      const open=paths.filter(p=>!p.closed).length;if(open)warnings.push(`${open} open path(s): SVG fill does not close the cutting path.`);
+      if(endpointJoin.joins)warnings.push(`Joined ${endpointJoin.joins} separate open-path endpoint pair(s) within ${options.joinDistance} mm.`);
+      if(endpointJoin.ambiguous)warnings.push(`Left ${endpointJoin.ambiguous} branching endpoint cluster(s) unjoined.`);
+      const open=paths.filter(p=>!p.closed).length;if(open)warnings.push(`${open} open path(s): fills do not close the cutting path.`);
       warnings.push('SVG vectors define the intended cut. Fills and stroke widths do not define a scrap side. Knife mode adds holder-offset compensation.');
       return {paths,width,height,page:[{x:0,y:0},{x:width,y:0},{x:width,y:height},{x:0,y:height}],warnings,vertices};
     }
     function run(prepared){const gen=process(prepared);let step;while(!(step=gen.next()).done){}return step.value;}
-    return {segments,at,derivative,cusps,mergeNearby,sample,process,run};
+    return {segments,at,derivative,cusps,mergeNearby,joinOpenEndpoints,sample,process,run};
   }
   const api=createGeometry();api.workerSource='const G=('+createGeometry.toString()+')();self.onmessage=e=>{try{const gen=G.process(e.data);let step,last=0;while(!(step=gen.next()).done){if(performance.now()-last>30){self.postMessage({progress:step.value});last=performance.now();}}self.postMessage({result:step.value});}catch(e){self.postMessage({error:e.message});}};';
   if(typeof module!=='undefined')module.exports=api;else root.SvgGeometry=api;

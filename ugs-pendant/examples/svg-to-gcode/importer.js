@@ -80,11 +80,13 @@
     }
     throw Error('Unsupported SVG element <'+tag+'>. Convert text/clones to paths and remove bitmap images first.');
   }
-  function prepare(text,{dpi=96,spacing=.5,cleanup=0,curveSegments=12,tolerance=.01,equalDistance=0,mergeDistance=.001}={}){
+  function prepare(text,{dpi=96,spacing=.5,cleanup=0,curveSegments=12,tolerance=.01,equalDistance=0,mergeDistance=.001,joinEndpoints=false,joinDistance=.01}={}){
     if(!Number.isInteger(curveSegments)||curveSegments<1||curveSegments>1000)throw Error('Curve segments must be an integer from 1 to 1000.');
     if(!Number.isFinite(tolerance)||tolerance<.001||tolerance>1)throw Error('Curve tolerance must be 0.001–1 mm.');
     if(!Number.isFinite(mergeDistance)||mergeDistance<0||mergeDistance>.1)throw Error('Merge nearby nodes must be 0–0.1 mm.');
     if(!Number.isFinite(equalDistance)||equalDistance<0||equalDistance>1)throw Error('Endpoint equality must be 0–1 mm.');
+    if(typeof joinEndpoints!=='boolean')throw Error('Endpoint joining must be on or off.');
+    if(!Number.isFinite(joinDistance)||joinDistance<0||joinDistance>1)throw Error('Endpoint join tolerance must be 0–1 mm.');
     if(text.length>5000000)throw Error('SVG exceeds 5 MB.');
     if(!(dpi>0&&dpi<=2400&&spacing>=.02&&spacing<=5))throw Error('DPI must be 1–2400; segment spacing must be 0.02–5 mm.');
     if(/<!DOCTYPE|<!ENTITY/i.test(text))throw Error('Remove the SVG DOCTYPE/entity declarations first.');
@@ -125,7 +127,7 @@
       }
     }
     walk(root,pageMatrix);
-    return {items,width,height,options:{dpi,spacing,cleanup,curveSegments,tolerance,equalDistance,mergeDistance}};
+    return {items,width,height,options:{dpi,spacing,cleanup,curveSegments,tolerance,equalDistance,mergeDistance,joinEndpoints,joinDistance}};
   }
   function parse(text,options){return SvgGeometry.run(prepare(text,options));}
   async function parseAsync(text,options,{signal,onProgress=()=>{}}={}){

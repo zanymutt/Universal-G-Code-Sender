@@ -1,7 +1,7 @@
 (function(){
   'use strict';
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
-  const importFields=['dpi','spacing','cleanup','curveSegments','tolerance','equalDistance','mergeDistance'];
+  const importFields=['dpi','spacing','cleanup','curveSegments','tolerance','equalDistance','mergeDistance','joinDistance'];
   const numeric=['outputTolerance','feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
   const knifeNumeric=['knifeArcAngle','knifeOffset','knifeSwivelZ','knifePasses','knifeAngle','knifeFeed','knifeLead','knifeHeading'];
   const choices=['mode','tool','origin','originBounds','order','start'];
@@ -13,6 +13,7 @@
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
+  function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
   function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
@@ -85,7 +86,7 @@
   }
   async function importSvg(){
     const request=++loadId;importController?.abort();const controller=new AbortController();importController=controller;
-    const source=svgText,format=fileFormat,options={...Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),dxfUnits:$('dxfUnits').value},started=performance.now();
+    const source=svgText,format=fileFormat,options={...Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),joinEndpoints:$('joinEndpoints').checked,dxfUnits:$('dxfUnits').value},started=performance.now();
     busy('Opening '+format.toUpperCase()+'…');
     invalidate();job=null;documentData=null;locks={};directions={};$('generate').disabled=true;$('selected').replaceChildren();
     for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=true;
@@ -115,7 +116,7 @@
     svgText='<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="outer" x="5" y="5" width="70" height="50" rx="4"/><circle id="hole" cx="20" cy="20" r="6"/><path id="wave" d="M32 20 C40 5 55 35 65 18 M15 42 Q40 22 65 42"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
-  [...importFields,'dxfUnits'].forEach(id=>$(id).addEventListener('input',()=>{cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
+  [...importFields,'dxfUnits','joinEndpoints'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='joinEndpoints')syncEndpointJoinControl();cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
   [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift'].forEach(id=>$(id).addEventListener('input',()=>{
     if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';update();
   }));
@@ -254,7 +255,8 @@
     host('subscribe',{event:'theme'}).catch(()=>{});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse',...importFields,'dxfUnits'];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','joinEndpoints',...importFields,'dxfUnits'];
+  const importState=()=>JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value).concat($('joinEndpoints').checked));
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));
     presets.forEach((p,i)=>$('presets').append(new Option(p.name,String(i))));
@@ -272,12 +274,13 @@
   };
   $('loadPreset').onclick=()=>{
     const preset=presets[Number($('presets').value)];if($('presets').value===''||!preset)return;
-    const oldImport=JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value));
+    const oldImport=importState();
     $('dxfUnits').value=preset.values.dxfUnits??'auto';
-    for(const [k,v]of Object.entries({mergeDistance:.001,curveSegments:12,tolerance:.01,equalDistance:0,outputTolerance:.01}))$(k).value=preset.values[k]??v;
+    for(const [k,v]of Object.entries({mergeDistance:.001,curveSegments:12,tolerance:.01,equalDistance:0,joinDistance:.01,outputTolerance:.01}))$(k).value=preset.values[k]??v;
     $('cleanup').value=Object.hasOwn(preset.values,'cleanup')?preset.values.cleanup:'0';
     if(preset.values.mode==='knife'){$('knifeAlign').checked=true;$('knifeLift').checked=true;knifeNumeric.forEach(k=>$(k).value=({knifeArcAngle:'10',knifeOffset:'0.45',knifePasses:'1',knifeAngle:'30',knifeFeed:'200',knifeLead:'0',knifeHeading:'0'})[k]??'');}
     presetFields.forEach(k=>{if(Object.hasOwn(preset.values,k)){if($(k).type==='checkbox')$(k).checked=!!preset.values[k];else $(k).value=preset.values[k];}});
+    syncEndpointJoinControl();
     let migrated=false;
     if(preset.values.mode==='knife'&&Object.hasOwn(preset.values,'knifeCutZ')){
       const oldZ=String(preset.values.knifeCutZ).trim();
@@ -285,7 +288,7 @@
       else {$('surface').value='';$('final').value='';}
     }
     $('presetName').value=preset.name;
-    if(svgText&&oldImport!==JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value)))importSvg();else update();
+    if(svgText&&oldImport!==importState())importSvg();else update();
     message('Loaded preset: '+preset.name+(migrated?'. Previous fixed cut Z was kept as Surface and Final Z; repeats are preserved. Set Surface / Final / Step down for progressive passes.':''));
   };
   $('deletePreset').onclick=async()=>{
@@ -313,5 +316,5 @@
     $('output').focus();$('output').select();
     try{if(!document.execCommand('copy'))throw Error();message('G-code copied.');}catch{message('G-code selected. Use your device’s Copy command.');}
   };
-  update();
+  syncEndpointJoinControl();update();
 })();
