@@ -71,19 +71,34 @@ console.log('fill ok');
   const edgeDist=(p,r)=>Math.min(p.x-r.x0,r.x1-p.x,p.y-r.y0,r.y1-p.y);
   const square=[rect(0,0,20,20)],box={x0:0,y0:0,x1:20,y1:20};
   const waves=core.hatchLines(square,0,2,.5,{wave:true,amp:.8,wavelength:5,shift:0});
-  assert(waves.length>5&&waves.every(w=>w.length>10),'each wavy line has many points');
-  // waves swing no further than amp from their straight line, and never come nearer than the gap to the outline
-  for(const w of waves){
-    const baseY=Math.round(w.reduce((a,p)=>a+p.y,0)/w.length/2)*2;
-    assert(w.every(p=>Math.abs(p.y-baseY)<=.8+1e-6),'swing within amplitude');
-    assert(w.every(p=>edgeDist(p,box)>=.5-1e-6),'wave keeps the gap');
-  }
-  const ys=waves[0].map(p=>p.y);assert(Math.max(...ys)-Math.min(...ys)>1.4,'the wave really swings (about 2 x amp)');
+  assert(waves.length>5,'many wavy lines');
+  // the wave is trimmed to the gap from the outline, not to the gap plus the wave height
+  const allPts=waves.flat(),minEdge=Math.min(...allPts.map(p=>edgeDist(p,box)));
+  assert(allPts.every(p=>edgeDist(p,box)>=.5-1e-6),'no point closer than the gap');
+  assert(minEdge<.5+.02,'waves run right up to the gap ('+minEdge.toFixed(4)+' from the outline)');
+  assert(waves.some(w=>w.some(p=>p.x<.5+.05))&&waves.some(w=>w.some(p=>p.x>20-.5-.05)),'reaches the left and right sides');
+  assert(allPts.some(p=>p.y>20-.5-.05)&&allPts.some(p=>p.y<.5+.05),'reaches the top and bottom sides');
+  // interior lines swing about 2 x amp and keep their shape
+  const full=waves.filter(w=>w.length>20);assert(full.length>=3);
+  for(const w of full){const ys=w.map(p=>p.y);assert(Math.max(...ys)-Math.min(...ys)>1.4,'the wave really swings (about 2 x amp)');}
   // phase shift moves neighboring lines relative to each other
   const shifted=core.hatchLines(square,0,2,.5,{wave:true,amp:.8,wavelength:5,shift:180});
   const offsetAt=(w,x)=>{const q=w.reduce((best,p)=>Math.abs(p.x-x)<Math.abs(best.x-x)?p:best);return q.y-Math.round(q.y/2)*2;};
-  assert(Math.abs(offsetAt(waves[0],7.3)-offsetAt(waves[1],7.3))<.05,'shift 0: neighboring lines swing together');
-  assert(Math.abs(offsetAt(shifted[0],7.3)+offsetAt(shifted[1],7.3))<.05&&Math.abs(offsetAt(shifted[0],7.3))>.1,'shift 180: neighboring lines swing oppositely');
+  const mid=ws=>ws.filter(w=>w.length>20&&w.some(p=>Math.abs(p.x-6.5)<.3)).slice(2,4);
+  const [m0,m1]=mid(waves),[s0,s1]=mid(shifted);
+  assert(Math.abs(offsetAt(m0,6.5)-offsetAt(m1,6.5))<.05,'shift 0: neighboring lines swing together');
+  assert(Math.abs(offsetAt(s0,6.5)+offsetAt(s1,6.5))<.05&&Math.abs(offsetAt(s0,6.5))>.1,'shift 180: neighboring lines swing oppositely');
+  // a tall wave on a small shape still fills it right up to the gap (the reported case)
+  const tall=core.hatchLines([rect(0,0,30,30)],135,1.15,.7,{wave:true,amp:2.1,wavelength:10,shift:0});
+  assert(tall.length>10);
+  const near=p=>Math.min(p.x,30-p.x,p.y,30-p.y);
+  const tp=tall.flat();
+  assert(tp.every(p=>near(p)>=.7-1e-6),'tall wave keeps the gap');
+  assert(Math.min(...tp.map(near))<.7+.05,'tall wave reaches the gap');
+  // coverage: every point of the square (outside the gap band) is within one line spacing of some hatch point
+  let worst=0;
+  for(let x=1;x<=29;x+=2)for(let y=1;y<=29;y+=2){const d=Math.min(...tp.map(p=>Math.hypot(p.x-x,p.y-y)));worst=Math.max(worst,d);}
+  assert(worst<2.2,'the square is covered ('+worst.toFixed(2)+' mm from the nearest line at worst)');
 }
 // ---- zigzag: neighboring lines are joined so the pen stays down
 {
@@ -111,7 +126,7 @@ console.log('fill ok');
   const d={paths:[{id:'a',name:'a',closed:true,color:'#ff0000',fillColor:'#ff0000',group:1,points:rect(0,0,20,20)}],page:rect(0,0,20,20)};
   const f=(extra)=>({1:{mode:'wavy',angle:0,spacing:2,gap:.5,amp:.6,wavelength:5,shift:0,...extra}});
   const wavy=core.plan(d,{...base2,penMap:{'#ff0000':1},fills:f({})});
-  assert(wavy.paths.filter(p=>p.fill).every(p=>p.points.length>10));
+  assert(wavy.paths.filter(p=>p.fill).some(p=>p.points.length>10)&&wavy.paths.filter(p=>p.fill).every(p=>p.points.length>=2));
   const zig=core.plan(d,{...base2,penMap:{'#ff0000':1},fills:f({zigzag:true})});
   assert(zig.fills<wavy.fills,'zigzag joins wavy lines');
   assert.throws(()=>core.plan(d,{...base2,penMap:{'#ff0000':1},fills:f({amp:-1})}),/wave height/);
@@ -129,7 +144,7 @@ console.log('wavy/zigzag ok');
   const one=core.plan(d,{...base3,penMap:{'#ff0000':1},fills:{1:{mode:'wavy',angle:0,spacing:2,gap:.5,amp:.6,wavelength:5,shift:0}}}).fills;
   const two=core.plan(d,{...base3,penMap:{'#ff0000':1},fills:{1:{mode:'wavycross',angle:0,spacing:2,gap:.5,amp:.6,wavelength:5,shift:0}}});
   assert.strictEqual(two.fills,one*2,'wavy cross-hatch = wavy lines at angle and angle+90');
-  assert(two.paths.filter(p=>p.fill).every(p=>p.points.length>10),'both sets are wavy');
+  assert(two.paths.filter(p=>p.fill).filter(p=>p.points.length>10).length>=two.fills/2,'both sets are wavy');
 }
 
 // ---- hidden-line removal
@@ -179,3 +194,40 @@ console.log('wavy/zigzag ok');
   assert.strictEqual(core.plan(doc2(lower,upper),{...o2,mode:'laser',tool:'M4',focus:0,laserPasses:1,hideCovered:true}).hidden.trimmed,0);
 }
 console.log('wavy cross + hidden lines ok');
+
+// ---- hidden-line removal keeps the edge gap from the covering shape
+{
+  const base5={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
+  const mk=(id,pts,group)=>({id,name:id,closed:true,color:'#000000',fillColor:'#ff0000',group,points:pts});
+  const lower=mk('low',rect(0,0,10,10),1),upper=mk('up',rect(5,5,15,15),2);
+  const docG={paths:[lower,upper],page:rect(0,0,15,15)};
+  const boundaryDist=p=>{ // distance to the upper rectangle's outline (0 on it), signed positive outside
+    const dx=Math.max(5-p.x,0,p.x-15),dy=Math.max(5-p.y,0,p.y-15);
+    if(dx>0||dy>0)return Math.hypot(dx,dy);
+    return -Math.min(p.x-5,15-p.x,p.y-5,15-p.y);
+  };
+  for(const [mode,extra] of [['hatch',{}],['wavy',{amp:.4,wavelength:4,shift:0}],['hatch',{zigzag:true}]]){
+    const gap=.6,o5={...base5,penMap:{'#000000':1,'#ff0000':1},hideCovered:true,fills:{1:{mode,angle:20,spacing:1,gap,...extra}}};
+    const job=core.plan(docG,o5);
+    const lowerHatch=job.paths.filter(p=>p.fill&&p.group===1);
+    assert(lowerHatch.length>0);
+    for(const p of lowerHatch)for(let i=0;i<p.points.length;i++){
+      for(const t of i?[0,.5,1]:[0]){
+        const a=p.points[i-1]||p.points[i],b=p.points[i],q={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t};
+        const d=boundaryDist(q);
+        assert(d>=gap-1e-6,mode+(extra.zigzag?'+zigzag':'')+': hatch of the covered shape comes within '+d.toFixed(4)+' of the covering outline at '+JSON.stringify(q));
+      }
+    }
+    // the covering shape's own hatch is untouched and still reaches its own gap limit
+    assert(job.paths.some(p=>p.fill&&p.group===2));
+  }
+  // with gap 0 the old behavior stays: the hatch runs right up to the edge
+  const flush=core.plan(docG,{...base5,penMap:{'#000000':1,'#ff0000':1},hideCovered:true,fills:{1:{mode:'hatch',angle:0,spacing:1,gap:0}}});
+  assert(flush.paths.filter(p=>p.fill&&p.group===1).some(p=>p.points.some(q=>Math.abs(boundaryDist(q))<1e-6)),'gap 0 reaches the edge');
+  // a bigger gap pulls the hatch further back
+  const wide=core.plan(docG,{...base5,penMap:{'#000000':1,'#ff0000':1},hideCovered:true,fills:{1:{mode:'hatch',angle:0,spacing:1,gap:2}}});
+  assert(wide.paths.filter(p=>p.fill&&p.group===1).every(p=>p.points.every(q=>boundaryDist(q)>=2-1e-6)));
+  // outlines of the covered shape still stop exactly at the edge (the gap is a fill setting)
+  assert(flush.paths.filter(p=>p.id.startsWith('low.')).some(p=>p.points.some(q=>Math.abs(boundaryDist(q))<1e-6)));
+}
+console.log('hidden-line gap ok');

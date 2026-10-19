@@ -122,14 +122,14 @@
   }
   // Returns polylines ([{x,y},...]). opt: wave/amp/wavelength/shift (wavy lines), zigzag (join line ends).
   function hatchLines(contours,angle,spacing,gap,opt={}){
-    const th=angle*Math.PI/180,c=Math.cos(th),s=Math.sin(th),edges=[];let vmin=Infinity,vmax=-Infinity;
-    const amp=opt.wave?opt.amp:0,wavelength=opt.wavelength||10,shift=(opt.shift||0)*Math.PI/180,clearance=gap+amp;
+    const th=angle*Math.PI/180,c=Math.cos(th),s=Math.sin(th),edges=[];let vmin=Infinity,vmax=-Infinity,umin=Infinity,umax=-Infinity;
+    const amp=opt.wave?opt.amp:0,wavelength=opt.wavelength||10,shift=(opt.shift||0)*Math.PI/180,clearance=gap;
     for(const pts of contours){
       const r=pts.map(q=>({u:q.x*c+q.y*s,v:-q.x*s+q.y*c}));
-      for(const q of r){vmin=Math.min(vmin,q.v);vmax=Math.max(vmax,q.v);}
-      for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];if(a.u===b.u&&a.v===b.v)continue;edges.push({a,b,lo:Math.min(a.v,b.v),hi:Math.max(a.v,b.v)});}
+      for(const q of r){vmin=Math.min(vmin,q.v);vmax=Math.max(vmax,q.v);umin=Math.min(umin,q.u);umax=Math.max(umax,q.u);}
+      for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];if(a.u===b.u&&a.v===b.v)continue;edges.push({a,b,xa:{x:a.u,y:a.v},xb:{x:b.u,y:b.v},lo:Math.min(a.v,b.v),hi:Math.max(a.v,b.v),ulo:Math.min(a.u,b.u),uhi:Math.max(a.u,b.u)});}
     }
-    const first=Math.ceil(vmin/spacing),last=Math.floor(vmax/spacing);
+    const first=Math.ceil((vmin-amp)/spacing),last=Math.floor((vmax+amp)/spacing);
     if(last-first>20000)throw Error('Hatch spacing is too small for this artwork: more than 20,000 lines. Increase the spacing.');
     const insideShape=(u,v)=>{let hit=false;for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v)&&u<e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v))hit=!hit;return hit;};
     const nearest=(u,v)=>{let best=Infinity;for(const e of edges){if(v<e.lo-best||v>e.hi+best)continue;const dx=e.b.u-e.a.u,dy=e.b.v-e.a.v,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((u-e.a.u)*dx+(v-e.a.v)*dy)/l)):0;best=Math.min(best,Math.hypot(u-e.a.u-t*dx,v-e.a.v-t*dy));}return best;};
@@ -139,34 +139,63 @@
       for(const t of [.25,.5,.75]){const u=p.u+(q.u-p.u)*t,v=p.v+(q.v-p.v)*t;if(!insideShape(u,v)||(gap>0&&nearest(u,v)<gap*.6))return false;}
       return true;
     };
+    // A wavy line is generated across the shape's whole width, then trimmed to the part that is
+    // inside the shape and at least `gap` from its outline, so waves reach the gap at the sides too.
+    let work=0;
+    const waveRow=(n,v)=>{
+      const count=Math.max(2,Math.ceil((umax-umin)/(wavelength/10))),base=[];
+      for(let k=0;k<=count;k++){const u=umin+(umax-umin)*k/count;base.push({u,v:v+amp*Math.sin(2*Math.PI*u/wavelength+n*shift)});}
+      const pieces=[];let cur=null;const done=()=>{if(cur&&cur.length>1&&length(cur.map(q=>({x:q.u,y:q.v})))>=.1)pieces.push(cur);cur=null;};
+      for(let i=0;i+1<base.length;i++){
+        const a=base[i],b=base[i+1],pa={x:a.u,y:a.v},pb={x:b.u,y:b.v},ts=[0,1];
+        const lov=Math.min(a.v,b.v)-gap,hiv=Math.max(a.v,b.v)+gap,lou=Math.min(a.u,b.u)-gap,hiu=Math.max(a.u,b.u)+gap;
+        for(const e of edges){
+          if(e.hi<lov||e.lo>hiv||e.uhi<lou||e.ulo>hiu)continue;
+          const t=cutParam(pa,pb,e.xa,e.xb);if(t!==null)ts.push(t);
+          if(gap>0){const iv=segmentCapsule(pa,pb,e.xa,e.xb,gap);if(iv)ts.push(iv[0],iv[1]);}
+        }
+        ts.sort((x,y)=>x-y);
+        for(let k=0;k+1<ts.length;k++){
+          const t0=ts[k],t1=ts[k+1];if(t1-t0<1e-9)continue;
+          work+=2*edges.length;if(work>3e8)throw Error('Wavy fill is too detailed for this artwork. Increase the fill spacing or wavelength.');
+          const mid=(t0+t1)/2,mu=a.u+(b.u-a.u)*mid,mv=a.v+(b.v-a.v)*mid;
+          if(!insideShape(mu,mv)||(gap>0&&nearest(mu,mv)<gap-1e-7)){done();continue;}
+          const p0=t0===0?a:{u:a.u+(b.u-a.u)*t0,v:a.v+(b.v-a.v)*t0},p1=t1===1?b:{u:a.u+(b.u-a.u)*t1,v:a.v+(b.v-a.v)*t1};
+          if(cur&&Math.hypot(cur.at(-1).u-p0.u,cur.at(-1).v-p0.v)<1e-9)cur.push(p1);else{done();cur=[p0,p1];}
+        }
+      }
+      done();
+      return pieces;
+    };
     const chains=[];let chain=null;
     const flush=()=>{if(chain)chains.push(chain);chain=null;};
     for(let n=first;n<=last;n++){
-      const v=n*spacing,xs=[];
-      for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v))xs.push(e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v));
-      if(xs.length<2)continue;
-      xs.sort((p,q)=>p-q);
-      let blocked=[];
-      if(clearance>0){for(const e of edges)if(v>=e.lo-clearance&&v<=e.hi+clearance){const iv=capsule(e,v,clearance);if(iv)blocked.push(iv);}blocked.sort((p,q)=>p[0]-q[0]);}
-      const row=[];
-      for(let k=0;k+1<xs.length;k+=2){
-        let from=xs[k];const to=xs[k+1];
-        for(const [lo,hi] of blocked){
-          if(hi<from||lo>to)continue;
-          if(lo>from)row.push([from,lo]);
-          from=Math.max(from,hi);if(from>=to)break;
+      const v=n*spacing;
+      let pieces=[];
+      if(opt.wave)pieces=waveRow(n,v);
+      else{
+        const xs=[];
+        for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v))xs.push(e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v));
+        if(xs.length>=2){
+          xs.sort((p,q)=>p-q);
+          let blocked=[];
+          if(clearance>0){for(const e of edges)if(v>=e.lo-clearance&&v<=e.hi+clearance){const iv=capsule(e,v,clearance);if(iv)blocked.push(iv);}blocked.sort((p,q)=>p[0]-q[0]);}
+          const row=[];
+          for(let k=0;k+1<xs.length;k+=2){
+            let from=xs[k];const to=xs[k+1];
+            for(const [lo,hi] of blocked){
+              if(hi<from||lo>to)continue;
+              if(lo>from)row.push([from,lo]);
+              from=Math.max(from,hi);if(from>=to)break;
+            }
+            if(from<to)row.push([from,to]);
+          }
+          pieces=row.filter(([p,q])=>q-p>=.1).map(([p,q])=>[{u:p,v},{u:q,v}]);
         }
-        if(from<to)row.push([from,to]);
       }
-      const pieces=row.filter(([p,q])=>q-p>=.1);
-      if(n%2)pieces.reverse();
-      pieces.forEach(([p,q],i)=>{
-        const line=[];
-        if(opt.wave){
-          const count=Math.max(2,Math.ceil((q-p)/(wavelength/10)));
-          for(let k=0;k<=count;k++){const u=p+(q-p)*k/count;line.push({u,v:v+amp*Math.sin(2*Math.PI*u/wavelength+n*shift)});}
-        }else line.push({u:p,v},{u:q,v});
-        if(n%2)line.reverse();
+      // Odd lines run the other way, so the pen can zigzag from one line into the next.
+      if(n%2){pieces.reverse();pieces.forEach(line=>line.reverse());}
+      pieces.forEach((line,i)=>{
         if(opt.zigzag&&i===0&&chain&&linkable(chain.at(-1),line[0]))chain.push(...line);
         else{flush();chain=line;}
         if(!opt.zigzag||i<pieces.length-1)flush();
@@ -197,7 +226,7 @@
       for(const angle of s.mode==='cross'||s.mode==='wavycross'?[s.angle,s.angle+90]:[s.angle])
         for(const points of hatchLines(g.contours,angle,s.spacing,s.gap,opt)){
           if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
-          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,points});
+          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,gap:s.gap,points});
         }
       boxes.push(bounds(g.contours.flat()));
     }
@@ -226,20 +255,39 @@
     return t>=0&&t<=1&&u>=0&&u<=1?t:null;
   }
   // Returns the visible pieces of a polyline, or null when nothing is hidden.
-  function clipHidden(points,closed,occs,budget){
+  // Interval of t in [0,1] where a point on segment a-b lies within g of edge e0-e1.
+  function segmentCapsule(a,b,e0,e1,g){
+    const L=dist(a,b),el=dist(e0,e1);if(L<1e-12||el<1e-12)return null;
+    const dx=(b.x-a.x)/L,dy=(b.y-a.y)/L,uv=p=>({u:(p.x-a.x)*dx+(p.y-a.y)*dy,v:-(p.x-a.x)*dy+(p.y-a.y)*dx});
+    const iv=capsule({a:uv(e0),b:uv(e1)},0,g);if(!iv)return null;
+    const lo=Math.max(0,iv[0]/L),hi=Math.min(1,iv[1]/L);return lo<hi?[lo,hi]:null;
+  }
+  function edgeDistance(occ,m){
+    let best=Infinity;
+    for(const c of occ.contours)for(let j=0;j<c.length;j++){
+      const p=c[j],q=c[(j+1)%c.length],dx=q.x-p.x,dy=q.y-p.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((m.x-p.x)*dx+(m.y-p.y)*dy)/l)):0;
+      best=Math.min(best,Math.hypot(m.x-p.x-t*dx,m.y-p.y-t*dy));
+    }
+    return best;
+  }
+  // gap: stay this far from the covering shapes' outlines (used for hatch lines).
+  function clipHidden(points,closed,occs,budget,gap=0){
     const pts=closed?[...points,points[0]]:points,pieces=[];let cur=null,changed=false;
     const flush=()=>{if(cur&&cur.length>1)pieces.push(cur);cur=null;};
     for(let i=0;i+1<pts.length;i++){
-      const a=pts[i],b=pts[i+1],lo={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)},hi={x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)},near=occs.filter(o=>o.box.minX<=hi.x&&o.box.maxX>=lo.x&&o.box.minY<=hi.y&&o.box.maxY>=lo.y),ts=[0,1];
+      const a=pts[i],b=pts[i+1],lo={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)},hi={x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)},near=occs.filter(o=>o.box.minX-gap<=hi.x&&o.box.maxX+gap>=lo.x&&o.box.minY-gap<=hi.y&&o.box.maxY+gap>=lo.y),ts=[0,1];
       for(const o of near)for(const c of o.contours){
         budget.left-=c.length;if(budget.left<0)throw Error('Hidden-line removal is too large. Increase the fill spacing or turn it off.');
-        for(let j=0;j<c.length;j++){const t=cutParam(a,b,c[j],c[(j+1)%c.length]);if(t!==null)ts.push(t);}
+        for(let j=0;j<c.length;j++){
+          const e1=c[(j+1)%c.length],t=cutParam(a,b,c[j],e1);if(t!==null)ts.push(t);
+          if(gap>0){const iv=segmentCapsule(a,b,c[j],e1,gap);if(iv)ts.push(iv[0],iv[1]);}
+        }
       }
       ts.sort((x,y)=>x-y);
       for(let k=0;k+1<ts.length;k++){
         const t0=ts[k],t1=ts[k+1];if(t1-t0<1e-9)continue;
         const mid=(t0+t1)/2,m={x:a.x+(b.x-a.x)*mid,y:a.y+(b.y-a.y)*mid};
-        if(near.some(o=>coveredBy(o,m))){flush();changed=true;continue;}
+        if(near.some(o=>coveredBy(o,m)||(gap>0&&edgeDistance(o,m)<gap-1e-7))){flush();changed=true;continue;}
         const p0=t0===0?a:{x:a.x+(b.x-a.x)*t0,y:a.y+(b.y-a.y)*t0},p1=t1===1?b:{x:a.x+(b.x-a.x)*t1,y:a.y+(b.y-a.y)*t1};
         if(cur&&dist(cur.at(-1),p0)<1e-9)cur.push(p1);else{flush();cur=[p0,p1];}
       }
@@ -254,7 +302,7 @@
     const out=[];
     for(const p of list){
       const above=p.group===undefined?[]:occs.filter(o=>o.group>p.group);
-      const pieces=above.length?clipHidden(p.points,p.closed,above,budget):null;
+      const pieces=above.length?clipHidden(p.points,p.closed,above,budget,p.gap||0):null;
       if(!pieces){out.push(p);continue;}
       if(!pieces.length){stats.removed++;continue;}
       stats.trimmed++;
@@ -468,6 +516,71 @@
   }
 
   const num = n => Number(n.toFixed(4)).toString();
+  // ---- Color grouping ----------------------------------------------------
+  // k-means on colors in CIE Lab, so distances follow how different colors look.
+  // Weighted by how much artwork uses each color; deterministic (no random start).
+  function lab(hex){
+    const n=parseInt(hex.slice(1),16),lin=v=>{v/=255;return v<=.04045?v/12.92:Math.pow((v+.055)/1.055,2.4);};
+    const r=lin(n>>16&255),g=lin(n>>8&255),b=lin(n&255);
+    const x=(.4124564*r+.3575761*g+.1804375*b)/.95047,y=.2126729*r+.7151522*g+.072175*b,z=(.0193339*r+.119192*g+.9503041*b)/1.08883;
+    const f=t=>t>216/24389?Math.cbrt(t):(24389/27*t+16)/116;
+    return [116*f(y)-16,500*(f(x)-f(y)),200*(f(y)-f(z))];
+  }
+  const labDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
+  // k-means with a deterministic start: the heaviest color, then repeatedly the color
+  // farthest from those chosen. Returns each point's cluster and the cluster centers.
+  function kmeans(pts,k){
+    let centers=[pts.reduce((a,p)=>p.weight>a.weight?p:a).lab];
+    while(centers.length<k){
+      let best=null,far=-1;
+      for(const p of pts){const d=Math.min(...centers.map(c=>labDist(c,p.lab)));if(d>far){far=d;best=p;}}
+      centers.push(best.lab);
+    }
+    let owner=new Array(pts.length).fill(-1);
+    for(let round=0;round<100;round++){
+      const next=pts.map(p=>{let bi=0,bd=Infinity;centers.forEach((c,i)=>{const d=labDist(c,p.lab);if(d<bd-1e-12){bd=d;bi=i;}});return bi;});
+      const changed=next.some((v,i)=>v!==owner[i]);owner=next;
+      centers=centers.map((c,i)=>{
+        const members=pts.filter((_,j)=>owner[j]===i);if(!members.length)return c;
+        const w=members.reduce((s,p)=>s+p.weight,0);
+        return [0,1,2].map(axis=>members.reduce((s,p)=>s+p.lab[axis]*p.weight,0)/w);
+      });
+      if(!changed)break;
+    }
+    return {owner,centers};
+  }
+  // Black, grays and white (very low chroma) are grouped first and get their own pens;
+  // only the pens left over are shared out among the chromatic colors.
+  const NEUTRAL_CHROMA=10,NEUTRAL_SPLIT=20;
+  // colors: [{color:'#rrggbb',weight}] in order of appearance. Returns pen numbers (1..k, by
+  // first appearance) and, per pen, the member color closest to the group's center.
+  function clusterColors(colors,k){
+    if(!Number.isInteger(k)||k<1)throw Error('Number of pens must be a whole number of at least 1.');
+    if(!colors.length)return {assign:{},reps:[]};
+    k=Math.min(k,colors.length);
+    const pts=colors.map(c=>({color:c.color,weight:Math.max(c.weight||1,1),lab:lab(c.color)}));
+    const neutral=pts.filter(p=>Math.hypot(p.lab[1],p.lab[2])<NEUTRAL_CHROMA),chromatic=pts.filter(p=>Math.hypot(p.lab[1],p.lab[2])>=NEUTRAL_CHROMA);
+    let groups; // [{members:[pt], center}]
+    const run=(list,count)=>{const {owner,centers}=kmeans(list,Math.min(count,list.length));return centers.map((center,i)=>({members:list.filter((_,j)=>owner[j]===i),center})).filter(g=>g.members.length);};
+    if(k===1||!neutral.length||!chromatic.length){
+      groups=run(pts,k);
+    }else{
+      // How many distinct neutral tones (black, mid gray, white...) there are, farthest-point style.
+      const tones=[neutral.reduce((a,p)=>p.weight>a.weight?p:a)];
+      for(;;){let far=-1,best=null;for(const p of neutral){const d=Math.min(...tones.map(t=>labDist(t.lab,p.lab)));if(d>far){far=d;best=p;}}if(far<=NEUTRAL_SPLIT)break;tones.push(best);}
+      const neutralPens=Math.max(1,Math.min(tones.length,k-1));
+      groups=[...run(neutral,neutralPens),...run(chromatic,k-neutralPens)];
+    }
+    // Number pens by the first appearance of any member; reps are real colors from the artwork.
+    const first=g=>Math.min(...g.members.map(m=>pts.indexOf(m)));
+    groups.sort((x,y)=>first(x)-first(y));
+    const assign={},reps=[];
+    groups.forEach((g,index)=>{
+      g.members.forEach(m=>{assign[m.color]=index+1;});
+      reps.push(g.members.reduce((a,m)=>labDist(g.center,m.lab)<labDist(g.center,a.lab)?m:a).color);
+    });
+    return {assign,reps};
+  }
   const PEN_CHANGES=['none','M0','M6','files'];
   const penLabel=(o,pen)=>{const colors=[...new Set(Object.entries(o.penMap||{}).filter(([,v])=>v===pen).map(([c])=>(o.penColors||{})[c]||c))];return 'Pen '+pen+(colors.length?' ('+colors.join(', ')+')':'');};
   // 'M0' pauses for a manual pen swap, 'M6' sends T<n> M6, 'files' is handled by gcodeFiles.
@@ -509,6 +622,6 @@
       return {pen,label:penLabel(o,pen),paths:paths.length,text:'('+penLabel(o,pen)+' only)\n'+text};
     });
   }
-  const api={simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,gcodeFiles,hatchLines,dist,length};
+  const api={simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,gcodeFiles,hatchLines,clusterColors,dist,length};
   if(typeof module!=='undefined')module.exports=api;else root.SvgCam=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -26,16 +26,16 @@
   let fitBox=null,viewBox=null;
   function applyView(){if(viewBox)$('preview').setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);$('zoomLevel').textContent=fitBox&&viewBox?Math.round(fitBox.w/viewBox.w*100)+'%':'100%';}
   function colorList(){
-    const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0});return counts.get(c);};
-    for(const p of documentData?.paths||[]){entry(p.color||'#000000').paths++;if(p.closed&&p.fillColor)entry(p.fillColor).fills++;}
-    return [...counts].map(([c,n])=>[c,n.paths,n.fills]);
+    const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0,closed:0});return counts.get(c);};
+    for(const p of documentData?.paths||[]){const e=entry(p.color||'#000000');e.paths++;if(p.closed)e.closed++;if(p.closed&&p.fillColor)entry(p.fillColor).fills++;}
+    return [...counts].map(([c,n])=>[c,n.paths,n.fills,n.closed]);
   }
   function assignDefaults(onePen){
     penAssign={};colorList().forEach(([c],i)=>{penAssign[c]=onePen?1:i+1;});
   }
   function renderPens(){
     const list=colorList(),rows=$('penRows');rows.replaceChildren();
-    $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;
+    $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;$('penCluster').disabled=list.length<2;$('penCount').max=String(Math.max(1,list.length));
     $('penNote').textContent=list.length?(list.length+' color'+(list.length===1?'':'s')+' found. Pens apply in plotter mode.'):'Import artwork to list its colors.';
     list.forEach(([color,count,fills])=>{
       const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display color for '+color);
@@ -70,10 +70,17 @@
   function renderFills(){
     const rows=$('fillRows');rows.replaceChildren();
     const pens=new Set();
-    for(const [color,,fills] of colorList()){const pen=penAssign[color];if(pen>0&&(fills>0||$('fillAll').checked))pens.add(pen);}
+    const openOnly=new Set();
+    for(const [color,,fills,closed] of colorList()){
+      const pen=penAssign[color];if(!(pen>0))continue;
+      if(fills>0||($('fillAll').checked&&closed>0))pens.add(pen);else if($('fillAll').checked)openOnly.add(pen);
+    }
+    for(const pen of pens)openOnly.delete(pen);
     fillPens=[...pens].sort((a,b)=>a-b);
     $('fillTable').hidden=!fillPens.length;$('fillRandomAll').disabled=!fillPens.length||$('mode').value!=='plotter';
     $('fillNote').textContent=fillPens.length?'Fills are drawn with the pen assigned to the shape\'s fill color. Only shapes that have a fill in the artwork are filled (an unspecified fill counts as none).':(documentData?'No shape has a fill. Tick "Hatch every closed shape" to fill shapes anyway.':'Import artwork to set up fills.');
+    // With "every closed shape", a pen holding only open paths (plain lines) has nothing to fill.
+    if(fillPens.length&&openOnly.size)$('fillNote').textContent+=' Pen'+(openOnly.size>1?'s ':' ')+[...openOnly].sort((a,b)=>a-b).join(', ')+(openOnly.size>1?' hold':' holds')+' only open paths (lines), which cannot be filled, so '+(openOnly.size>1?'they are':'it is')+' not listed.';
     for(const pen of fillPens){
       const f=fillSettings[pen]=fillSettings[pen]||fillDefaults(),tr=document.createElement('tr'),cell=(node,className)=>{const td=document.createElement('td');if(className)td.className=className;td.append(node);tr.append(td);return td;};
       cell(document.createTextNode(String(pen)));cell(document.createTextNode(describeFill(f)),'fillSummary');
@@ -89,23 +96,44 @@
     $('fdPattern').value=f.pattern;$('fdAngle').value=f.angle;$('fdSpacing').value=f.spacing;$('fdGap').value=f.gap;
     $('fdAmp').value=f.amp;$('fdLength').value=f.wavelength;$('fdShift').value=f.shift;$('fdZigzag').checked=f.zigzag;
     $('fdWave').hidden=!isWavy(f.pattern);$('fdBasic').hidden=f.pattern==='none';
-    window.Dropdowns?.refresh();
+    window.Dropdowns?.refresh();if(!$('fillDialog').hidden&&dialogPos)placeDialog();
+  }
+  // The dialog floats without a backdrop: drag its title bar to move it and watch the preview update.
+  let dialogPos=null;
+  const dialogBody=()=>$('fillDialog').querySelector('.modalBody');
+  function placeDialog(){
+    const body=dialogBody(),w=body.offsetWidth,h=body.offsetHeight;
+    const at=dialogPos||{x:window.innerWidth-w-14,y:60};
+    dialogPos={x:Math.max(0,Math.min(at.x,window.innerWidth-w)),y:Math.max(0,Math.min(at.y,window.innerHeight-h))};
+    body.style.left=dialogPos.x+'px';body.style.top=dialogPos.y+'px';
   }
   function openFillDialog(pen){
-    fillDialogPen=pen;$('fillDialogTitle').textContent='Pen '+pen+' fill';fillDialogFields();$('fillDialog').hidden=false;$('fdDone').focus({preventScroll:true});
+    fillDialogPen=pen;$('fillDialogTitle').textContent='Pen '+pen+' fill';fillDialogFields();$('fillDialog').hidden=false;placeDialog();$('fdDone').focus({preventScroll:true});
   }
+  let dragging=null;
+  $('fillDialogHead').addEventListener('pointerdown',event=>{
+    if(event.target.closest('button')||(event.pointerType==='mouse'&&event.button!==0))return;
+    dragging={id:event.pointerId,dx:event.clientX-dialogPos.x,dy:event.clientY-dialogPos.y};
+    $('fillDialogHead').setPointerCapture(event.pointerId);event.preventDefault();
+  });
+  $('fillDialogHead').addEventListener('pointermove',event=>{
+    if(!dragging||dragging.id!==event.pointerId)return;
+    dialogPos={x:event.clientX-dragging.dx,y:event.clientY-dragging.dy};placeDialog();
+  });
+  for(const name of ['pointerup','pointercancel','lostpointercapture'])$('fillDialogHead').addEventListener(name,()=>{dragging=null;});
+  window.addEventListener('resize',()=>{if(!$('fillDialog').hidden)placeDialog();});
+  $('fdClose').onclick=()=>closeFillDialog();
   function closeFillDialog(){fillDialogPen=null;$('fillDialog').hidden=true;window.Dropdowns?.close();}
   function readFillDialog(){
     if(fillDialogPen===null)return;
     const f=fillSettings[fillDialogPen],num=id=>$(id).value.trim()===''?NaN:Number($(id).value);
     Object.assign(f,{pattern:$('fdPattern').value,angle:num('fdAngle'),spacing:num('fdSpacing'),gap:num('fdGap'),amp:num('fdAmp'),wavelength:num('fdLength'),shift:num('fdShift'),zigzag:$('fdZigzag').checked});
     $('fdWave').hidden=!isWavy(f.pattern);$('fdBasic').hidden=f.pattern==='none';
-    renderFills();update();
+    placeDialog();renderFills();update();
   }
   for(const id of ['fdPattern','fdAngle','fdSpacing','fdGap','fdAmp','fdLength','fdShift','fdZigzag'])$(id).addEventListener('input',readFillDialog);
   $('fdRandom').onclick=()=>{if(fillDialogPen===null)return;randomizeFill(fillDialogPen);fillDialogFields();renderFills();update();};
   $('fdDone').onclick=closeFillDialog;
-  $('fillDialog').addEventListener('pointerdown',event=>{if(event.target===$('fillDialog'))closeFillDialog();});
   document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('fillDialog').hidden)closeFillDialog();});
   $('fillRandomAll').onclick=()=>{fillPens.forEach(randomizeFill);renderFills();update();};
   // Cut color in the preview; add a halo when it would vanish against the theme.
@@ -222,7 +250,18 @@
     if(file.size>5000000){endBusy();message('File exceeds 5 MB.',true);return;}
     try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('reimport').disabled=false;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
   });
-  $('penPerColor').onclick=()=>{assignDefaults(false);renderPens();update();};
+  $('penPerColor').onclick=()=>{assignDefaults(false);penColors={};renderPens();update();};
+  $('penCluster').onclick=()=>{
+    try{
+      const wanted=Number($('penCount').value),list=colorList().filter(([c])=>penAssign[c]!==0);
+      if(!list.length)throw Error('Every color is set to skip. Give a color a pen number first.');
+      const result=SvgCam.clusterColors(list.map(([color,paths,fills])=>({color,weight:paths+fills})),wanted);
+      for(const [color,pen] of Object.entries(result.assign)){penAssign[color]=pen;penColors[color]=result.reps[pen-1];}
+      renderPens();update();
+      if(!$('message').classList.contains('error'))message(`Grouped ${list.length} colors onto ${result.reps.length} pen${result.reps.length===1?'':'s'}. Each pen is shown in its most representative color; change a swatch to use another.
+`+$('message').textContent);
+    }catch(e){message(e.message,true);}
+  };
   $('penAllOne').onclick=()=>{assignDefaults(true);renderPens();update();};
   $('reimport').onclick=importSvg;
   $('reimportDxf').onclick=importSvg;
