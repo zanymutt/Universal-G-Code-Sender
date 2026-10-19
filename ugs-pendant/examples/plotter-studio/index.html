@@ -51,10 +51,10 @@
 </fieldset>
 <fieldset id="panel-pens" role="tabpanel" aria-labelledby="tab-pens" hidden><legend>Pens and colours</legend>
 <p class="hint" id="penNote">Import artwork to list its colours.</p>
-<table id="penTable" class="penTable" hidden><thead><tr><th>Colour</th><th>Paths</th><th>Pen</th></tr></thead><tbody id="penRows"></tbody></table>
+<table id="penTable" class="penTable" hidden><thead><tr><th>Colour (click to change)</th><th>Paths</th><th>Pen</th></tr></thead><tbody id="penRows"></tbody></table>
 <div class="pair"><button id="penPerColor" type="button" disabled>One pen per colour</button><button id="penAllOne" type="button" disabled>All on pen 1</button></div>
 <label>When the pen changes<select id="penChange"><option value="M0">Pause (M0) so I can swap the pen</option><option value="M6">Tool change (T&lt;n&gt; M6)</option><option value="files">Separate G-code file per pen</option><option value="none">No pause — one program, sorted by pen</option></select></label>
-<p class="hint">Enter 0 to skip a colour. Colours sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG colour comes from stroke, else fill (inherited from groups); DXF colour from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
+<p class="hint">Click a colour swatch to change the colour a pen is shown and labelled with; the artwork itself is not changed. Enter 0 to skip a colour. Colours sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG colour comes from stroke, else fill (inherited from groups); DXF colour from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
 </fieldset>
 <fieldset id="panel-paths" role="tabpanel" aria-labelledby="tab-paths" hidden><legend>3 · Paths</legend>
 <label>Order<select id="order"><option value="svg">Original file order</option><option value="nearest">Reduce travel</option></select></label>

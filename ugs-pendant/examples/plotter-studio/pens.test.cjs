@@ -61,3 +61,8 @@ const colors=prepared.items.map(i=>i.color).sort();
 assert.deepStrictEqual(colors,['#00ff00','#0000ff','#112233','#ff0000'].sort());
 assert.strictEqual(prepared.items.length,4); // the touching green/red lines were not joined into one contour
 console.log('dxf colour ok');
+
+// display colour override changes the pen label only
+{const o={...base,penMap:{'#ff0000':1,'#0000ff':1},penColors:{'#ff0000':'#aa0000'},penChange:'M0'};
+const j=core.plan(doc,o),other={...o,penMap:{'#ff0000':1,'#0000ff':2}};
+assert(/\(Pen 1 \(#aa0000\)\)/.test(core.gcode(core.plan(doc,other),other)));console.log('pen colour label ok');}

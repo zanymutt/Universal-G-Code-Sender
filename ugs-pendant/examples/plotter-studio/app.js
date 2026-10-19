@@ -11,13 +11,13 @@
   let documentData=null,svgText='',fileFormat='svg',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
   let importController=null;
   // colour -> pen number (0 = skip). Kept across reimports for colours that still exist.
-  let penAssign={},generatedFiles=[];
+  let penAssign={},penColors={},generatedFiles=[];
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};return o;}
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
@@ -37,7 +37,8 @@
     $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;
     $('penNote').textContent=list.length?(list.length+' colour'+(list.length===1?'':'s')+' found. Pens apply in plotter mode.'):'Import artwork to list its colours.';
     list.forEach(([color,count])=>{
-      const tr=document.createElement('tr'),swatch=document.createElement('span');swatch.className='swatch';swatch.style.background=color;
+      const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display colour for '+color);
+      swatch.addEventListener('input',()=>{penColors[color]=swatch.value;update();});
       const c1=document.createElement('td');c1.append(swatch,document.createTextNode(color));
       const c2=document.createElement('td');c2.textContent=String(count);
       const input=document.createElement('input');input.type='number';input.min='0';input.max='99';input.step='1';input.value=String(penAssign[color]??1);input.setAttribute('aria-label','Pen for '+color+' (0 skips)');
@@ -51,8 +52,8 @@
   function luminance(hex){const n=parseInt(hex.slice(1),16),f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255);}
   function penStyle(p){
     if($('mode').value!=='plotter'||!/^#[0-9a-f]{6}$/i.test(p.color||''))return {stroke:'var(--plugin-cut)',halo:'var(--plugin-surface)'};
-    const light=document.documentElement.dataset.theme==='light',l=luminance(p.color),weak=light?l>.8:l<.12;
-    return {stroke:p.color,halo:weak?'var(--plugin-text-muted)':'var(--plugin-surface)'};
+    const shown=penColors[p.color]||p.color,light=document.documentElement.dataset.theme==='light',l=luminance(shown),weak=light?l>.8:l<.12;
+    return {stroke:shown,halo:weak?'var(--plugin-text-muted)':'var(--plugin-surface)'};
   }
   function draw(){
     window.Dropdowns?.refresh();

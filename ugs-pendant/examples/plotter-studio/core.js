@@ -299,7 +299,7 @@
 
   const num = n => Number(n.toFixed(4)).toString();
   const PEN_CHANGES=['none','M0','M6','files'];
-  const penLabel=(o,pen)=>{const colors=Object.entries(o.penMap||{}).filter(([,v])=>v===pen).map(([c])=>c);return 'Pen '+pen+(colors.length?' ('+colors.join(', ')+')':'');};
+  const penLabel=(o,pen)=>{const colors=[...new Set(Object.entries(o.penMap||{}).filter(([,v])=>v===pen).map(([c])=>(o.penColors||{})[c]||c))];return 'Pen '+pen+(colors.length?' ('+colors.join(', ')+')':'');};
   // 'M0' pauses for a manual pen swap, 'M6' sends T<n> M6, 'files' is handled by gcodeFiles.
   function gcode(job,o) {
     if(o.mode==='knife')return knifeGcode(job,o);
