@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">
+  <rect id="frame" x="3" y="3" width="94" height="54" fill="none" stroke="#000"/>
+  <path id="ring" d="M 30 10 A 18 18 0 1 0 30 46 A 18 18 0 1 0 30 10 Z M 30 20 A 8 8 0 1 1 30 36 A 8 8 0 1 1 30 20 Z" fill="#d02020" stroke="#d02020" fill-rule="evenodd"/>
+  <polygon id="tri" points="55,48 85,48 70,12" fill="#2040d0" stroke="#2040d0"/>
+  <circle id="dot" cx="88" cy="12" r="5" fill="none" stroke="#2040d0"/>
+</svg>

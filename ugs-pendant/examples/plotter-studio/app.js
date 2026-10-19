@@ -11,13 +11,13 @@
   let documentData=null,svgText='',fileFormat='svg',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
   let importController=null;
   // colour -> pen number (0 = skip). Kept across reimports for colours that still exist.
-  let penAssign={},penColors={},generatedFiles=[];
+  let penAssign={},penColors={},fillSettings={},generatedFiles=[],previewBg=null;
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};return o;}
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:f.on?(f.cross?'cross':'hatch'):'none',angle:f.angle,spacing:f.spacing,gap:f.gap}]));return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
@@ -26,8 +26,9 @@
   let fitBox=null,viewBox=null;
   function applyView(){if(viewBox)$('preview').setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);$('zoomLevel').textContent=fitBox&&viewBox?Math.round(fitBox.w/viewBox.w*100)+'%':'100%';}
   function colorList(){
-    const counts=new Map();for(const p of documentData?.paths||[])counts.set(p.color||'#000000',(counts.get(p.color||'#000000')||0)+1);
-    return [...counts];
+    const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0});return counts.get(c);};
+    for(const p of documentData?.paths||[]){entry(p.color||'#000000').paths++;if(p.closed&&p.fillColor)entry(p.fillColor).fills++;}
+    return [...counts].map(([c,n])=>[c,n.paths,n.fills]);
   }
   function assignDefaults(onePen){
     penAssign={};colorList().forEach(([c],i)=>{penAssign[c]=onePen?1:i+1;});
@@ -36,24 +37,57 @@
     const list=colorList(),rows=$('penRows');rows.replaceChildren();
     $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;
     $('penNote').textContent=list.length?(list.length+' colour'+(list.length===1?'':'s')+' found. Pens apply in plotter mode.'):'Import artwork to list its colours.';
-    list.forEach(([color,count])=>{
+    list.forEach(([color,count,fills])=>{
       const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display colour for '+color);
       swatch.addEventListener('input',()=>{penColors[color]=swatch.value;update();});
       const c1=document.createElement('td');c1.append(swatch,document.createTextNode(color));
-      const c2=document.createElement('td');c2.textContent=String(count);
+      const c2=document.createElement('td');c2.textContent=String(count)+(fills?' · '+fills+' fill'+(fills===1?'':'s'):'');
       const input=document.createElement('input');input.type='number';input.min='0';input.max='99';input.step='1';input.value=String(penAssign[color]??1);input.setAttribute('aria-label','Pen for '+color+' (0 skips)');
       input.disabled=$('mode').value!=='plotter';
-      input.addEventListener('input',()=>{penAssign[color]=input.value.trim()===''?NaN:Number(input.value);update();});
+      input.addEventListener('input',()=>{penAssign[color]=input.value.trim()===''?NaN:Number(input.value);renderFills();update();});
       const c3=document.createElement('td');c3.append(input);
       tr.append(c1,c2,c3);rows.append(tr);
     });
+    renderFills();
+  }
+  // One row of fill settings per pen that has something to hatch.
+  function renderFills(){
+    const rows=$('fillRows');rows.replaceChildren();
+    const pens=new Set();
+    for(const [color,,fills] of colorList()){const pen=penAssign[color];if(pen>0&&(fills>0||$('fillAll').checked))pens.add(pen);}
+    const sorted=[...pens].sort((a,b)=>a-b);
+    $('fillTable').hidden=!sorted.length;
+    $('fillNote').textContent=sorted.length?'Fills are drawn with the pen assigned to the shape\'s fill colour. Only shapes that have a fill in the artwork are hatched (an unspecified fill counts as none).':(documentData?'No shape has a fill. Tick "Hatch every closed shape" to fill shapes anyway.':'Import artwork to set up fills.');
+    for(const pen of sorted){
+      const f=fillSettings[pen]=fillSettings[pen]||{on:false,cross:false,angle:45,spacing:1,gap:.5};
+      const tr=document.createElement('tr'),cell=node=>{const td=document.createElement('td');td.append(node);tr.append(td);};
+      cell(document.createTextNode(String(pen)));
+      const check=key=>{const i=document.createElement('input');i.type='checkbox';i.checked=f[key];i.disabled=$('mode').value!=='plotter';i.setAttribute('aria-label',(key==='on'?'Hatch':'Cross-hatch')+' pen '+pen);i.addEventListener('input',()=>{f[key]=i.checked;update();});return i;};
+      const num=(key,label,min,step)=>{const i=document.createElement('input');i.type='number';i.min=String(min);i.step=String(step);i.value=String(f[key]);i.disabled=$('mode').value!=='plotter';i.setAttribute('aria-label',label+' for pen '+pen);i.addEventListener('input',()=>{f[key]=i.value.trim()===''?NaN:Number(i.value);update();});return i;};
+      cell(check('on'));cell(check('cross'));cell(num('angle','Angle',-360,5));cell(num('spacing','Spacing',.05,.1));cell(num('gap','Gap from outline',0,.1));
+      rows.append(tr);
+    }
   }
   // Cut colour in the preview; add a halo when it would vanish against the theme.
   function luminance(hex){const n=parseInt(hex.slice(1),16),f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255);}
+  // With a custom background the halo is the background itself, or a contrasting tone
+  // when the pen colour would be hard to see on it.
   function penStyle(p){
-    if($('mode').value!=='plotter'||!/^#[0-9a-f]{6}$/i.test(p.color||''))return {stroke:'var(--plugin-cut)',halo:'var(--plugin-surface)'};
-    const shown=penColors[p.color]||p.color,light=document.documentElement.dataset.theme==='light',l=luminance(shown),weak=light?l>.8:l<.12;
-    return {stroke:shown,halo:weak?'var(--plugin-text-muted)':'var(--plugin-surface)'};
+    const bg=previewBg,bgLum=bg?luminance(bg):null,plain=bg||'var(--plugin-surface)';
+    if($('mode').value!=='plotter'||!/^#[0-9a-f]{6}$/i.test(p.color||''))return {stroke:'var(--plugin-cut)',halo:plain};
+    const shown=penColors[p.color]||p.color,l=luminance(shown);
+    if(bg){const weak=(Math.max(l,bgLum)+.05)/(Math.min(l,bgLum)+.05)<2.2;return {stroke:shown,halo:weak?(bgLum>.5?'#303030':'#e0e0e0'):bg};}
+    const light=document.documentElement.dataset.theme==='light',weak=light?l>.8:l<.12;
+    return {stroke:shown,halo:weak?'var(--plugin-text-muted)':plain};
+  }
+  const rgbHex=css=>{const m=/(\d+)\D+(\d+)\D+(\d+)/.exec(css||'');return m?'#'+[1,2,3].map(i=>Number(m[i]).toString(16).padStart(2,'0')).join(''):'#101619';};
+  function applyBackground(value){
+    previewBg=/^#[0-9a-f]{6}$/i.test(value||'')?value.toLowerCase():null;
+    const svg=$('preview');
+    if(previewBg){svg.style.background=previewBg;svg.style.setProperty('--plugin-preview-text',luminance(previewBg)>.5?'#111':'#e6eef9');}
+    else{svg.style.removeProperty('background');svg.style.removeProperty('--plugin-preview-text');}
+    $('previewBg').value=previewBg||rgbHex(getComputedStyle(svg).backgroundColor);
+    if(job)draw();
   }
   function draw(){
     window.Dropdowns?.refresh();
@@ -66,6 +100,10 @@
     const holderLayer=el('g',{'data-layer':'holder'},svg),cutLayer=el('g',{'data-layer':'cut'},svg);
     let prev={x:0,y:0};
     job.paths.forEach((p,i)=>{
+      if(p.fill){
+        el('polyline',{points:p.points.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:penStyle(p).stroke,'stroke-width':1,'vector-effect':'non-scaling-stroke',opacity:.85},cutLayer);
+        prev=p.points.at(-1);return;
+      }
       const first=p.points[0];if(!job.knife)el('line',{x1:prev.x,y1:-prev.y,x2:first.x,y2:-first.y,stroke:'var(--plugin-travel)','stroke-width':1,'vector-effect':'non-scaling-stroke','stroke-dasharray':'4 4'},cutLayer);
       el('polyline',{points:p.points.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:penStyle(p).halo,'stroke-width':p.id===$('selected').value?5:4,'vector-effect':'non-scaling-stroke'},cutLayer);
       el('polyline',{'data-cut-path':p.id,points:p.points.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:p.id===$('selected').value?'var(--plugin-selected)':penStyle(p).stroke,'stroke-width':p.id===$('selected').value?3:2,'vector-effect':'non-scaling-stroke'},cutLayer);
@@ -99,7 +137,7 @@
     viewBox=null;invalidate();job=null;$('generate').disabled=true;pick=null;
     const o=settings();$('depthSettings').hidden=o.mode==='laser';$('laserSettings').hidden=o.mode!=='laser';
     $('knifeSettings').hidden=o.mode!=='knife';$('knifeOverlayControl').hidden=o.mode!=='knife';
-    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');
+    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');['fillAll','fillFirst','skipUnstroked'].forEach(k=>$(k).disabled=o.mode!=='plotter');
     $('tool').disabled=o.mode==='knife';$('power').disabled=o.mode==='knife';$('powerMax').disabled=o.mode==='knife';
     if(o.mode==='knife'){$('tool').value='none';o.tool='none';}
     $('knifeSwivelZ').disabled=!o.knifeAlign&&!o.knifeLift;$('knifeLead').disabled=!o.knifeAlign;$('knifeHeading').disabled=!o.knifeAlign;
@@ -110,11 +148,11 @@
       if(importDirty)throw Error('Click Reimport to apply import settings.');
       job=SvgCam.plan(documentData,o,locks,directions);$('generate').disabled=false;
       const selected=$('selected').value;
-      $('selected').replaceChildren(...job.paths.map(p=>new Option(`Path ${p.number} - ${p.name}${p.closed?' (closed)':' (open)'}`,p.id)));
-      if(job.paths.some(p=>p.id===selected))$('selected').value=selected;
+      $('selected').replaceChildren(...job.paths.filter(p=>!p.fill).map(p=>new Option(`Path ${p.number} - ${p.name}${p.closed?' (closed)':' (open)'}`,p.id)));
+      if(job.paths.some(p=>p.id===selected&&!p.fill))$('selected').value=selected;
       const b=job.bounds;
-      $('summary').textContent=`${job.paths.length} paths · ${(b.maxX-b.minX).toFixed(2)} × ${(b.maxY-b.minY).toFixed(2)} mm · ${job.depths.length} passes/path · travel ${job.travel.toFixed(1)} mm`+(o.mode==='plotter'&&job.pens.length>1?` · ${job.pens.length} pens`:'')+(job.knife?` · ${job.knife.swivels} corner swivels · holder ${(job.knife.bounds.maxX-job.knife.bounds.minX).toFixed(2)} × ${(job.knife.bounds.maxY-job.knife.bounds.minY).toFixed(2)} mm`:'');
-      message((job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
+      $('summary').textContent=`${job.paths.length-job.fills} paths${job.fills?` + ${job.fills} hatch lines`:''} · ${(b.maxX-b.minX).toFixed(2)} × ${(b.maxY-b.minY).toFixed(2)} mm · ${job.depths.length} passes/path · travel ${job.travel.toFixed(1)} mm`+(o.mode==='plotter'&&job.pens.length>1?` · ${job.pens.length} pens`:'')+(job.knife?` · ${job.knife.swivels} corner swivels · holder ${(job.knife.bounds.maxX-job.knife.bounds.minX).toFixed(2)} × ${(job.knife.bounds.maxY-job.knife.bounds.minY).toFixed(2)} mm`:'');
+      message((job.fillOverlaps?`${job.fillOverlaps} pair(s) of filled shapes overlap; each is hatched in full (hidden-line removal is not implemented).\n`:'')+(job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
     }catch(e){$('passes').textContent='Check settings';$('summary').textContent='Preview invalid — correct settings before generating.';$('preview').replaceChildren();message(e.message,true);}finally{window.Dropdowns?.refresh();}
   }
   async function importSvg(){
@@ -154,10 +192,16 @@
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
   [...importFields,'dxfUnits','joinEndpoints'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='joinEndpoints')syncEndpointJoinControl();cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
-  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift'].forEach(id=>$(id).addEventListener('input',()=>{
-    if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';update();
+  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(id=>$(id).addEventListener('input',()=>{
+    if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';if(id==='fillAll')renderFills();update();
   }));
   $('knifeOverlay').onchange=draw;
+  async function saveBackground(){
+    if(window.parent===window)return;
+    try{const data={...stored,previewBg};await host('saveSettings',{data});stored=data;}catch{}
+  }
+  $('previewBg').addEventListener('input',()=>{applyBackground($('previewBg').value);saveBackground();});
+  $('previewBgReset').onclick=()=>{applyBackground(null);saveBackground();};
   $('knifeCalibration').onclick=()=>{
     svgExample();loadId++;svgText='<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="55mm" viewBox="0 0 90 55"><path id="square" d="M10 10 H30 V30 H10 Z"/><circle id="circle" cx="48" cy="20" r="10"/><path id="triangle" d="M65 30 L75 10 L85 30 Z"/><path id="open-line" d="M10 45 H30"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
@@ -304,7 +348,7 @@
     host('subscribe',{event:'theme'}).catch(()=>{});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','joinEndpoints',...importFields,'dxfUnits'];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','fillAll','fillFirst','skipUnstroked','joinEndpoints',...importFields,'dxfUnits'];
   const importState=()=>JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value).concat($('joinEndpoints').checked));
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));
@@ -347,6 +391,7 @@
   };
   if(window.parent!==window)host('getSettings').then(data=>{
     stored=data&&typeof data==='object'?data:{};
+    if(typeof stored.previewBg==='string')applyBackground(stored.previewBg);
     presets=Array.isArray(stored.plotterStudioPresets)?stored.plotterStudioPresets.filter(p=>typeof p.name==='string'&&p.values&&typeof p.values==='object'):[];
     presetList();$('savePreset').disabled=false;
   }).catch(e=>message('Could not load presets: '+e.message,true));
@@ -365,5 +410,5 @@
     $('output').focus();$('output').select();
     try{if(!document.execCommand('copy'))throw Error();message('G-code copied.');}catch{message('G-code selected. Use your device’s Copy command.');}
   };
-  syncEndpointJoinControl();update();
+  syncEndpointJoinControl();applyBackground(null);update();
 })();

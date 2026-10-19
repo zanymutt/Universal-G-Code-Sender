@@ -196,7 +196,7 @@
         const r=step.value;if(!r)continue;vertices+=r.originalCount;removed+=r.removed;mergedCount+=r.merged;
         if(vertices>100000)throw Error('Limit: 100,000 sampled points. Increase tolerance or step.');
         if(r.gapClosed)warnings.push('Closed a same-path endpoint gap within '+options.equalDistance+' mm.');
-        paths.push({id:'p'+paths.length,name:items[i].name,color:items[i].color||'#000000',closed:r.closed,points:r.points});
+        paths.push({id:'p'+paths.length,name:items[i].name,color:items[i].color||'#000000',fillColor:items[i].fillColor||null,noStroke:!!items[i].noStroke,group:items[i].group,closed:r.closed,points:r.points});
       }
       const endpointJoin=joinOpenEndpoints(paths,options.joinEndpoints?options.joinDistance:0);
       paths.splice(0,paths.length,...endpointJoin.paths);

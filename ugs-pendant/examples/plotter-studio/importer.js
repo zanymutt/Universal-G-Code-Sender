@@ -117,7 +117,7 @@
     }
     const pageMatrix=new DOMMatrix([sx,0,0,sy,ox-box[0]*sx,oy-box[1]*sy]);
     if(!Number.isFinite(cleanup)||cleanup<0||cleanup>1)throw Error('Node cleanup must be from 0 to 1 mm.');
-    const items=[];
+    const items=[];let elementCount=0;
     function walk(el,parent,depth=0,paint={}){
       if(depth>60)throw Error('SVG group nesting exceeds 60 levels.');
       const tag=el.localName;
@@ -135,10 +135,11 @@
       if(![mat.a,mat.b,mat.c,mat.d,mat.e,mat.f].every(Number.isFinite))throw Error('Non-finite SVG transform.');
       if(tag==='g'||el===root){for(const child of el.children)walk(child,mat,depth+1,inherited);return;}
       if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
+      const group=++elementCount;
       for(const source of shape(el))for(const sub of (source.ends?[source]:splitPath(source.d))){
         if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
         if(sub.ends.length>3000)throw Error('A path exceeds 3000 segments. Simplify or split it first.');
-        items.push({color:inherited.stroke||inherited.fill||'#000000',d:sub.d,closed:sub.closed,matrix:[mat.a,mat.b,mat.c,mat.d,mat.e,mat.f],height,name:(el.getAttribute('id')||tag)+'/'+(items.length+1)});
+        items.push({group,fillColor:inherited.fill||null,noStroke:!inherited.stroke,color:inherited.stroke||inherited.fill||'#000000',d:sub.d,closed:sub.closed,matrix:[mat.a,mat.b,mat.c,mat.d,mat.e,mat.f],height,name:(el.getAttribute('id')||tag)+'/'+(items.length+1)});
       }
     }
     walk(root,pageMatrix);

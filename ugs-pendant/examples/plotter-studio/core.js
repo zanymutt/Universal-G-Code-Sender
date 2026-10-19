@@ -103,6 +103,85 @@
     }
     return {...p,points};
   }
+  // ---- Hatch fill -------------------------------------------------------
+  // Lines at a fixed angle on a global grid (so neighbouring shapes line up),
+  // clipped even-odd to a shape's closed contours (holes from compound paths work),
+  // then trimmed so no line comes within `gap` mm of any contour.
+  function solve(c0,c1,lo,hi){
+    if(Math.abs(c1)<1e-12)return c0>=lo&&c0<=hi?[-Infinity,Infinity]:null;
+    const a=(lo-c0)/c1,b=(hi-c0)/c1;return a<b?[a,b]:[b,a];
+  }
+  // Interval of u where (u,v) lies within g of edge a-b: the line meets a convex
+  // capsule in one interval, found as the hull of its circle and slab hits.
+  function capsule(e,v,g){
+    const a=e.a,b=e.b,du=b.u-a.u,dv=b.v-a.v,len=Math.hypot(du,dv),ex=du/len,ey=dv/len,nx=-ey,ny=ex,parts=[];
+    for(const p of [a,b]){const dy=v-p.v;if(Math.abs(dy)<=g){const h=Math.sqrt(g*g-dy*dy);parts.push([p.u-h,p.u+h]);}}
+    const side=solve(-a.u*nx+(v-a.v)*ny,nx,-g,g),along=solve(-a.u*ex+(v-a.v)*ey,ex,0,len);
+    if(side&&along){const lo=Math.max(side[0],along[0]),hi=Math.min(side[1],along[1]);if(lo<=hi)parts.push([lo,hi]);}
+    return parts.length?[Math.min(...parts.map(p=>p[0])),Math.max(...parts.map(p=>p[1]))]:null;
+  }
+  function hatchLines(contours,angle,spacing,gap){
+    const th=angle*Math.PI/180,c=Math.cos(th),s=Math.sin(th),edges=[];let vmin=Infinity,vmax=-Infinity;
+    for(const pts of contours){
+      const r=pts.map(q=>({u:q.x*c+q.y*s,v:-q.x*s+q.y*c}));
+      for(const q of r){vmin=Math.min(vmin,q.v);vmax=Math.max(vmax,q.v);}
+      for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];if(a.u===b.u&&a.v===b.v)continue;edges.push({a,b,lo:Math.min(a.v,b.v),hi:Math.max(a.v,b.v)});}
+    }
+    const first=Math.ceil(vmin/spacing),last=Math.floor(vmax/spacing),out=[];
+    if(last-first>20000)throw Error('Hatch spacing is too small for this artwork: more than 20,000 lines. Increase the spacing.');
+    for(let n=first;n<=last;n++){
+      const v=n*spacing,xs=[];
+      for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v))xs.push(e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v));
+      if(xs.length<2)continue;
+      xs.sort((p,q)=>p-q);
+      let blocked=[];
+      if(gap>0){for(const e of edges)if(v>=e.lo-gap&&v<=e.hi+gap){const iv=capsule(e,v,gap);if(iv)blocked.push(iv);}blocked.sort((p,q)=>p[0]-q[0]);}
+      const row=[];
+      for(let k=0;k+1<xs.length;k+=2){
+        let from=xs[k];const to=xs[k+1];
+        for(const [lo,hi] of blocked){
+          if(hi<from||lo>to)continue;
+          if(lo>from)row.push([from,lo]);
+          from=Math.max(from,hi);if(from>=to)break;
+        }
+        if(from<to)row.push([from,to]);
+      }
+      const pieces=row.filter(([p,q])=>q-p>=.1);
+      if(n%2)pieces.reverse();
+      for(const [p,q] of pieces){
+        const [from,to]=n%2?[q,p]:[p,q];
+        out.push([{x:from*c-v*s,y:from*s+v*c},{x:to*c-v*s,y:to*s+v*c}]);
+      }
+    }
+    return out;
+  }
+  function hatchFills(paths,o,penOf){
+    const groups=new Map(),out=[];
+    for(const p of paths){
+      if(!p.closed)continue;
+      const color=p.fillColor||(o.fillAll?p.color:null);if(!color)continue;
+      const pen=penOf(color),s=o.fills&&o.fills[pen];
+      if(!(pen>0)||!s||s.mode==='none'||!s.mode)continue;
+      const key=(p.group??p.id)+'|'+color;
+      if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,contours:[]});
+      groups.get(key).contours.push(p.points);
+    }
+    const boxes=[];
+    for(const g of groups.values()){
+      const s=g.s;
+      if(!Number.isFinite(s.angle)||!(s.spacing>=.05&&s.spacing<=100)||!Number.isFinite(s.gap)||s.gap<0||s.gap>100)throw Error('Pen '+g.pen+' fill: angle must be a number, spacing 0.05-100 mm, gap 0-100 mm.');
+      for(const angle of s.mode==='cross'?[s.angle,s.angle+90]:[s.angle])
+        for(const [a,b] of hatchLines(g.contours,angle,s.spacing,s.gap)){
+          if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
+          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,points:[a,b]});
+        }
+      boxes.push(bounds(g.contours.flat()));
+    }
+    // Overlapping filled shapes are each hatched in full; there is no hidden-line removal yet.
+    let overlaps=0;
+    for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(a.minX<b.maxX&&b.minX<a.maxX&&a.minY<b.maxY&&b.minY<a.maxY)overlaps++;}
+    return {paths:out,overlaps};
+  }
   function plan(doc,o,locks={},directions={}) {
     const required=['feed','plunge','safe','scale','rotation','overlap','originX','originY',...(o.mode!=='laser'?['surface','final','step']:o.mode==='laser'?['focus','laserPasses']:[]),...(o.tool!=='none'?['power','powerMax']:[])];
     for(const key of required) if(!Number.isFinite(o[key])) throw Error('Enter a valid number for '+key+'.');
@@ -120,7 +199,11 @@
     // Pens: every colour maps to a pen number (0 = skip). Only plotter mode has pens.
     const penMap=o.mode==='plotter'&&o.penMap&&typeof o.penMap==='object'?o.penMap:null;
     if(penMap)for(const [color,pen] of Object.entries(penMap))if(!Number.isInteger(pen)||pen<0||pen>99)throw Error('Pen numbers must be whole numbers from 0 (skip) to 99 for '+color+'.');
-    const remaining=transformed.paths.map(p=>({...p,pen:penMap?(Object.hasOwn(penMap,p.color)?penMap[p.color]:1):1,area:p.closed?area(p.points):0})).filter(p=>p.pen>0);
+    const penOf=c=>penMap?(Object.hasOwn(penMap,c)?penMap[c]:1):1;
+    const plotter=o.mode==='plotter',filled=plotter?hatchFills(transformed.paths,o,penOf):{paths:[],overlaps:0};
+    // Stage orders outlines against hatch within a pen: lower stages are cut first.
+    const remaining=transformed.paths.filter(p=>!(plotter&&o.skipUnstroked&&p.noStroke&&p.fillColor)).map(p=>({...p,stage:o.fillFirst?2:1,pen:penOf(p.color),area:p.closed?area(p.points):0}))
+      .concat(filled.paths.map(f=>({...f,stage:o.fillFirst?1:2,pen:penOf(f.color),area:0}))).filter(p=>p.pen>0);
     if(!remaining.length) throw Error(penMap?'Every colour is set to Skip. Assign at least one colour to a pen.':'No paths selected.');
     // Strict containment, not just size: crossing/touching contours are not holes.
     const before=new Map(remaining.map(p=>[p.id,new Set()]));
@@ -141,7 +224,7 @@
       return cross(a,b,c)*cross(a,b,d)<=0 && cross(c,d,a)*cross(c,d,b)<=0;
     }
     if(o.inner) for(const outer of remaining.filter(p=>p.closed)) for(const child of remaining) {
-      if(outer===child||outer.pen!==child.pen)continue;
+      if(outer===child||outer.pen!==child.pen||outer.fill||child.fill)continue;
       const op=contours.get(outer.id),cp=contours.get(child.id);
       const a=bounds(op),b=bounds(cp);
       if(b.minX<=a.minX||b.maxX>=a.maxX||b.minY<=a.minY||b.maxY>=a.maxY)continue;
@@ -160,7 +243,9 @@
     const rest=remaining.filter(p=>p.pen===pen);
     const largest=o.largest?rest.filter(p=>p.closed).reduce((a,p)=>!a||p.area>a.area?p:a,null):null;
     while(rest.length) {
-      let candidates=rest.filter(p=>[...before.get(p.id)].every(id=>done.has(id)) && (p!==largest||rest.length===1));
+      const stage=Math.min(...rest.map(p=>p.stage)),ready=p=>[...before.get(p.id)].every(id=>done.has(id)) && (p!==largest||rest.length===1);
+      let candidates=rest.filter(p=>p.stage===stage&&ready(p));
+      if(!candidates.length)candidates=rest.filter(ready);
       if(!candidates.length) throw Error('Path-order constraints conflict. Disable largest-last or inner-first.');
       let best=orient(candidates[0],position,o,locks,directions);
       if(o.order==='nearest') for(const p of candidates.slice(1)){const q=orient(p,position,o,locks,directions);if(dist(position,q.points[0])<dist(position,best.points[0]))best=q;}
@@ -172,7 +257,7 @@
     }
     }
     if(ordered.reduce((n,p)=>n+p.points.length*z.length,0)>1000000)throw Error('Output exceeds one million moves. Reduce passes or increase sampling spacing.');
-    const job={paths:ordered,pens,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
+    const job={paths:ordered,pens,fills:filled.paths.length,fillOverlaps:filled.overlaps,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
     return o.mode==='knife'?compensateKnife(job,o):job;
   }
   // Passive drag knife: the holder is offset ahead of the blade along its heading.
@@ -339,6 +424,6 @@
       return {pen,label:penLabel(o,pen),paths:paths.length,text:'('+penLabel(o,pen)+' only)\n'+text};
     });
   }
-  const api={simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,gcodeFiles,dist,length};
+  const api={simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,gcodeFiles,hatchLines,dist,length};
   if(typeof module!=='undefined')module.exports=api;else root.SvgCam=api;
 })(typeof window==='undefined'?globalThis:window);
