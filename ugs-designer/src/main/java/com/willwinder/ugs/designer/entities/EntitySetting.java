@@ -48,7 +48,7 @@ public enum EntitySetting {
     TOOL_PATH_ANGLE("Tool path angle"),
     LINE_SPACING("Line spacing"),
     TOOL_PATH_DIRECTION("Tool path direction"),
-    DIRECTION("Tool path direction"),
+    DIRECTION("Cut direction"),
     PLUNGE_TYPE("Plunge type"),
     CORNER_RADIUS("Corner radius"),
     RASTER_INVERT("Invert"),
@@ -62,6 +62,7 @@ public enum EntitySetting {
     ROUGHING("Roughing"),
     FINISHING_PASS("Finishing pass"),
     STOCK_TO_LEAVE("Stock to leave"),
+    FINISHING_PASS_DIRECTION("Finishing pass direction"),
     TABS("Tabs"),
     TAB_COUNT("Number of tabs");
 
@@ -127,6 +128,7 @@ public enum EntitySetting {
             EntitySetting.LEAD_IN_PERCENT,
             EntitySetting.FINISHING_PASS,
             EntitySetting.STOCK_TO_LEAVE,
+            EntitySetting.FINISHING_PASS_DIRECTION,
             EntitySetting.INCLUDE_IN_EXPORT);
 
     public static final List<EntitySetting> DEFAULT_LASER_SETTINGS = List.of(

@@ -97,16 +97,19 @@ public final class DesignRenderable implements Renderable {
 
     /**
      * The meshes of one entity, in its own coordinates. Reused for as long as the relative shape
-     * instance and the styling it was built for stay the same. The dashed outline is the
+     * instance and the styling it was built for stay the same, including the surfacing directions
+     * that the arrow decoration is drawn from. The dashed outline is the
      * exception: it is built in world coordinates with a dash length chosen for the zoom, so it
      * also depends on the transform and dash length it was built with.
      */
-    private record EntityMeshes(Shape relativeShape, CutType cutType, AffineTransform transform, double dashLength,
+    private record EntityMeshes(Shape relativeShape, CutType cutType, ToolPathDirection toolPathDirection,
+                                Direction direction, AffineTransform transform, double dashLength,
                                 MeshHandle fill, MeshHandle outline, MeshHandle dashedOutline, MeshHandle decoration,
                                 MeshHandle image, TextureHandle texture, BufferedImage textureSource) {
-        boolean isCurrentFor(Shape relativeShape, CutType cutType, AffineTransform transform, double dashLength,
-                             BufferedImage preview) {
+        boolean isCurrentFor(Shape relativeShape, CutType cutType, ToolPathDirection toolPathDirection,
+                             Direction direction, AffineTransform transform, double dashLength, BufferedImage preview) {
             return this.relativeShape == relativeShape && this.cutType == cutType && textureSource == preview
+                    && this.toolPathDirection == toolPathDirection && this.direction == direction
                     && (dashedOutline == null || (this.transform.equals(transform) && this.dashLength == dashLength));
         }
 
@@ -140,9 +143,9 @@ public final class DesignRenderable implements Renderable {
             Platform.runLater(this::invalidate);
         }
     };
-    private final SelectionListener selectionListener = event -> Platform.runLater(this::requestRender);
+    private final SelectionListener selectionListener = _ -> Platform.runLater(this::requestRender);
     private final SettingsListener settingsListener = () -> Platform.runLater(this::invalidate);
-    private final ChangeListener<Object> redrawListener = (observable, oldValue, newValue) -> requestRender();
+    private final ChangeListener<Object> redrawListener = (_, _, _) -> requestRender();
     private final WorkspaceManager.WorkspaceListener workspaceListener = new WorkspaceManager.WorkspaceListener() {
         @Override
         public void onWorkspaceOpened(WorkspaceContext workspace) {
@@ -268,15 +271,17 @@ public final class DesignRenderable implements Renderable {
             }
             Shape relativeShape = entity.getRelativeShape();
             CutType cutType = entity instanceof Cuttable cuttable ? cuttable.getCutType() : CutType.NONE;
+            ToolPathDirection toolPathDirection = entity instanceof Cuttable cuttable ? cuttable.getToolPathDirection() : null;
+            Direction direction = entity instanceof Cuttable cuttable ? cuttable.getDirection() : null;
             BufferedImage preview = previewOf(entity);
             EntityMeshes existing = previous.remove(entity);
-            if (existing != null && existing.isCurrentFor(relativeShape, cutType, entity.getTransform(), dashLength, preview)) {
+            if (existing != null && existing.isCurrentFor(relativeShape, cutType, toolPathDirection, direction, entity.getTransform(), dashLength, preview)) {
                 cache.put(entity, existing);
             } else {
                 if (existing != null) {
                     existing.release(context);
                 }
-                cache.put(entity, build(context, entity, relativeShape, cutType, preview));
+                cache.put(entity, build(context, entity, relativeShape, cutType, toolPathDirection, direction, preview));
             }
             if (entity instanceof Cuttable cuttable) {
                 appendTabs(tabBuilder, cuttable);
@@ -300,7 +305,8 @@ public final class DesignRenderable implements Renderable {
         return entity instanceof Raster raster ? raster.getPreviewImage() : null;
     }
 
-    private EntityMeshes build(RenderContext context, Entity entity, Shape relativeShape, CutType cutType, BufferedImage preview) {
+    private EntityMeshes build(RenderContext context, Entity entity, Shape relativeShape, CutType cutType,
+                               ToolPathDirection toolPathDirection, Direction direction, BufferedImage preview) {
         MeshHandle outline = context.upload(DesignTessellator.outline(relativeShape, Color.BLACK), VertexLayout.LINE);
         MeshHandle image = null;
         TextureHandle texture = null;
@@ -326,7 +332,7 @@ public final class DesignRenderable implements Renderable {
             fill = context.upload(DesignTessellator.fill(relativeShape), VertexLayout.MESH);
         }
 
-        return new EntityMeshes(relativeShape, cutType, new AffineTransform(entity.getTransform()), dashLength,
+        return new EntityMeshes(relativeShape, cutType, toolPathDirection, direction, new AffineTransform(entity.getTransform()), dashLength,
                 fill, outline, dashed, decoration, image, texture, preview);
     }
 
@@ -359,7 +365,7 @@ public final class DesignRenderable implements Renderable {
      */
     private void appendTabs(LineMeshBuilder builder, Cuttable cuttable) {
         Shape tabShape = TabShapes.create(cuttable, controller.getSettings());
-        if (tabShape == null || tabShape.getPathIterator(null).isDone()) {
+        if (tabShape.getPathIterator(null).isDone()) {
             return;
         }
         float[] segments = DesignTessellator.outline(tabShape, Colors.ORANGE);
@@ -379,9 +385,13 @@ public final class DesignRenderable implements Renderable {
                 .build();
     }
 
-    private static float[] surfacingArrows(Rectangle2D bounds, Cuttable cuttable) {
+    /**
+     * Arrows showing which way the surfacing passes run. The first segment of each arrow is the
+     * shaft, from tail to tip.
+     */
+    static float[] surfacingArrows(Rectangle2D bounds, Cuttable cuttable) {
         LineMeshBuilder builder = new LineMeshBuilder(6);
-        double angle = cuttable.getToolPathDirection() == ToolPathDirection.VERTICAL ? 90 : 0;
+        double angle = cuttable.getToolPathDirection().getAngle();
         double length = Math.min(bounds.getWidth(), bounds.getHeight());
         appendArrow(builder, bounds.getCenterX(), bounds.getCenterY(), angle, length);
         if (cuttable.getDirection() == Direction.BOTH) {
@@ -391,7 +401,9 @@ public final class DesignRenderable implements Renderable {
     }
 
     private static void appendArrow(LineMeshBuilder builder, double centerX, double centerY, double angleDegrees, double length) {
-        double angle = Math.toRadians(angleDegrees);
+        // The tool path angle is measured clockwise, like in GeometryUtils.generateLineString which
+        // lays out the actual passes, so a vertical pass runs towards negative Y.
+        double angle = Math.toRadians(-angleDegrees);
         double half = length / 2;
         double headSize = length * 0.2;
         double tipX = centerX + Math.cos(angle) * half;

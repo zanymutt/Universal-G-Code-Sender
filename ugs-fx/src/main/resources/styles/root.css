@@ -33,7 +33,6 @@
 }
 
 .button:focused,
-.combo-box:focused,
 .toggle-button:focused {
     -fx-border-color: -fx-focus-border-color;
     -fx-border-width: 1;
@@ -107,10 +106,33 @@
 
 /**
  * Combo box
+ *
+ * Styled like a text field (modena's .text-input) with the drop down arrow on the right, so a
+ * combo lines up with the text fields it sits next to in forms.
  */
+.combo-box-base {
+    -fx-background-color: linear-gradient(to bottom, derive(-fx-text-box-border, -10%), -fx-text-box-border),
+        linear-gradient(from 0px 0px to 0px 5px, derive(-fx-control-inner-background, -9%), -fx-control-inner-background);
+    -fx-background-insets: 0, 1;
+    -fx-background-radius: 3, 2;
+}
+
 .combo-box-base:focused {
-    -fx-background-color: -fx-focus-color, -fx-outer-border, -fx-inner-border, -fx-body-color;
-    -fx-border-radius: 0;
+    -fx-background-color: -fx-focus-color, -fx-control-inner-background, -fx-faint-focus-color,
+        linear-gradient(from 0px 0px to 0px 5px, derive(-fx-control-inner-background, -9%), -fx-control-inner-background);
+    -fx-background-insets: -0.2, 1, -1.4, 3;
+    -fx-background-radius: 3, 2, 4, 0;
+}
+
+/* The arrow button's own right padding keeps the text clear of the arrow */
+.combo-box > .list-cell {
+    -fx-text-fill: -fx-text-inner-color;
+    -fx-padding: 4 0 4 7;
+}
+
+/* A text field does not light up on hover, so neither does the value shown in the box */
+.combo-box > .list-cell:hover {
+    -fx-background-color: transparent;
 }
 
 .combo-box .list-cell:selected {
@@ -186,6 +208,46 @@
 
 .inspector-scroll > .viewport {
     -fx-background-color: transparent;
+}
+
+/* The entity tree selects rows like the lists and tables: a light bar with the regular text colour. */
+.entity-tree {
+    -fx-selection-bar: -fx-focus-background-color;
+    -fx-selection-bar-non-focused: -fx-focus-background-color;
+}
+
+.entity-tree .tree-cell:selected .label,
+.entity-tree .tree-cell:hover .label {
+    -fx-text-fill: -fx-text-base-color;
+}
+
+/* The folder icon of a group row replaces the disclosure arrow. */
+.entity-tree .tree-cell > .tree-disclosure-node,
+.entity-tree .tree-cell > .tree-disclosure-node > .arrow {
+    -fx-padding: 0;
+    -fx-shape: null;
+}
+
+/* Drop markers while dragging rows: a line above or below the row, or the row filled when
+   dropping into a group. Painted as backgrounds so the rows keep their size. */
+.entity-tree .tree-cell:drop-before {
+    -fx-background-color: -ugs-blackish-color, -fx-background;
+    -fx-background-insets: 0, 2 0 0 0;
+}
+
+.entity-tree .tree-cell:drop-after {
+    -fx-background-color: -ugs-blackish-color, -fx-background;
+    -fx-background-insets: 0, 0 0 2 0;
+}
+
+.entity-tree .tree-cell:drop-into {
+    -fx-background-color: -fx-focus-background-color;
+}
+
+/* Second line of a cuttable in the entity tree: depths, feed rate and spindle speed. */
+.entity-tree .entity-tree-detail {
+    -fx-font-size: 0.85em;
+    -fx-opacity: 0.7;
 }
 
 /* Header bar that labels and separates the inspector's stacked sections. */

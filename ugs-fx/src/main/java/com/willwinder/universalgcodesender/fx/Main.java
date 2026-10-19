@@ -26,6 +26,7 @@ import com.willwinder.universalgcodesender.fx.component.MainMenuBar;
 import com.willwinder.universalgcodesender.fx.component.ToolBarMenu;
 import com.willwinder.universalgcodesender.fx.component.WorkspaceTools;
 import com.willwinder.universalgcodesender.fx.component.drawer.DrawerPane;
+import com.willwinder.universalgcodesender.fx.component.drawer.TerminalDrawer;
 import com.willwinder.universalgcodesender.fx.component.sidepane.CollapsibleSidePane;
 import com.willwinder.universalgcodesender.fx.component.sidepane.SidePane;
 import com.willwinder.universalgcodesender.fx.component.sidepane.SidePaneAlignment;
@@ -33,16 +34,19 @@ import com.willwinder.universalgcodesender.fx.component.visualizer.VisualizerPan
 import com.willwinder.universalgcodesender.fx.model.UgsdWorkspaceContext;
 import com.willwinder.universalgcodesender.fx.service.FxBackend;
 import com.willwinder.universalgcodesender.fx.service.FxEventDispatcher;
+import com.willwinder.universalgcodesender.fx.service.InMemoryLogHandler;
 import com.willwinder.universalgcodesender.model.BackendAPI;
 import com.willwinder.universalgcodesender.services.LookupService;
 import com.willwinder.universalgcodesender.fx.helper.BrowserHelper;
 import com.willwinder.universalgcodesender.fx.helper.FontRegistry;
 import com.willwinder.universalgcodesender.fx.helper.SplitPaneDividerPersistence;
 import com.willwinder.universalgcodesender.fx.helper.SvgLoader;
+import com.willwinder.universalgcodesender.fx.service.ControllerErrorNotifier;
 import com.willwinder.universalgcodesender.fx.service.JogActionRegistry;
 import com.willwinder.universalgcodesender.fx.interceptor.InterceptorDialogService;
 import com.willwinder.universalgcodesender.fx.service.MacroActionService;
 import com.willwinder.universalgcodesender.fx.service.ShortcutService;
+import com.willwinder.universalgcodesender.fx.service.ToastService;
 import com.willwinder.universalgcodesender.fx.service.WorkspaceFileLoader;
 import com.willwinder.universalgcodesender.fx.service.WorkspaceManager;
 import com.willwinder.universalgcodesender.fx.settings.Settings;
@@ -77,11 +81,13 @@ public class Main extends Application {
     private SplitPane contentSplitPane;
     private StackPane contentPanel;
     private VisualizerPane visualizerPane;
+    private DrawerPane drawerPane;
     private CollapsibleSidePane leftSidePane;
     private CollapsibleSidePane rightSidePane;
 
     @Override
     public void init() throws Exception {
+        InMemoryLogHandler.install();
         LookupService.initialize(new FxBackend(new FxEventDispatcher()));
         LookupService.register(new WorkspaceFileLoader());
 
@@ -128,7 +134,7 @@ public class Main extends Application {
         VBox.setVgrow(workArea, Priority.ALWAYS);
 
         VBox root = new VBox();
-        Scene scene = new Scene(root);
+        Scene scene = new Scene(new StackPane(root, ToastService.getInstance().getToastPane()));
 
         ShortcutService.registerListener(scene);
         FontRegistry.registerFonts();
@@ -174,13 +180,14 @@ public class Main extends Application {
     private void registerInterceptorDialogs(Stage primaryStage) {
         BackendAPI backend = LookupService.lookup(BackendAPI.class);
         backend.addUGSEventListener(new InterceptorDialogService(backend, primaryStage));
+        ControllerErrorNotifier.register(backend, () -> drawerPane.open(TerminalDrawer.class));
     }
 
     private void registerWindowBoundsListeners(Stage primaryStage) {
-        primaryStage.widthProperty().addListener((observable, oldValue, newValue) -> Settings.getInstance().windowWidthProperty().set(newValue.doubleValue()));
-        primaryStage.heightProperty().addListener((observable, oldValue, newValue) -> Settings.getInstance().windowHeightProperty().set(newValue.doubleValue()));
-        primaryStage.xProperty().addListener((observable, oldValue, newValue) -> Settings.getInstance().windowPositionXProperty().set(newValue.doubleValue()));
-        primaryStage.yProperty().addListener((observable, oldValue, newValue) -> Settings.getInstance().windowPositionYProperty().set(newValue.doubleValue()));
+        primaryStage.widthProperty().addListener((_, _, newValue) -> Settings.getInstance().windowWidthProperty().set(newValue.doubleValue()));
+        primaryStage.heightProperty().addListener((_, _, newValue) -> Settings.getInstance().windowHeightProperty().set(newValue.doubleValue()));
+        primaryStage.xProperty().addListener((_, _, newValue) -> Settings.getInstance().windowPositionXProperty().set(newValue.doubleValue()));
+        primaryStage.yProperty().addListener((_, _, newValue) -> Settings.getInstance().windowPositionYProperty().set(newValue.doubleValue()));
     }
 
     // Applied before the window is shown so the scene is laid out at its final size from the
@@ -194,7 +201,7 @@ public class Main extends Application {
     }
 
     private void registerListeners(Stage primaryStage) {
-        primaryStage.setOnShown(event -> {
+        primaryStage.setOnShown(_ -> {
             primaryStage.setX(Settings.getInstance().windowPositionXProperty().get());
             primaryStage.setY(Settings.getInstance().windowPositionYProperty().get());
             registerWindowBoundsListeners(primaryStage);
@@ -205,7 +212,7 @@ public class Main extends Application {
             });
         });
 
-        primaryStage.setOnCloseRequest(event -> {
+        primaryStage.setOnCloseRequest(_ -> {
             if (visualizerPane != null) {
                 visualizerPane.dispose();
             }
@@ -220,7 +227,7 @@ public class Main extends Application {
         visualizerPane = new VisualizerPane();
         contentPanel.getChildren().add(visualizerPane);
 
-        DrawerPane drawerPane = new DrawerPane();
+        drawerPane = new DrawerPane();
         contentPanel.getChildren().add(drawerPane);
         StackPane.setAlignment(drawerPane, Pos.BOTTOM_RIGHT);
     }

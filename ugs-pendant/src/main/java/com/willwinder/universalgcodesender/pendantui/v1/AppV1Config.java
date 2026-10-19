@@ -37,7 +37,6 @@ import com.willwinder.universalgcodesender.services.JogService;
 import org.glassfish.jersey.internal.inject.AbstractBinder;
 import org.glassfish.jersey.media.multipart.MultiPartFeature;
 import org.glassfish.jersey.server.ResourceConfig;
-import org.glassfish.jersey.server.wadl.WadlFeature;
 
 public class AppV1Config extends ResourceConfig {
     public AppV1Config(BackendAPI backendAPI, JogService jogService) {
@@ -53,7 +52,6 @@ public class AppV1Config extends ResourceConfig {
         register(ProbeResource.class);
         register(PluginsResource.class);
         register(MultiPartFeature.class);
-        register(WadlFeature.class);
         register(StaticResource.class);
         register(ExceptionMapper.class);
         register(ObjectMapperProvider.class);
