@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),C=require('./core.js');
+const p=(x,y)=>({x,y});
+const noisy=[p(0,0),p(1,0),p(.99989,.00002),p(2,0)];
+assert(C.cleanPoints(noisy,false,.1).length<noisy.length);
+assert.equal(C.cleanPoints(noisy,false,0),noisy);
+const corner=[p(0,0),p(.05,0),p(.05,.05),p(.05,1)];assert(C.cleanPoints(corner,false,.1).includes(corner[1]));
+const line=Array.from({length:100},(_,i)=>p(i*.01,0));const out=C.cleanPoints(line,false,.1);assert(out.length<line.length);assert.equal(out[0],line[0]);assert.equal(out.at(-1),line.at(-1));
+const ring=[p(0,0),p(.01,0),p(.01,.01),p(0,.01)];assert(C.cleanPoints(ring,true,.1).length>=3);
+assert.throws(()=>C.cleanPoints(line,false,NaN));
+console.log('PASS cleanup: removes tiny backtrack, retains corner/endpoints/small ring, zero disables');

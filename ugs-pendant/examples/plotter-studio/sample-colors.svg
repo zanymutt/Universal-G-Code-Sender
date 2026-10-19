@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="60mm" viewBox="0 0 100 60">
+  <g stroke="#e02020" fill="none">
+    <rect id="frame" x="5" y="5" width="90" height="50"/>
+    <circle id="sun" cx="25" cy="25" r="10"/>
+  </g>
+  <g stroke="rgb(30,60,220)" fill="none">
+    <path id="wave" d="M 40 30 C 50 15 65 45 90 25"/>
+    <path id="wave2" d="M 40 40 Q 65 25 90 40"/>
+  </g>
+  <path id="shade" d="M 15 48 L 35 48" stroke="#ff6060" fill="none"/>
+  <path id="tree" d="M 60 12 L 70 12 L 65 5 Z" style="stroke:green;fill:none"/>
+  <path id="ink" d="M 10 10 L 20 10" stroke="#000" fill="none"/>
+</svg>
