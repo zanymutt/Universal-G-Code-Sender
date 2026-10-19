@@ -104,7 +104,7 @@
     return {...p,points};
   }
   // ---- Hatch fill -------------------------------------------------------
-  // Lines at a fixed angle on a global grid (so neighbouring shapes line up),
+  // Lines at a fixed angle on a global grid (so neighboring shapes line up),
   // clipped even-odd to a shape's closed contours (holes from compound paths work),
   // then trimmed so no line comes within `gap` mm of any contour.
   function solve(c0,c1,lo,hi){
@@ -120,22 +120,34 @@
     if(side&&along){const lo=Math.max(side[0],along[0]),hi=Math.min(side[1],along[1]);if(lo<=hi)parts.push([lo,hi]);}
     return parts.length?[Math.min(...parts.map(p=>p[0])),Math.max(...parts.map(p=>p[1]))]:null;
   }
-  function hatchLines(contours,angle,spacing,gap){
+  // Returns polylines ([{x,y},...]). opt: wave/amp/wavelength/shift (wavy lines), zigzag (join line ends).
+  function hatchLines(contours,angle,spacing,gap,opt={}){
     const th=angle*Math.PI/180,c=Math.cos(th),s=Math.sin(th),edges=[];let vmin=Infinity,vmax=-Infinity;
+    const amp=opt.wave?opt.amp:0,wavelength=opt.wavelength||10,shift=(opt.shift||0)*Math.PI/180,clearance=gap+amp;
     for(const pts of contours){
       const r=pts.map(q=>({u:q.x*c+q.y*s,v:-q.x*s+q.y*c}));
       for(const q of r){vmin=Math.min(vmin,q.v);vmax=Math.max(vmax,q.v);}
       for(let i=0;i<r.length;i++){const a=r[i],b=r[(i+1)%r.length];if(a.u===b.u&&a.v===b.v)continue;edges.push({a,b,lo:Math.min(a.v,b.v),hi:Math.max(a.v,b.v)});}
     }
-    const first=Math.ceil(vmin/spacing),last=Math.floor(vmax/spacing),out=[];
+    const first=Math.ceil(vmin/spacing),last=Math.floor(vmax/spacing);
     if(last-first>20000)throw Error('Hatch spacing is too small for this artwork: more than 20,000 lines. Increase the spacing.');
+    const insideShape=(u,v)=>{let hit=false;for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v)&&u<e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v))hit=!hit;return hit;};
+    const nearest=(u,v)=>{let best=Infinity;for(const e of edges){if(v<e.lo-best||v>e.hi+best)continue;const dx=e.b.u-e.a.u,dy=e.b.v-e.a.v,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((u-e.a.u)*dx+(v-e.a.v)*dy)/l)):0;best=Math.min(best,Math.hypot(u-e.a.u-t*dx,v-e.a.v-t*dy));}return best;};
+    // A connector may join two line ends only if it is short and stays inside the shape, clear of the outline.
+    const linkable=(p,q)=>{
+      if(Math.hypot(p.u-q.u,p.v-q.v)>spacing*2.5+amp*2)return false;
+      for(const t of [.25,.5,.75]){const u=p.u+(q.u-p.u)*t,v=p.v+(q.v-p.v)*t;if(!insideShape(u,v)||(gap>0&&nearest(u,v)<gap*.6))return false;}
+      return true;
+    };
+    const chains=[];let chain=null;
+    const flush=()=>{if(chain)chains.push(chain);chain=null;};
     for(let n=first;n<=last;n++){
       const v=n*spacing,xs=[];
       for(const e of edges)if((e.a.v<=v)!==(e.b.v<=v))xs.push(e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v));
       if(xs.length<2)continue;
       xs.sort((p,q)=>p-q);
       let blocked=[];
-      if(gap>0){for(const e of edges)if(v>=e.lo-gap&&v<=e.hi+gap){const iv=capsule(e,v,gap);if(iv)blocked.push(iv);}blocked.sort((p,q)=>p[0]-q[0]);}
+      if(clearance>0){for(const e of edges)if(v>=e.lo-clearance&&v<=e.hi+clearance){const iv=capsule(e,v,clearance);if(iv)blocked.push(iv);}blocked.sort((p,q)=>p[0]-q[0]);}
       const row=[];
       for(let k=0;k+1<xs.length;k+=2){
         let from=xs[k];const to=xs[k+1];
@@ -148,13 +160,22 @@
       }
       const pieces=row.filter(([p,q])=>q-p>=.1);
       if(n%2)pieces.reverse();
-      for(const [p,q] of pieces){
-        const [from,to]=n%2?[q,p]:[p,q];
-        out.push([{x:from*c-v*s,y:from*s+v*c},{x:to*c-v*s,y:to*s+v*c}]);
-      }
+      pieces.forEach(([p,q],i)=>{
+        const line=[];
+        if(opt.wave){
+          const count=Math.max(2,Math.ceil((q-p)/(wavelength/10)));
+          for(let k=0;k<=count;k++){const u=p+(q-p)*k/count;line.push({u,v:v+amp*Math.sin(2*Math.PI*u/wavelength+n*shift)});}
+        }else line.push({u:p,v},{u:q,v});
+        if(n%2)line.reverse();
+        if(opt.zigzag&&i===0&&chain&&linkable(chain.at(-1),line[0]))chain.push(...line);
+        else{flush();chain=line;}
+        if(!opt.zigzag||i<pieces.length-1)flush();
+      });
     }
-    return out;
+    flush();
+    return chains.map(line=>line.map(q=>({x:q.u*c-q.v*s,y:q.u*s+q.v*c})));
   }
+  const FILL_MODES=['hatch','cross','wavy'];
   function hatchFills(paths,o,penOf){
     const groups=new Map(),out=[];
     for(const p of paths){
@@ -168,12 +189,15 @@
     }
     const boxes=[];
     for(const g of groups.values()){
-      const s=g.s;
+      const s=g.s,wavy=s.mode==='wavy';
+      if(!FILL_MODES.includes(s.mode))throw Error('Pen '+g.pen+' fill: unknown pattern.');
       if(!Number.isFinite(s.angle)||!(s.spacing>=.05&&s.spacing<=100)||!Number.isFinite(s.gap)||s.gap<0||s.gap>100)throw Error('Pen '+g.pen+' fill: angle must be a number, spacing 0.05-100 mm, gap 0-100 mm.');
+      if(wavy&&(!(s.amp>=0&&s.amp<=20)||!(s.wavelength>=.5&&s.wavelength<=500)||!Number.isFinite(s.shift)))throw Error('Pen '+g.pen+' fill: wave height must be 0-20 mm, wavelength 0.5-500 mm, and the shift a number.');
+      const opt={wave:wavy,amp:s.amp,wavelength:s.wavelength,shift:s.shift,zigzag:!!s.zigzag};
       for(const angle of s.mode==='cross'?[s.angle,s.angle+90]:[s.angle])
-        for(const [a,b] of hatchLines(g.contours,angle,s.spacing,s.gap)){
+        for(const points of hatchLines(g.contours,angle,s.spacing,s.gap,opt)){
           if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
-          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,points:[a,b]});
+          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,points});
         }
       boxes.push(bounds(g.contours.flat()));
     }
@@ -196,7 +220,7 @@
     if(o.outputTolerance!==undefined&&(!Number.isFinite(o.outputTolerance)||o.outputTolerance<0||o.outputTolerance>1))throw Error('Output tolerance must be 0–1 mm.');
     const z=depths(o), transformed=transform(doc,o);
     if(transformed.paths.some(p=>p.points.some(q=>![q.x,q.y].every(v=>Number.isFinite(v)&&Math.abs(v)<=1000000))))throw Error('Transformed artwork exceeds the supported coordinate range.');
-    // Pens: every colour maps to a pen number (0 = skip). Only plotter mode has pens.
+    // Pens: every color maps to a pen number (0 = skip). Only plotter mode has pens.
     const penMap=o.mode==='plotter'&&o.penMap&&typeof o.penMap==='object'?o.penMap:null;
     if(penMap)for(const [color,pen] of Object.entries(penMap))if(!Number.isInteger(pen)||pen<0||pen>99)throw Error('Pen numbers must be whole numbers from 0 (skip) to 99 for '+color+'.');
     const penOf=c=>penMap?(Object.hasOwn(penMap,c)?penMap[c]:1):1;
@@ -204,7 +228,7 @@
     // Stage orders outlines against hatch within a pen: lower stages are cut first.
     const remaining=transformed.paths.filter(p=>!(plotter&&o.skipUnstroked&&p.noStroke&&p.fillColor)).map(p=>({...p,stage:o.fillFirst?2:1,pen:penOf(p.color),area:p.closed?area(p.points):0}))
       .concat(filled.paths.map(f=>({...f,stage:o.fillFirst?1:2,pen:penOf(f.color),area:0}))).filter(p=>p.pen>0);
-    if(!remaining.length) throw Error(penMap?'Every colour is set to Skip. Assign at least one colour to a pen.':'No paths selected.');
+    if(!remaining.length) throw Error(penMap?'Every color is set to Skip. Assign at least one color to a pen.':'No paths selected.');
     // Strict containment, not just size: crossing/touching contours are not holes.
     const before=new Map(remaining.map(p=>[p.id,new Set()]));
     let comparisons=0;

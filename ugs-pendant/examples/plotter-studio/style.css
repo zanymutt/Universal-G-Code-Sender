@@ -64,3 +64,9 @@ html{height:100%}body{height:100%;display:flex;flex-direction:column;overflow:hi
 .bgControl input[type=color]{width:2.2rem;height:1.7rem;padding:0;border:1px solid var(--plugin-border-strong);border-radius:3px;background:none;cursor:pointer}
 .bgControl button{min-width:0;padding:4px 8px}
 .zoomControls{flex-wrap:wrap}.bgControl{white-space:nowrap;flex:none}
+.modal{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:14px}
+.modal[hidden]{display:none}
+.modalBody{background:var(--plugin-bg);border:1px solid var(--plugin-border-strong);border-radius:8px;padding:14px 16px;max-width:420px;width:100%;max-height:100%;overflow:auto;box-shadow:0 10px 30px var(--plugin-shadow)}
+.modalBody h2{font-size:16px;margin:0 0 10px}
+#fillTable td.fillSummary{white-space:normal;color:var(--plugin-text-muted);font-size:12px}
+#fillTable td.fillButtons{white-space:nowrap}#fillTable td.fillButtons button{min-width:0;padding:3px 8px;margin-right:4px}

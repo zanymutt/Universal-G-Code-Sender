@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plotter Studio</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>Plotter Studio <small>Preview · 0.2.0</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each colour is assigned to a pen; every pen is finished before the next.</p>
+<header><h1>Plotter Studio <small>Preview · 0.3.0</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each color is assigned to a pen; every pen is finished before the next.</p>
 <div class="importBar"><label>SVG or DXF file<input id="file" type="file" accept=".svg,.dxf,image/svg+xml,application/dxf,image/vnd.dxf"></label><button id="example">Load example artwork</button></div></header>
 <div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
@@ -49,18 +49,19 @@
 <label>Tool on/off commands<select id="tool"><option value="none">None — no tool-on commands</option><option value="M3">M3 + M5</option><option value="M4">M4 + M5 (controller-dependent)</option></select></label>
 <div class="pair"><label>S value / laser power<input id="power" type="number" value="100" min="0"></label><label>Configured maximum S<input id="powerMax" type="number" value="1000" min="1"></label></div>
 </fieldset>
-<fieldset id="panel-pens" role="tabpanel" aria-labelledby="tab-pens" hidden><legend>Pens and colours</legend>
-<p class="hint" id="penNote">Import artwork to list its colours.</p>
-<table id="penTable" class="penTable" hidden><thead><tr><th>Colour (click to change)</th><th>Paths</th><th>Pen</th></tr></thead><tbody id="penRows"></tbody></table>
-<div class="pair"><button id="penPerColor" type="button" disabled>One pen per colour</button><button id="penAllOne" type="button" disabled>All on pen 1</button></div>
+<fieldset id="panel-pens" role="tabpanel" aria-labelledby="tab-pens" hidden><legend>Pens and colors</legend>
+<p class="hint" id="penNote">Import artwork to list its colors.</p>
+<table id="penTable" class="penTable" hidden><thead><tr><th>Color (click to change)</th><th>Paths</th><th>Pen</th></tr></thead><tbody id="penRows"></tbody></table>
+<div class="pair"><button id="penPerColor" type="button" disabled>One pen per color</button><button id="penAllOne" type="button" disabled>All on pen 1</button></div>
 <h3 class="subhead">Fills</h3>
-<p class="hint" id="fillNote">Fills are drawn with the pen assigned to the shape's fill colour. Only shapes that have a fill in the artwork are hatched (an unspecified fill counts as none).</p>
-<table id="fillTable" class="penTable" hidden><thead><tr><th>Pen</th><th>Hatch</th><th>Cross</th><th title="Hatch angle, degrees">Angle</th><th title="Distance between lines, mm">Space</th><th title="Distance kept from every outline, mm">Gap</th></tr></thead><tbody id="fillRows"></tbody></table>
+<p class="hint" id="fillNote">Fills are drawn with the pen assigned to the shape's fill color. Only shapes that have a fill in the artwork are hatched (an unspecified fill counts as none).</p>
+<table id="fillTable" class="penTable" hidden><thead><tr><th>Pen</th><th>Fill pattern</th><th></th></tr></thead><tbody id="fillRows"></tbody></table>
+<div class="pair"><button id="fillRandomAll" type="button" disabled title="Pick a random pattern, angle, spacing and wave for every pen">Random fills</button></div>
 <label class="check"><input id="fillAll" type="checkbox">Hatch every closed shape, even if the artwork gives it no fill</label>
 <label class="check"><input id="fillFirst" type="checkbox">Hatch before outlines</label>
 <label class="check"><input id="skipUnstroked" type="checkbox">Don't outline shapes that have a fill but no stroke</label>
 <label>When the pen changes<select id="penChange"><option value="M0">Pause (M0) so I can swap the pen</option><option value="M6">Tool change (T&lt;n&gt; M6)</option><option value="files">Separate G-code file per pen</option><option value="none">No pause — one program, sorted by pen</option></select></label>
-<p class="hint">Click a colour swatch to change the colour a pen is shown and labelled with; the artwork itself is not changed. Enter 0 to skip a colour. Hatch fills closed shapes with parallel lines at the angle (measured in output coordinates, after rotation), Cross adds a second set at +90°. Lines sit on a fixed grid, so touching shapes line up, and stop at least Gap mm short of every outline, including holes. Overlapping filled shapes are each hatched in full; hidden-line removal is not implemented yet. Colours sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG colour comes from stroke, else fill (inherited from groups); DXF colour from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
+<p class="hint">Click a color swatch to change the color a pen is shown and labelled with; the artwork itself is not changed. Enter 0 to skip a color. Use Edit to choose a pattern for a pen: parallel lines at an angle (measured in output coordinates, after rotation), cross-hatch (a second set at +90°) or wavy lines (wave height, wavelength and a shift between lines). Zigzag joins the ends of neighboring lines so the pen stays down. Random picks settings for you. Lines sit on a fixed grid, so touching shapes line up, and stop at least Gap mm short of every outline, including holes. Overlapping filled shapes are each hatched in full; hidden-line removal is not implemented yet. Colors sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG color comes from stroke, else fill (inherited from groups); DXF color from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
 </fieldset>
 <fieldset id="panel-paths" role="tabpanel" aria-labelledby="tab-paths" hidden><legend>3 · Paths</legend>
 <label>Order<select id="order"><option value="svg">Original file order</option><option value="nearest">Reduce travel</option></select></label>
@@ -98,7 +99,7 @@
 </fieldset>
 </section>
 <section class="work" id="work">
-<div class="previewCard"><div id="summary">Import SVG or DXF to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button><label class="bgControl" title="Preview background colour (not saved in G-code)">Background <input id="previewBg" type="color" value="#101619" aria-label="Preview background colour"><button id="previewBgReset" type="button" title="Use the theme background">Auto</button></label></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel / tight turn</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import SVG or DXF to preview toolpaths</text></svg><p class="hint">Plotter paths use their pen colour (green in knife/laser mode) · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel, pinch, or +/− to zoom · drag to pan</p></div>
+<div class="previewCard"><div id="summary">Import SVG or DXF to begin.</div><div class="zoomControls" aria-label="Preview zoom"><button id="zoomOut" aria-label="Zoom out">−</button><span id="zoomLevel">100%</span><button id="zoomIn" aria-label="Zoom in">+</button><button id="zoomFit">Fit</button><label class="bgControl" title="Preview background color (not saved in G-code)">Background <input id="previewBg" type="color" value="#101619" aria-label="Preview background color"><button id="previewBgReset" type="button" title="Use the theme background">Auto</button></label></div><label class="check" id="knifeOverlayControl" hidden><input id="knifeOverlay" type="checkbox" checked>Show holder movement · dashed blue = holder · orange = swivel / tight turn</label><svg id="preview" viewBox="0 0 100 100" aria-label="Toolpath preview" role="img"><text x="50" y="50" text-anchor="middle" font-size="5">Import SVG or DXF to preview toolpaths</text></svg><p class="hint">Plotter paths use their pen color (green in knife/laser mode) · thick cyan = selected cut · dashed = travel · orange dot = start · purple ring = end · number = cut order · knife overlay = holder center · arrows = direction · cyan = selected · red cross = origin · wheel, pinch, or +/− to zoom · drag to pan</p></div>
 <div id="divider" role="separator" tabindex="0" aria-label="Resize preview and G-code" aria-orientation="vertical" aria-valuemin="25" aria-valuemax="75" aria-valuenow="55" title="Drag to resize; arrow keys adjust; double-click resets"></div>
 <div class="codePane">
 <div id="message" role="status" aria-live="polite">Nothing is sent to the machine by this plugin.</div>
@@ -108,5 +109,18 @@
 </div>
 </section>
 </main>
+<div id="fillDialog" class="modal" hidden><div class="modalBody" role="dialog" aria-modal="true" aria-labelledby="fillDialogTitle">
+<h2 id="fillDialogTitle">Fill</h2>
+<label>Pattern<select id="fdPattern"><option value="none">None</option><option value="lines">Parallel lines</option><option value="cross">Cross-hatch</option><option value="wavy">Wavy lines</option></select></label>
+<div id="fdBasic">
+<div class="pair"><label>Angle (°)<input id="fdAngle" type="number" step="5"></label><label>Line spacing (mm)<input id="fdSpacing" type="number" min="0.05" step="0.1"></label></div>
+<label>Gap from outline (mm)<input id="fdGap" type="number" min="0" step="0.1"></label>
+<div id="fdWave"><div class="pair"><label>Wave height (mm)<input id="fdAmp" type="number" min="0" step="0.1"></label><label>Wavelength (mm)<input id="fdLength" type="number" min="0.5" step="0.5"></label></div>
+<label>Wave shift between lines (°)<input id="fdShift" type="number" step="15"></label>
+<p class="hint">Height is how far a line swings to each side. Shift 0 keeps neighboring lines parallel; 180 swings them in opposite directions. The gap is kept even at the peaks.</p></div>
+<label class="check"><input id="fdZigzag" type="checkbox">Zigzag: join line ends so the pen stays down</label>
+</div>
+<div class="actions"><button id="fdRandom" type="button">Random</button><button id="fdDone" type="button">Done</button></div>
+</div></div>
 <script src="core.js"></script><script src="geometry.js"></script><script src="importer.js"></script><script src="dxf-importer.js"></script><script src="dropdowns.js"></script><script src="app.js"></script>
 </body></html>

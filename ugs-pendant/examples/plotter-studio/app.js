@@ -10,14 +10,14 @@
   tabs.forEach((tab,i)=>{tab.onclick=()=>showTab(tab);tab.onkeydown=e=>{let index;if(e.key==='ArrowRight')index=(i+1)%tabs.length;else if(e.key==='ArrowLeft')index=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;e.preventDefault();showTab(tabs[index]);tabs[index].focus({preventScroll:true});};});
   let documentData=null,svgText='',fileFormat='svg',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
   let importController=null;
-  // colour -> pen number (0 = skip). Kept across reimports for colours that still exist.
+  // color -> pen number (0 = skip). Kept across reimports for colors that still exist.
   let penAssign={},penColors={},fillSettings={},generatedFiles=[],previewBg=null;
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:f.on?(f.cross?'cross':'hatch'):'none',angle:f.angle,spacing:f.spacing,gap:f.gap}]));return o;}
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
@@ -36,9 +36,9 @@
   function renderPens(){
     const list=colorList(),rows=$('penRows');rows.replaceChildren();
     $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;
-    $('penNote').textContent=list.length?(list.length+' colour'+(list.length===1?'':'s')+' found. Pens apply in plotter mode.'):'Import artwork to list its colours.';
+    $('penNote').textContent=list.length?(list.length+' color'+(list.length===1?'':'s')+' found. Pens apply in plotter mode.'):'Import artwork to list its colors.';
     list.forEach(([color,count,fills])=>{
-      const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display colour for '+color);
+      const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display color for '+color);
       swatch.addEventListener('input',()=>{penColors[color]=swatch.value;update();});
       const c1=document.createElement('td');c1.append(swatch,document.createTextNode(color));
       const c2=document.createElement('td');c2.textContent=String(count)+(fills?' · '+fills+' fill'+(fills===1?'':'s'):'');
@@ -50,28 +50,67 @@
     });
     renderFills();
   }
-  // One row of fill settings per pen that has something to hatch.
+  // One row per pen that has something to fill; Edit opens the pattern dialog.
+  const fillDefaults=()=>({pattern:'none',angle:45,spacing:1,gap:.5,amp:.6,wavelength:6,shift:0,zigzag:false});
+  const patternNames={none:'Off',lines:'Parallel lines',cross:'Cross-hatch',wavy:'Wavy lines'};
+  let fillPens=[],fillDialogPen=null;
+  function describeFill(f){
+    if(f.pattern==='none')return 'Off';
+    let text=patternNames[f.pattern]+' · '+f.angle+'° · spacing '+f.spacing+' mm';
+    if(f.pattern==='wavy')text+=' · wave '+f.amp+' mm / '+f.wavelength+' mm'+(f.shift?' · shift '+f.shift+'°':'');
+    return text+(f.zigzag?' · zigzag':'')+' · gap '+f.gap+' mm';
+  }
+  const pickOne=list=>list[Math.floor(Math.random()*list.length)];
+  const randomIn=(lo,hi,step)=>Number((Math.round((lo+Math.random()*(hi-lo))/step)*step).toFixed(2));
+  function randomizeFill(pen){
+    const f=fillSettings[pen]=fillSettings[pen]||fillDefaults(),spacing=randomIn(.6,3,.1);
+    Object.assign(f,{pattern:pickOne(['lines','cross','wavy']),angle:randomIn(0,175,5),spacing,gap:randomIn(.2,1.2,.1),amp:randomIn(.3,Math.max(.5,spacing*1.2),.1),wavelength:randomIn(3,14,.5),shift:pickOne([0,45,90,180]),zigzag:Math.random()<.5});
+  }
   function renderFills(){
     const rows=$('fillRows');rows.replaceChildren();
     const pens=new Set();
     for(const [color,,fills] of colorList()){const pen=penAssign[color];if(pen>0&&(fills>0||$('fillAll').checked))pens.add(pen);}
-    const sorted=[...pens].sort((a,b)=>a-b);
-    $('fillTable').hidden=!sorted.length;
-    $('fillNote').textContent=sorted.length?'Fills are drawn with the pen assigned to the shape\'s fill colour. Only shapes that have a fill in the artwork are hatched (an unspecified fill counts as none).':(documentData?'No shape has a fill. Tick "Hatch every closed shape" to fill shapes anyway.':'Import artwork to set up fills.');
-    for(const pen of sorted){
-      const f=fillSettings[pen]=fillSettings[pen]||{on:false,cross:false,angle:45,spacing:1,gap:.5};
-      const tr=document.createElement('tr'),cell=node=>{const td=document.createElement('td');td.append(node);tr.append(td);};
-      cell(document.createTextNode(String(pen)));
-      const check=key=>{const i=document.createElement('input');i.type='checkbox';i.checked=f[key];i.disabled=$('mode').value!=='plotter';i.setAttribute('aria-label',(key==='on'?'Hatch':'Cross-hatch')+' pen '+pen);i.addEventListener('input',()=>{f[key]=i.checked;update();});return i;};
-      const num=(key,label,min,step)=>{const i=document.createElement('input');i.type='number';i.min=String(min);i.step=String(step);i.value=String(f[key]);i.disabled=$('mode').value!=='plotter';i.setAttribute('aria-label',label+' for pen '+pen);i.addEventListener('input',()=>{f[key]=i.value.trim()===''?NaN:Number(i.value);update();});return i;};
-      cell(check('on'));cell(check('cross'));cell(num('angle','Angle',-360,5));cell(num('spacing','Spacing',.05,.1));cell(num('gap','Gap from outline',0,.1));
+    fillPens=[...pens].sort((a,b)=>a-b);
+    $('fillTable').hidden=!fillPens.length;$('fillRandomAll').disabled=!fillPens.length||$('mode').value!=='plotter';
+    $('fillNote').textContent=fillPens.length?'Fills are drawn with the pen assigned to the shape\'s fill color. Only shapes that have a fill in the artwork are filled (an unspecified fill counts as none).':(documentData?'No shape has a fill. Tick "Hatch every closed shape" to fill shapes anyway.':'Import artwork to set up fills.');
+    for(const pen of fillPens){
+      const f=fillSettings[pen]=fillSettings[pen]||fillDefaults(),tr=document.createElement('tr'),cell=(node,className)=>{const td=document.createElement('td');if(className)td.className=className;td.append(node);tr.append(td);return td;};
+      cell(document.createTextNode(String(pen)));cell(document.createTextNode(describeFill(f)),'fillSummary');
+      const box=document.createElement('span'),button=(label,handler)=>{const b=document.createElement('button');b.type='button';b.textContent=label;b.disabled=$('mode').value!=='plotter';b.setAttribute('aria-label',label+' fill for pen '+pen);b.addEventListener('click',handler);box.append(b);};
+      button('Edit',()=>openFillDialog(pen));
+      button('Random',()=>{randomizeFill(pen);renderFills();update();});
+      cell(box,'fillButtons');
       rows.append(tr);
     }
   }
-  // Cut colour in the preview; add a halo when it would vanish against the theme.
+  function fillDialogFields(){
+    const f=fillSettings[fillDialogPen];
+    $('fdPattern').value=f.pattern;$('fdAngle').value=f.angle;$('fdSpacing').value=f.spacing;$('fdGap').value=f.gap;
+    $('fdAmp').value=f.amp;$('fdLength').value=f.wavelength;$('fdShift').value=f.shift;$('fdZigzag').checked=f.zigzag;
+    $('fdWave').hidden=f.pattern!=='wavy';$('fdBasic').hidden=f.pattern==='none';
+    window.Dropdowns?.refresh();
+  }
+  function openFillDialog(pen){
+    fillDialogPen=pen;$('fillDialogTitle').textContent='Pen '+pen+' fill';fillDialogFields();$('fillDialog').hidden=false;$('fdDone').focus({preventScroll:true});
+  }
+  function closeFillDialog(){fillDialogPen=null;$('fillDialog').hidden=true;window.Dropdowns?.close();}
+  function readFillDialog(){
+    if(fillDialogPen===null)return;
+    const f=fillSettings[fillDialogPen],num=id=>$(id).value.trim()===''?NaN:Number($(id).value);
+    Object.assign(f,{pattern:$('fdPattern').value,angle:num('fdAngle'),spacing:num('fdSpacing'),gap:num('fdGap'),amp:num('fdAmp'),wavelength:num('fdLength'),shift:num('fdShift'),zigzag:$('fdZigzag').checked});
+    $('fdWave').hidden=f.pattern!=='wavy';$('fdBasic').hidden=f.pattern==='none';
+    renderFills();update();
+  }
+  for(const id of ['fdPattern','fdAngle','fdSpacing','fdGap','fdAmp','fdLength','fdShift','fdZigzag'])$(id).addEventListener('input',readFillDialog);
+  $('fdRandom').onclick=()=>{if(fillDialogPen===null)return;randomizeFill(fillDialogPen);fillDialogFields();renderFills();update();};
+  $('fdDone').onclick=closeFillDialog;
+  $('fillDialog').addEventListener('pointerdown',event=>{if(event.target===$('fillDialog'))closeFillDialog();});
+  document.addEventListener('keydown',event=>{if(event.key==='Escape'&&!$('fillDialog').hidden)closeFillDialog();});
+  $('fillRandomAll').onclick=()=>{fillPens.forEach(randomizeFill);renderFills();update();};
+  // Cut color in the preview; add a halo when it would vanish against the theme.
   function luminance(hex){const n=parseInt(hex.slice(1),16),f=v=>{v/=255;return v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4);};return .2126*f(n>>16&255)+.7152*f(n>>8&255)+.0722*f(n&255);}
   // With a custom background the halo is the background itself, or a contrasting tone
-  // when the pen colour would be hard to see on it.
+  // when the pen color would be hard to see on it.
   function penStyle(p){
     const bg=previewBg,bgLum=bg?luminance(bg):null,plain=bg||'var(--plugin-surface)';
     if($('mode').value!=='plotter'||!/^#[0-9a-f]{6}$/i.test(p.color||''))return {stroke:'var(--plugin-cut)',halo:plain};
@@ -137,7 +176,7 @@
     viewBox=null;invalidate();job=null;$('generate').disabled=true;pick=null;
     const o=settings();$('depthSettings').hidden=o.mode==='laser';$('laserSettings').hidden=o.mode!=='laser';
     $('knifeSettings').hidden=o.mode!=='knife';$('knifeOverlayControl').hidden=o.mode!=='knife';
-    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');['fillAll','fillFirst','skipUnstroked'].forEach(k=>$(k).disabled=o.mode!=='plotter');
+    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('button').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRandomAll').disabled=o.mode!=='plotter'||!fillPens.length;['fillAll','fillFirst','skipUnstroked'].forEach(k=>$(k).disabled=o.mode!=='plotter');
     $('tool').disabled=o.mode==='knife';$('power').disabled=o.mode==='knife';$('powerMax').disabled=o.mode==='knife';
     if(o.mode==='knife'){$('tool').value='none';o.tool='none';}
     $('knifeSwivelZ').disabled=!o.knifeAlign&&!o.knifeLift;$('knifeLead').disabled=!o.knifeAlign;$('knifeHeading').disabled=!o.knifeAlign;

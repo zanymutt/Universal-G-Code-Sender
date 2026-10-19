@@ -37,8 +37,8 @@
     if(!eof||section||!sections.has('ENTITIES'))throw Error('Incomplete DXF: ENTITIES section and EOF are required.');
     return sections;
   }
-  // AutoCAD Color Index -> '#rrggbb'. 1-9 are the fixed colours, 10-249 follow the
-  // hue/shade pattern of the standard palette, 250-255 are greys. Colour 7 is
+  // AutoCAD Color Index -> '#rrggbb'. 1-9 are the fixed colors, 10-249 follow the
+  // hue/shade pattern of the standard palette, 250-255 are greys. Color 7 is
   // white-or-black in CAD; paper is white here, so it plots black.
   const aciBase={1:'#ff0000',2:'#ffff00',3:'#00ff00',4:'#00ffff',5:'#0000ff',6:'#ff00ff',7:'#000000',8:'#808080',9:'#c0c0c0'};
   function aci(n){
@@ -158,7 +158,7 @@
         segments=polyline(points.map(tags=>({...coord(tags,10,20),bulge:num(tags,42,0)})),closed);
       }
       if(!segments.length){skip('zero-length entities');continue;}
-      // True colour (420) wins, then an explicit ACI (62); 0/256/missing follow the layer.
+      // True color (420) wins, then an explicit ACI (62); 0/256/missing follow the layer.
       const aciIndex=integer(t,62,256),trueColor=get(t,420);
       const color=trueColor!==undefined?'#'+(Number(trueColor)&0xffffff).toString(16).padStart(6,'0'):(aciIndex>0&&aciIndex<256)?aci(aciIndex):(layerColor.get(layer)||'#000000');
       const path={segments,closed,index,name,layer:layer+'|'+color,color};
