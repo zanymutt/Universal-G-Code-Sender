@@ -428,15 +428,14 @@
       event.preventDefault();
       $("divider").setPointerCapture(event.pointerId);
       const work = $("divider").parentElement;
+      // "side by side" is when the work area has more than one column.
       const vertical = getComputedStyle(work).gridTemplateColumns.trim().split(/\s+/).length > 1;
       const move = moveEvent => {
         const box = work.getBoundingClientRect();
         if (vertical) {
-          const percent = clamp((moveEvent.clientX - box.left) / box.width * 100, 25, 75);
-          work.style.gridTemplateColumns = `minmax(0, ${percent}%) 8px minmax(0, 1fr)`;
+          work.style.setProperty("--split", `${clamp((moveEvent.clientX - box.left) / box.width * 100, 25, 75)}%`);
         } else {
-          const percent = clamp((moveEvent.clientY - box.top) / box.height * 100, 25, 75);
-          work.style.gridTemplateRows = `minmax(0, ${percent}%) 8px minmax(0, 1fr)`;
+          work.style.setProperty("--split", `${clamp((moveEvent.clientY - box.top) / box.height * 100, 25, 75)}%`);
         }
       };
       const end = () => {

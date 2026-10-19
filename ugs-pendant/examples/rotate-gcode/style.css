@@ -65,7 +65,7 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: va
 .hint, .muted { color: var(--plugin-text-muted); font-size: 12px; }
 .hint { overflow-wrap: anywhere; }
 .fileInfo, .summary { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--plugin-text-muted); }
-.work { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 58%) 8px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; }
+.work { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--split, 58%)) 8px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; }
 .previewCard, .codeCard { display: flex; flex-direction: column; overflow: hidden; }
 .cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-bottom: 1px solid var(--plugin-border-strong); background: var(--plugin-surface-raised); }
 .cardHeader h2 { margin: 0; font-size: 14px; font-weight: 600; }
@@ -92,15 +92,20 @@ label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: va
 .presetList li button:first-child { flex: 1; text-align: left; }
 #anglePresets { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); width: 100%; }
 #anglePresets button { min-width: 0; width: 100%; padding-left: 5px; padding-right: 5px; }
+/* Narrower than 1000px the settings stay on the left and the preview stacks above the generated G-code (the
+   same as the Nesting and SVG plugins); the divider turns into a horizontal bar. --split is set by dragging the
+   divider (app.js) for either direction, so it never overrides these layouts. */
+@media (max-width: 1000px) {
+  .app { grid-template-columns: minmax(200px, 250px) minmax(260px, 1fr); }
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, var(--split, 58%)) 8px minmax(0, 1fr); }
+  #divider { cursor: row-resize; }
+}
+/* Narrower than 850px everything stacks: settings, then the preview and G-code at a fixed height. */
 @media (max-width: 850px) {
   body { min-width: 360px; overflow: auto; }
   .app { height: auto; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 680px; }
   .settings { max-height: none; }
-  .work { min-height: 680px; grid-template-columns: 1fr; grid-template-rows: minmax(0, 58%) 8px minmax(0, 1fr); }
-  #divider { cursor: row-resize; }
-}
-@media (min-width: 851px) and (max-width: 1000px) {
-  .app { grid-template-columns: minmax(200px, 250px) minmax(260px, 1fr); }
+  .work { min-height: 680px; }
 }
 
 /* Dropdowns (dropdowns.js): the select is hidden and replaced by a button, and its list is drawn inside this

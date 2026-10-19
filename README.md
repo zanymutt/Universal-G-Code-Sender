@@ -34,7 +34,7 @@ run beside the machine view.
 - **Try it with no machine:** https://zanymutt.github.io/Universal-G-Code-Sender/ (a simulated backend in the browser).
 - **Keyboard, Bluetooth keypad and game controller** drive jogging, the job, zero/home and macros; bindings are per
   device and can be exported and imported. Nothing is on until you enable it in Settings.
-- **Plugins** (Nesting, Rotate G-code, Straight Cut, SVG to G-code, THC panel and more) are plain HTML/JS folders;
+- **Plugins** (Nesting, Transform G-code, Straight Cut, SVG to G-code, THC panel and more) are plain HTML/JS folders;
   see [`ugs-pendant/PLUGIN_API.md`](ugs-pendant/PLUGIN_API.md).
 - **What changed and when:** [`CHANGELOG.md`](CHANGELOG.md). **How it is put together and how to work on it:**
   [`docs/ugs-backend-api-anchor.md`](docs/ugs-backend-api-anchor.md),

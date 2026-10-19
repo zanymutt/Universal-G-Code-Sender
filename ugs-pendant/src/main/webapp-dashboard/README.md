@@ -14,7 +14,7 @@ in memory and a reload starts over.
 - What's simulated: connection, jogging, console/macros, work-zero and homing,
   spindle/coolant/overrides, and running the loaded file (start/pause/stop, run
   from line) with the tool moving along the toolpath at the programmed feeds.
-- Plugins: Nesting and Rotate G-code are offered, copied from
+- Plugins: Nesting and Transform G-code are offered, copied from
   `ugs-pendant/examples/<id>` at build time (`DEMO_PLUGINS` in
   `vite.demo.config.ts`) - so they always match the repo. svg-to-gcode is left out.
 - Sample library: ten larger programs (GANESHA.gcode, eight router/laser/plasma

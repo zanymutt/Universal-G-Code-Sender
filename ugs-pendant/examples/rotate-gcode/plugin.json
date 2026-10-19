@@ -1,5 +1,5 @@
 {
-  "name": "Rotate G-code",
+  "name": "Transform G-code",
   "description": "Rotate, uniformly scale, flip, preview, and save the loaded G-code toolpath.",
   "version": "2.0.0",
   "entry": "index.html"

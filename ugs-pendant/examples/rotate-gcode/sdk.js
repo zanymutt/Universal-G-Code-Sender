@@ -1,4 +1,4 @@
-// Small Dashboard bridge used by the Rotate G-code example.
+// Small Dashboard bridge used by the Transform G-code example.
 (function () {
   let nextId = 1;
   const pending = new Map();
