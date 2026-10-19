@@ -175,7 +175,7 @@
     flush();
     return chains.map(line=>line.map(q=>({x:q.u*c-q.v*s,y:q.u*s+q.v*c})));
   }
-  const FILL_MODES=['hatch','cross','wavy'];
+  const FILL_MODES=['hatch','cross','wavy','wavycross'];
   function hatchFills(paths,o,penOf){
     const groups=new Map(),out=[];
     for(const p of paths){
@@ -184,20 +184,20 @@
       const pen=penOf(color),s=o.fills&&o.fills[pen];
       if(!(pen>0)||!s||s.mode==='none'||!s.mode)continue;
       const key=(p.group??p.id)+'|'+color;
-      if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,contours:[]});
+      if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,group:p.group,contours:[]});
       groups.get(key).contours.push(p.points);
     }
     const boxes=[];
     for(const g of groups.values()){
-      const s=g.s,wavy=s.mode==='wavy';
+      const s=g.s,wavy=s.mode==='wavy'||s.mode==='wavycross';
       if(!FILL_MODES.includes(s.mode))throw Error('Pen '+g.pen+' fill: unknown pattern.');
       if(!Number.isFinite(s.angle)||!(s.spacing>=.05&&s.spacing<=100)||!Number.isFinite(s.gap)||s.gap<0||s.gap>100)throw Error('Pen '+g.pen+' fill: angle must be a number, spacing 0.05-100 mm, gap 0-100 mm.');
       if(wavy&&(!(s.amp>=0&&s.amp<=20)||!(s.wavelength>=.5&&s.wavelength<=500)||!Number.isFinite(s.shift)))throw Error('Pen '+g.pen+' fill: wave height must be 0-20 mm, wavelength 0.5-500 mm, and the shift a number.');
       const opt={wave:wavy,amp:s.amp,wavelength:s.wavelength,shift:s.shift,zigzag:!!s.zigzag};
-      for(const angle of s.mode==='cross'?[s.angle,s.angle+90]:[s.angle])
+      for(const angle of s.mode==='cross'||s.mode==='wavycross'?[s.angle,s.angle+90]:[s.angle])
         for(const points of hatchLines(g.contours,angle,s.spacing,s.gap,opt)){
           if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
-          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,points});
+          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,points});
         }
       boxes.push(bounds(g.contours.flat()));
     }
@@ -205,6 +205,62 @@
     let overlaps=0;
     for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];if(a.minX<b.maxX&&b.minX<a.maxX&&a.minY<b.maxY&&b.minY<a.maxY)overlaps++;}
     return {paths:out,overlaps};
+  }
+  // ---- Hidden-line removal ----------------------------------------------
+  // SVG paints later elements over earlier ones. Shapes that have a fill hide whatever
+  // an element below them draws (outlines and hatch) inside their area (even-odd).
+  function occluders(paths){
+    const byGroup=new Map();
+    for(const p of paths){
+      if(!p.closed||!p.fillColor||p.group===undefined)continue;
+      if(!byGroup.has(p.group))byGroup.set(p.group,{group:p.group,contours:[]});
+      byGroup.get(p.group).contours.push(p.points);
+    }
+    return [...byGroup.values()].map(o=>({...o,box:bounds(o.contours.flat())}));
+  }
+  const coveredBy=(occ,m)=>m.x>=occ.box.minX&&m.x<=occ.box.maxX&&m.y>=occ.box.minY&&m.y<=occ.box.maxY&&occ.contours.reduce((hit,c)=>hit!==inside(m,c),false);
+  function cutParam(a,b,e0,e1){
+    const dx=b.x-a.x,dy=b.y-a.y,ex=e1.x-e0.x,ey=e1.y-e0.y,den=dx*ey-dy*ex;
+    if(Math.abs(den)<1e-12)return null;
+    const t=((e0.x-a.x)*ey-(e0.y-a.y)*ex)/den,u=((e0.x-a.x)*dy-(e0.y-a.y)*dx)/den;
+    return t>=0&&t<=1&&u>=0&&u<=1?t:null;
+  }
+  // Returns the visible pieces of a polyline, or null when nothing is hidden.
+  function clipHidden(points,closed,occs,budget){
+    const pts=closed?[...points,points[0]]:points,pieces=[];let cur=null,changed=false;
+    const flush=()=>{if(cur&&cur.length>1)pieces.push(cur);cur=null;};
+    for(let i=0;i+1<pts.length;i++){
+      const a=pts[i],b=pts[i+1],lo={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)},hi={x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)},near=occs.filter(o=>o.box.minX<=hi.x&&o.box.maxX>=lo.x&&o.box.minY<=hi.y&&o.box.maxY>=lo.y),ts=[0,1];
+      for(const o of near)for(const c of o.contours){
+        budget.left-=c.length;if(budget.left<0)throw Error('Hidden-line removal is too large. Increase the fill spacing or turn it off.');
+        for(let j=0;j<c.length;j++){const t=cutParam(a,b,c[j],c[(j+1)%c.length]);if(t!==null)ts.push(t);}
+      }
+      ts.sort((x,y)=>x-y);
+      for(let k=0;k+1<ts.length;k++){
+        const t0=ts[k],t1=ts[k+1];if(t1-t0<1e-9)continue;
+        const mid=(t0+t1)/2,m={x:a.x+(b.x-a.x)*mid,y:a.y+(b.y-a.y)*mid};
+        if(near.some(o=>coveredBy(o,m))){flush();changed=true;continue;}
+        const p0=t0===0?a:{x:a.x+(b.x-a.x)*t0,y:a.y+(b.y-a.y)*t0},p1=t1===1?b:{x:a.x+(b.x-a.x)*t1,y:a.y+(b.y-a.y)*t1};
+        if(cur&&dist(cur.at(-1),p0)<1e-9)cur.push(p1);else{flush();cur=[p0,p1];}
+      }
+    }
+    flush();
+    if(!changed)return null;
+    // A closed outline whose seam is visible comes back as one piece, not two.
+    if(closed&&pieces.length>1&&dist(pieces[0][0],pts[0])<1e-9&&dist(pieces.at(-1).at(-1),pts[0])<1e-9){const last=pieces.pop();pieces[0]=last.concat(pieces[0].slice(1));}
+    return pieces.filter(q=>length(q)>=.05);
+  }
+  function hideCovered(list,occs,stats,budget){
+    const out=[];
+    for(const p of list){
+      const above=p.group===undefined?[]:occs.filter(o=>o.group>p.group);
+      const pieces=above.length?clipHidden(p.points,p.closed,above,budget):null;
+      if(!pieces){out.push(p);continue;}
+      if(!pieces.length){stats.removed++;continue;}
+      stats.trimmed++;
+      pieces.forEach((points,k)=>out.push({...p,id:p.id+'.'+k,closed:false,points}));
+    }
+    return out;
   }
   function plan(doc,o,locks={},directions={}) {
     const required=['feed','plunge','safe','scale','rotation','overlap','originX','originY',...(o.mode!=='laser'?['surface','final','step']:o.mode==='laser'?['focus','laserPasses']:[]),...(o.tool!=='none'?['power','powerMax']:[])];
@@ -225,10 +281,15 @@
     if(penMap)for(const [color,pen] of Object.entries(penMap))if(!Number.isInteger(pen)||pen<0||pen>99)throw Error('Pen numbers must be whole numbers from 0 (skip) to 99 for '+color+'.');
     const penOf=c=>penMap?(Object.hasOwn(penMap,c)?penMap[c]:1):1;
     const plotter=o.mode==='plotter',filled=plotter?hatchFills(transformed.paths,o,penOf):{paths:[],overlaps:0};
+    let outlines=transformed.paths;const hiding={trimmed:0,removed:0};
+    if(plotter&&o.hideCovered){
+      const occs=occluders(transformed.paths),budget={left:100000000};
+      outlines=hideCovered(outlines,occs,hiding,budget);filled.paths=hideCovered(filled.paths,occs,hiding,budget);
+    }
     // Stage orders outlines against hatch within a pen: lower stages are cut first.
-    const remaining=transformed.paths.filter(p=>!(plotter&&o.skipUnstroked&&p.noStroke&&p.fillColor)).map(p=>({...p,stage:o.fillFirst?2:1,pen:penOf(p.color),area:p.closed?area(p.points):0}))
+    const remaining=outlines.filter(p=>!(plotter&&o.skipUnstroked&&p.noStroke&&p.fillColor)).map(p=>({...p,stage:o.fillFirst?2:1,pen:penOf(p.color),area:p.closed?area(p.points):0}))
       .concat(filled.paths.map(f=>({...f,stage:o.fillFirst?1:2,pen:penOf(f.color),area:0}))).filter(p=>p.pen>0);
-    if(!remaining.length) throw Error(penMap?'Every color is set to Skip. Assign at least one color to a pen.':'No paths selected.');
+    if(!remaining.length) throw Error(hiding.removed?'Hidden-line removal left nothing to draw.':penMap?'Every color is set to Skip. Assign at least one color to a pen.':'No paths selected.');
     // Strict containment, not just size: crossing/touching contours are not holes.
     const before=new Map(remaining.map(p=>[p.id,new Set()]));
     let comparisons=0;
@@ -281,7 +342,7 @@
     }
     }
     if(ordered.reduce((n,p)=>n+p.points.length*z.length,0)>1000000)throw Error('Output exceeds one million moves. Reduce passes or increase sampling spacing.');
-    const job={paths:ordered,pens,fills:filled.paths.length,fillOverlaps:filled.overlaps,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
+    const job={paths:ordered,pens,fills:filled.paths.length,fillOverlaps:o.hideCovered?0:filled.overlaps,hidden:hiding,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
     return o.mode==='knife'?compensateKnife(job,o):job;
   }
   // Passive drag knife: the holder is offset ahead of the blade along its heading.

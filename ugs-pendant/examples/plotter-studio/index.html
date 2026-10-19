@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plotter Studio</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>Plotter Studio <small>Preview · 0.3.0</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each color is assigned to a pen; every pen is finished before the next.</p>
+<header><h1>Plotter Studio <small>Preview · 0.4.0</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each color is assigned to a pen; every pen is finished before the next.</p>
 <div class="importBar"><label>SVG or DXF file<input id="file" type="file" accept=".svg,.dxf,image/svg+xml,application/dxf,image/vnd.dxf"></label><button id="example">Load example artwork</button></div></header>
 <div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
@@ -59,9 +59,10 @@
 <div class="pair"><button id="fillRandomAll" type="button" disabled title="Pick a random pattern, angle, spacing and wave for every pen">Random fills</button></div>
 <label class="check"><input id="fillAll" type="checkbox">Hatch every closed shape, even if the artwork gives it no fill</label>
 <label class="check"><input id="fillFirst" type="checkbox">Hatch before outlines</label>
+<label class="check"><input id="hideCovered" type="checkbox">Hide lines covered by shapes above (hidden-line removal)</label>
 <label class="check"><input id="skipUnstroked" type="checkbox">Don't outline shapes that have a fill but no stroke</label>
 <label>When the pen changes<select id="penChange"><option value="M0">Pause (M0) so I can swap the pen</option><option value="M6">Tool change (T&lt;n&gt; M6)</option><option value="files">Separate G-code file per pen</option><option value="none">No pause — one program, sorted by pen</option></select></label>
-<p class="hint">Click a color swatch to change the color a pen is shown and labelled with; the artwork itself is not changed. Enter 0 to skip a color. Use Edit to choose a pattern for a pen: parallel lines at an angle (measured in output coordinates, after rotation), cross-hatch (a second set at +90°) or wavy lines (wave height, wavelength and a shift between lines). Zigzag joins the ends of neighboring lines so the pen stays down. Random picks settings for you. Lines sit on a fixed grid, so touching shapes line up, and stop at least Gap mm short of every outline, including holes. Overlapping filled shapes are each hatched in full; hidden-line removal is not implemented yet. Colors sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG color comes from stroke, else fill (inherited from groups); DXF color from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
+<p class="hint">Click a color swatch to change the color a pen is shown and labelled with; the artwork itself is not changed. Enter 0 to skip a color. Use Edit to choose a pattern for a pen: parallel lines at an angle (measured in output coordinates, after rotation), cross-hatch (a second set at +90°) or wavy lines (wave height, wavelength and a shift between lines). Zigzag joins the ends of neighboring lines so the pen stays down. Random picks settings for you. Lines sit on a fixed grid, so touching shapes line up, and stop at least Gap mm short of every outline, including holes. With hidden-line removal on, a shape that has a fill hides the outlines and hatch of shapes below it (later shapes in the file are on top); with it off, every filled shape is drawn in full. Colors sharing a pen number are plotted together (several shades of red can share one pen). Pens are plotted in number order; ordering, starts and Inner contours first apply within each pen. Pen changes lift to Safe Z first. Every pen must be re-zeroed to the same Z reference after a swap. SVG color comes from stroke, else fill (inherited from groups); DXF color from the entity, else its layer. Gradients, patterns and CSS classes are plotted black.</p>
 </fieldset>
 <fieldset id="panel-paths" role="tabpanel" aria-labelledby="tab-paths" hidden><legend>3 · Paths</legend>
 <label>Order<select id="order"><option value="svg">Original file order</option><option value="nearest">Reduce travel</option></select></label>
@@ -111,7 +112,7 @@
 </main>
 <div id="fillDialog" class="modal" hidden><div class="modalBody" role="dialog" aria-modal="true" aria-labelledby="fillDialogTitle">
 <h2 id="fillDialogTitle">Fill</h2>
-<label>Pattern<select id="fdPattern"><option value="none">None</option><option value="lines">Parallel lines</option><option value="cross">Cross-hatch</option><option value="wavy">Wavy lines</option></select></label>
+<label>Pattern<select id="fdPattern"><option value="none">None</option><option value="lines">Parallel lines</option><option value="cross">Cross-hatch</option><option value="wavy">Wavy lines</option><option value="wavycross">Wavy cross-hatch</option></select></label>
 <div id="fdBasic">
 <div class="pair"><label>Angle (°)<input id="fdAngle" type="number" step="5"></label><label>Line spacing (mm)<input id="fdSpacing" type="number" min="0.05" step="0.1"></label></div>
 <label>Gap from outline (mm)<input id="fdGap" type="number" min="0" step="0.1"></label>

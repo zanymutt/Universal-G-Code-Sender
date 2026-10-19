@@ -17,7 +17,7 @@
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked','hideCovered'].forEach(k=>o[k]=$(k).checked);o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy',wavycross:'wavycross'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
@@ -52,19 +52,20 @@
   }
   // One row per pen that has something to fill; Edit opens the pattern dialog.
   const fillDefaults=()=>({pattern:'none',angle:45,spacing:1,gap:.5,amp:.6,wavelength:6,shift:0,zigzag:false});
-  const patternNames={none:'Off',lines:'Parallel lines',cross:'Cross-hatch',wavy:'Wavy lines'};
+  const patternNames={none:'Off',lines:'Parallel lines',cross:'Cross-hatch',wavy:'Wavy lines',wavycross:'Wavy cross-hatch'};
+  const isWavy=pattern=>pattern==='wavy'||pattern==='wavycross';
   let fillPens=[],fillDialogPen=null;
   function describeFill(f){
     if(f.pattern==='none')return 'Off';
     let text=patternNames[f.pattern]+' · '+f.angle+'° · spacing '+f.spacing+' mm';
-    if(f.pattern==='wavy')text+=' · wave '+f.amp+' mm / '+f.wavelength+' mm'+(f.shift?' · shift '+f.shift+'°':'');
+    if(isWavy(f.pattern))text+=' · wave '+f.amp+' mm / '+f.wavelength+' mm'+(f.shift?' · shift '+f.shift+'°':'');
     return text+(f.zigzag?' · zigzag':'')+' · gap '+f.gap+' mm';
   }
   const pickOne=list=>list[Math.floor(Math.random()*list.length)];
   const randomIn=(lo,hi,step)=>Number((Math.round((lo+Math.random()*(hi-lo))/step)*step).toFixed(2));
   function randomizeFill(pen){
     const f=fillSettings[pen]=fillSettings[pen]||fillDefaults(),spacing=randomIn(.6,3,.1);
-    Object.assign(f,{pattern:pickOne(['lines','cross','wavy']),angle:randomIn(0,175,5),spacing,gap:randomIn(.2,1.2,.1),amp:randomIn(.3,Math.max(.5,spacing*1.2),.1),wavelength:randomIn(3,14,.5),shift:pickOne([0,45,90,180]),zigzag:Math.random()<.5});
+    Object.assign(f,{pattern:pickOne(['lines','cross','wavy','wavycross']),angle:randomIn(0,175,5),spacing,gap:randomIn(.2,1.2,.1),amp:randomIn(.3,Math.max(.5,spacing*1.2),.1),wavelength:randomIn(3,14,.5),shift:pickOne([0,45,90,180]),zigzag:Math.random()<.5});
   }
   function renderFills(){
     const rows=$('fillRows');rows.replaceChildren();
@@ -87,7 +88,7 @@
     const f=fillSettings[fillDialogPen];
     $('fdPattern').value=f.pattern;$('fdAngle').value=f.angle;$('fdSpacing').value=f.spacing;$('fdGap').value=f.gap;
     $('fdAmp').value=f.amp;$('fdLength').value=f.wavelength;$('fdShift').value=f.shift;$('fdZigzag').checked=f.zigzag;
-    $('fdWave').hidden=f.pattern!=='wavy';$('fdBasic').hidden=f.pattern==='none';
+    $('fdWave').hidden=!isWavy(f.pattern);$('fdBasic').hidden=f.pattern==='none';
     window.Dropdowns?.refresh();
   }
   function openFillDialog(pen){
@@ -98,7 +99,7 @@
     if(fillDialogPen===null)return;
     const f=fillSettings[fillDialogPen],num=id=>$(id).value.trim()===''?NaN:Number($(id).value);
     Object.assign(f,{pattern:$('fdPattern').value,angle:num('fdAngle'),spacing:num('fdSpacing'),gap:num('fdGap'),amp:num('fdAmp'),wavelength:num('fdLength'),shift:num('fdShift'),zigzag:$('fdZigzag').checked});
-    $('fdWave').hidden=f.pattern!=='wavy';$('fdBasic').hidden=f.pattern==='none';
+    $('fdWave').hidden=!isWavy(f.pattern);$('fdBasic').hidden=f.pattern==='none';
     renderFills();update();
   }
   for(const id of ['fdPattern','fdAngle','fdSpacing','fdGap','fdAmp','fdLength','fdShift','fdZigzag'])$(id).addEventListener('input',readFillDialog);
@@ -176,7 +177,7 @@
     viewBox=null;invalidate();job=null;$('generate').disabled=true;pick=null;
     const o=settings();$('depthSettings').hidden=o.mode==='laser';$('laserSettings').hidden=o.mode!=='laser';
     $('knifeSettings').hidden=o.mode!=='knife';$('knifeOverlayControl').hidden=o.mode!=='knife';
-    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('button').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRandomAll').disabled=o.mode!=='plotter'||!fillPens.length;['fillAll','fillFirst','skipUnstroked'].forEach(k=>$(k).disabled=o.mode!=='plotter');
+    $('penChange').disabled=o.mode!=='plotter';$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('button').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRandomAll').disabled=o.mode!=='plotter'||!fillPens.length;['fillAll','fillFirst','skipUnstroked','hideCovered'].forEach(k=>$(k).disabled=o.mode!=='plotter');
     $('tool').disabled=o.mode==='knife';$('power').disabled=o.mode==='knife';$('powerMax').disabled=o.mode==='knife';
     if(o.mode==='knife'){$('tool').value='none';o.tool='none';}
     $('knifeSwivelZ').disabled=!o.knifeAlign&&!o.knifeLift;$('knifeLead').disabled=!o.knifeAlign;$('knifeHeading').disabled=!o.knifeAlign;
@@ -191,7 +192,8 @@
       if(job.paths.some(p=>p.id===selected&&!p.fill))$('selected').value=selected;
       const b=job.bounds;
       $('summary').textContent=`${job.paths.length-job.fills} paths${job.fills?` + ${job.fills} hatch lines`:''} · ${(b.maxX-b.minX).toFixed(2)} × ${(b.maxY-b.minY).toFixed(2)} mm · ${job.depths.length} passes/path · travel ${job.travel.toFixed(1)} mm`+(o.mode==='plotter'&&job.pens.length>1?` · ${job.pens.length} pens`:'')+(job.knife?` · ${job.knife.swivels} corner swivels · holder ${(job.knife.bounds.maxX-job.knife.bounds.minX).toFixed(2)} × ${(job.knife.bounds.maxY-job.knife.bounds.minY).toFixed(2)} mm`:'');
-      message((job.fillOverlaps?`${job.fillOverlaps} pair(s) of filled shapes overlap; each is hatched in full (hidden-line removal is not implemented).\n`:'')+(job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
+      message((job.hidden&&(job.hidden.trimmed||job.hidden.removed)?`Hidden-line removal trimmed ${job.hidden.trimmed} path(s) and removed ${job.hidden.removed} that were fully covered.
+`:'')+(job.fillOverlaps?`${job.fillOverlaps} pair(s) of filled shapes overlap; each is hatched in full (turn on hidden-line removal to hide covered lines).\n`:'')+(job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
     }catch(e){$('passes').textContent='Check settings';$('summary').textContent='Preview invalid — correct settings before generating.';$('preview').replaceChildren();message(e.message,true);}finally{window.Dropdowns?.refresh();}
   }
   async function importSvg(){
@@ -231,7 +233,7 @@
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
   [...importFields,'dxfUnits','joinEndpoints'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='joinEndpoints')syncEndpointJoinControl();cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
-  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked'].forEach(id=>$(id).addEventListener('input',()=>{
+  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillAll','fillFirst','skipUnstroked','hideCovered'].forEach(id=>$(id).addEventListener('input',()=>{
     if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';if(id==='fillAll')renderFills();update();
   }));
   $('knifeOverlay').onchange=draw;
@@ -387,7 +389,7 @@
     host('subscribe',{event:'theme'}).catch(()=>{});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','fillAll','fillFirst','skipUnstroked','joinEndpoints',...importFields,'dxfUnits'];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','fillAll','fillFirst','skipUnstroked','hideCovered','joinEndpoints',...importFields,'dxfUnits'];
   const importState=()=>JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value).concat($('joinEndpoints').checked));
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));

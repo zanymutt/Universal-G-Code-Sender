@@ -119,3 +119,63 @@ console.log('fill ok');
   assert.throws(()=>core.plan(d,{...base2,penMap:{'#ff0000':1},fills:{1:{mode:'swirl',angle:0,spacing:1,gap:0}}}),/unknown pattern/);
 }
 console.log('wavy/zigzag ok');
+
+// ---- wavy cross-hatch
+{
+  const sq=[rect(0,0,20,20)];
+  const wavy=core.hatchLines(sq,0,2,.5,{wave:true,amp:.6,wavelength:5,shift:0});
+  const base3={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
+  const d={paths:[{id:'a',name:'a',closed:true,color:'#ff0000',fillColor:'#ff0000',group:1,points:rect(0,0,20,20)}],page:rect(0,0,20,20)};
+  const one=core.plan(d,{...base3,penMap:{'#ff0000':1},fills:{1:{mode:'wavy',angle:0,spacing:2,gap:.5,amp:.6,wavelength:5,shift:0}}}).fills;
+  const two=core.plan(d,{...base3,penMap:{'#ff0000':1},fills:{1:{mode:'wavycross',angle:0,spacing:2,gap:.5,amp:.6,wavelength:5,shift:0}}});
+  assert.strictEqual(two.fills,one*2,'wavy cross-hatch = wavy lines at angle and angle+90');
+  assert(two.paths.filter(p=>p.fill).every(p=>p.points.length>10),'both sets are wavy');
+}
+
+// ---- hidden-line removal
+{
+  const base4={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
+  const mk=(id,pts,group,fillColor)=>({id,name:id,closed:true,color:'#000000',fillColor,group,points:pts});
+  const lower=mk('low',rect(0,0,10,10),1,'#ff0000'),upper=mk('up',rect(5,5,15,15),2,'#0000ff');
+  const doc2=(a,b)=>({paths:[a,b],page:rect(0,0,15,15)});
+  const o2={...base4,penMap:{'#000000':1,'#ff0000':1,'#0000ff':1},fills:{1:{mode:'hatch',angle:0,spacing:1,gap:0}}};
+  const inUpper=p=>p.x>5+1e-6&&p.x<15-1e-6&&p.y>5+1e-6&&p.y<15-1e-6;
+  // off: everything is drawn, overlap is reported
+  let job=core.plan(doc2(lower,upper),o2);
+  assert.strictEqual(job.fillOverlaps,1);
+  assert(job.paths.some(p=>p.fill&&p.group===1&&p.points.some(inUpper)),'without removal the lower hatch runs under the upper shape');
+  // on: the lower shape's outline and hatch stop at the upper shape's edge; the upper shape stays whole
+  job=core.plan(doc2(lower,upper),{...o2,hideCovered:true});
+  assert.strictEqual(job.fillOverlaps,0);
+  assert(job.hidden.trimmed>0);
+  const mid=(a,b)=>({x:(a.x+b.x)/2,y:(a.y+b.y)/2});
+  for(const p of job.paths){
+    const fromLower=p.id==='low'||p.id.startsWith('low.')||(p.fill&&p.group===1);
+    if(!fromLower)continue;
+    for(let i=1;i<p.points.length;i++){const m=mid(p.points[i-1],p.points[i]);assert(!inUpper(m),'lower shape visible inside the upper one at '+JSON.stringify(m));}
+  }
+  const upperHatch=job.paths.filter(p=>p.fill&&p.group===2);
+  assert(upperHatch.length>0&&upperHatch.every(p=>p.points.length>=2));
+  assert(job.paths.some(p=>p.id==='up'&&p.closed),'the top shape keeps its closed outline');
+  // the lower outline is now open pieces (it was cut), and the seam-visible pieces merge into one
+  const lowPieces=job.paths.filter(p=>p.id.startsWith('low.'));
+  assert(lowPieces.length===1&&!lowPieces[0].closed,'L-shaped visible outline is a single open piece');
+  // swap the order: now the other shape is on top
+  const flipped=core.plan(doc2({...lower,group:2},{...upper,group:1}),{...o2,hideCovered:true});
+  assert(flipped.paths.some(p=>p.id==='low'&&p.closed),'now the 0..10 shape is whole');
+  assert(flipped.paths.some(p=>p.id.startsWith('up.')));
+  // a shape with no fill hides nothing
+  job=core.plan(doc2(lower,{...upper,fillColor:null}),{...o2,hideCovered:true});
+  assert.strictEqual(job.hidden.trimmed,0);
+  assert(job.paths.some(p=>p.id==='low'&&p.closed));
+  // completely covered shapes disappear
+  const tiny=mk('tiny',rect(6,6,8,8),1,'#ff0000'),big=mk('big',rect(0,0,15,15),2,'#0000ff');
+  job=core.plan(doc2(tiny,big),{...o2,hideCovered:true});
+  assert(job.hidden.removed>0&&!job.paths.some(p=>p.id==='tiny'||p.id.startsWith('tiny.')));
+  // without groups (DXF) nothing is removed
+  const dxfLike=core.plan({paths:[{...lower,group:undefined},{...upper,group:undefined}],page:rect(0,0,15,15)},{...o2,hideCovered:true});
+  assert.strictEqual(dxfLike.hidden.trimmed+dxfLike.hidden.removed,0);
+  // knife/laser ignore it
+  assert.strictEqual(core.plan(doc2(lower,upper),{...o2,mode:'laser',tool:'M4',focus:0,laserPasses:1,hideCovered:true}).hidden.trimmed,0);
+}
+console.log('wavy cross + hidden lines ok');
