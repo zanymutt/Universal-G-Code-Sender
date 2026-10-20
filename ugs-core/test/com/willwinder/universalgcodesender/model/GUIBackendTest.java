@@ -36,6 +36,7 @@ import com.willwinder.universalgcodesender.utils.FirmwareUtils;
 import com.willwinder.universalgcodesender.utils.GcodeStreamReader;
 import com.willwinder.universalgcodesender.utils.IGcodeStreamReader;
 import com.willwinder.universalgcodesender.utils.Settings;
+import com.willwinder.universalgcodesender.ControllerException;
 import org.apache.commons.io.FileUtils;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -61,6 +62,7 @@ import static org.mockito.Mockito.when;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -355,6 +357,29 @@ public class GUIBackendTest {
         instance.setGcodeFile(tempFile);
 
         assertTrue(instance.canSend());
+    }
+
+    @Test
+    public void sendWhenTheControllerIsNotReadyShouldLeaveTheRunningStreamAlone() throws Exception {
+        // Given: a job already streaming (or held at a tool change), so the controller refuses another stream
+        when(controller.isCommOpen()).thenReturn(true);
+        instance.connect(FIRMWARE, PORT, BAUD_RATE);
+        File tempFile = File.createTempFile("ugs-", ".gcode");
+        FileUtils.writeStringToFile(tempFile, "G0 X0 Y0\n", StandardCharsets.UTF_8);
+        instance.setGcodeFile(tempFile);
+        Field streamField = GUIBackend.class.getDeclaredField("gcodeStream");
+        streamField.setAccessible(true);
+        Object runningStream = streamField.get(instance);
+        assertNotNull("Loading the file should have opened the stream", runningStream);
+        when(controller.isReadyToStreamFile()).thenThrow(new ControllerException("Already streaming."));
+
+        // When
+        assertThrows(Exception.class, () -> instance.send());
+
+        // Then: it was not closed and replaced, and nothing was queued
+        assertTrue("The stream the running job reads from must be left as it was", runningStream == streamField.get(instance));
+        verify(controller, times(0)).queueStream(any());
+        verify(controller, times(0)).beginStreaming();
     }
 
     @Test

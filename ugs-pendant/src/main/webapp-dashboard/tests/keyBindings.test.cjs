@@ -166,6 +166,22 @@ test("commandFor resolves actions and macros", () => {
   assert.equal(new Set(actions.ACTIONS.map((a) => a.id)).size, actions.ACTIONS.length);
 });
 
+test("a tool change holds Start back, and Start / resume continues a waiting one", () => {
+  const ok = (id, state, toolChange, extra = {}) =>
+    actions.isCommandAvailable(actions.commandFor(id), { connected: true, state, hasFile: true, toolChange, ...extra });
+  // The controller reads IDLE during a tool change, so only the tool change itself can hold Start back.
+  assert.equal(ok("job.start", "IDLE", "none"), true);
+  assert.equal(ok("job.start", "IDLE", undefined), true);
+  assert.equal(ok("job.start", "IDLE", "busy"), false);
+  assert.equal(ok("job.start", "HOLD", "busy"), false);
+  // Waiting for the go-ahead: Start / resume is the go-ahead - but only while the machine is idle, like the prompt's own button.
+  assert.equal(ok("job.start", "IDLE", "continue"), true);
+  assert.equal(ok("job.start", "RUN", "continue"), false);
+  // The tool change is the reason to jog and zero: those stay available.
+  assert.equal(ok("jog.xPlus", "IDLE", "continue"), true);
+  assert.equal(ok("machine.zeroZ", "IDLE", "busy"), true);
+});
+
 test("availability mirrors the on-screen controls", () => {
   const ok = (id, state, extra = {}) =>
     actions.isCommandAvailable(actions.commandFor(id), { connected: true, state, hasFile: true, ...extra });

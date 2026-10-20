@@ -517,15 +517,18 @@ public class GUIBackend implements BackendAPI {
     public void send() throws Exception {
         logger.log(Level.INFO, String.format("Sending gcode file (%s).", this.processedGcodeFile));
         try {
+            // This will throw an exception and prevent that other stuff from
+            // happening (clearing the table before it is ready for clearing.
+            // It has to come first: when a job is already running, or held for a tool change, the stream below
+            // is the one it is reading from, and closing it before finding out we can't start would pull it out
+            // from under that job.
+            controller.isReadyToStreamFile();
+
             // Reset the stream and queue it again
             if (gcodeStream != null) {
                 gcodeStream.close();
             }
             gcodeStream = new GcodeStreamReader(this.processedGcodeFile, getCommandCreator());
-
-            // This will throw an exception and prevent that other stuff from
-            // happening (clearing the table before it is ready for clearing.
-            controller.isReadyToStreamFile();
             controller.queueStream(interceptorService.beginJob(gcodeStream));
             controller.beginStreaming();
         } catch (Exception e) {

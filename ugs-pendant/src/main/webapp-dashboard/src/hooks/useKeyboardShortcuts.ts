@@ -4,6 +4,7 @@ import type { Store } from "redux";
 import { getContinuousJog, onContinuousJogRefused } from "../services/continuousJogSession";
 import { runMacro } from "../services/macros";
 import { pause, stop } from "../services/files";
+import { respondToInterceptor } from "../services/interceptor";
 import { homeMachine, jog, killAlarm, resetToZero, returnToZero, sendOverride, softReset } from "../services/machine";
 import type { OverrideCommand } from "../services/machine";
 import { setSettings } from "../store/settingsSlice";
@@ -15,6 +16,7 @@ import {
   isTypingTarget,
 } from "../utils/keyBindings";
 import { ActionCommand, commandFor, isCommandAvailable } from "../utils/dashboardActions";
+import { toolChangeStage } from "../utils/toolChangePrompt";
 import { stepPreset } from "../utils/jogPresets";
 
 // Window event JobBar listens for, so Start goes through the same "unsaved
@@ -54,7 +56,12 @@ export const runActionCommand = (command: ActionCommand, state: RootState, dispa
       quiet(sendOverride(command.command as OverrideCommand));
       return;
     case "job":
-      if (command.op === "start") window.dispatchEvent(new CustomEvent(JOB_START_EVENT));
+      if (command.op === "start") {
+        // With a tool change waiting for the go-ahead, "start / resume" is the go-ahead (the same as the
+        // prompt's Continue button); otherwise it starts the file.
+        if (toolChangeStage(state.interceptor.status) === "continue") quiet(respondToInterceptor("CONTINUE"));
+        else window.dispatchEvent(new CustomEvent(JOB_START_EVENT));
+      }
       else if (command.op === "pause") quiet(pause());
       else quiet(stop());
       return;
@@ -85,6 +92,7 @@ const contextOf = (state: RootState) => ({
   connected: state.socket.isConnected,
   state: state.status.state,
   hasFile: state.fileStatus.fileName !== "",
+  toolChange: toolChangeStage(state.interceptor.status),
 });
 
 // The press/release engine behind every input source (keyboard, controller):

@@ -1067,6 +1067,10 @@ export const handleRequest = async (request: DemoRequest): Promise<DemoResponse>
       armedLine = Math.max(0, parseInt(query.get("line") ?? "0", 10) || 0);
       return ok();
     case "/api/v1/files/send":
+      // Like the backend: a tool change in progress is part of the running job, so the file isn't started again.
+      if (interceptor.state !== "INACTIVE") {
+        return json({ errorMessage: "A tool change is in progress. Answer it (continue or abort) instead of starting the file." }, 409);
+      }
       startJob();
       return ok();
     case "/api/v1/files/pause":

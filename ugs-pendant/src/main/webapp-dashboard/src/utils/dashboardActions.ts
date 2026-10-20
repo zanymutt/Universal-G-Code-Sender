@@ -60,7 +60,7 @@ export const ACTIONS: ActionDef[] = [
   { id: "feed.up", label: "Jog feed rate faster", group: "Jog settings", command: { kind: "feed", dir: 1 }, defaults: ["NumpadMultiply"] },
   { id: "feed.down", label: "Jog feed rate slower", group: "Jog settings", command: { kind: "feed", dir: -1 }, defaults: ["NumpadDivide"] },
 
-  { id: "job.start", label: "Start / resume", group: "Job", command: { kind: "job", op: "start" }, defaults: [] },
+  { id: "job.start", label: "Start / resume (also continues a tool change)", group: "Job", command: { kind: "job", op: "start" }, defaults: [] },
   { id: "job.pause", label: "Pause", group: "Job", command: { kind: "job", op: "pause" }, defaults: [] },
   { id: "job.stop", label: "Stop", group: "Job", command: { kind: "job", op: "stop" }, defaults: [] },
 
@@ -105,6 +105,8 @@ export const commandFor = (id: string): ActionCommand | null => {
   return null;
 };
 
+import type { ToolChangeStage } from "./toolChangePrompt";
+
 export type ActionContext = {
   // The WebSocket to UGS is up.
   connected: boolean;
@@ -112,6 +114,8 @@ export type ActionContext = {
   state: string;
   // A file is loaded in UGS.
   hasFile: boolean;
+  // A tool change UGS is running for an M6 (see toolChangeStage). Absent means none.
+  toolChange?: ToolChangeStage;
 };
 
 const IDLE_OR_JOG = ["IDLE", "JOG"];
@@ -131,7 +135,13 @@ export const isCommandAvailable = (command: ActionCommand, ctx: ActionContext): 
     case "override":
       return !NO_ADJUST.includes(state);
     case "job":
-      if (command.op === "start") return ctx.hasFile && (state === "IDLE" || state === "HOLD");
+      if (command.op === "start") {
+        // The job is already running, held at a tool change: starting it again would collide with it. When
+        // the tool change is waiting for the go-ahead, Start / resume is that go-ahead.
+        if (ctx.toolChange === "continue") return state === "IDLE";
+        if (ctx.toolChange === "busy") return false;
+        return ctx.hasFile && (state === "IDLE" || state === "HOLD");
+      }
       if (command.op === "pause") return state === "RUN" || state === "CHECK";
       return ["RUN", "HOLD", "CHECK", "JOG"].includes(state);
     case "zero":

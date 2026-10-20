@@ -34,6 +34,19 @@ const ACTION_LABELS: Record<InterceptorResponse, PromptAction> = {
 const toolLabel = (toolNumber: number | null | undefined) =>
   toolNumber === null || toolNumber === undefined ? "the new tool" : `tool #${toolNumber}`;
 
+// Where a tool change stands, for the controls outside the prompt (Start, the keyboard and controller
+// shortcuts): "none" - no tool change is going on; "continue" - UGS is waiting for the go-ahead and
+// Continue would answer it; "busy" - one is going on that has nothing to continue (the machine is moving,
+// the routine failed and only Abort is left). During any of them the controller reads IDLE, so state alone
+// can't tell a Start button that a tool change is holding the job.
+export type ToolChangeStage = "none" | "busy" | "continue";
+
+export const toolChangeStage = (status: InterceptorStatus | null | undefined): ToolChangeStage => {
+  if (!status || status.state === "INACTIVE") return "none";
+  if (status.state === "WAITING_FOR_USER" && status.prompt?.options.includes("CONTINUE")) return "continue";
+  return "busy";
+};
+
 // null when there is nothing to show (INACTIVE).
 export const describeInterceptor = (status: InterceptorStatus | null | undefined): PromptView | null => {
   if (!status || status.state === "INACTIVE") return null;

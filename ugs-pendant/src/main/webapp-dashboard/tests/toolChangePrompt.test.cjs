@@ -11,7 +11,7 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const sandbox = { exports: {}, Set };
 vm.runInNewContext(compiled, sandbox);
-const { describeInterceptor } = sandbox.exports;
+const { describeInterceptor, toolChangeStage } = sandbox.exports;
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const describe = (status) => plain(describeInterceptor(status));
 
@@ -79,4 +79,20 @@ test("a failed tool change leaves only Abort", () => {
   assert.equal(view.title, "Tool change failed");
   assert.equal(view.busy, false);
   assert.deepEqual(view.actions.map((a) => a.response), ["ABORT"]);
+});
+
+test("the tool change stage tells the controls outside the prompt what is going on", () => {
+  assert.equal(toolChangeStage(null), "none");
+  assert.equal(toolChangeStage(undefined), "none");
+  assert.equal(toolChangeStage({ state: "INACTIVE" }), "none");
+  for (const state of ["PENDING", "RUNNING", "RESUMING"]) assert.equal(toolChangeStage({ state }), "busy");
+  // Failed: only Abort is left, so there is nothing to continue.
+  assert.equal(toolChangeStage({ state: "FAILED", prompt: { stepId: "x", options: ["ABORT"] } }), "busy");
+  // Waiting without a Continue option is not a go-ahead either.
+  assert.equal(toolChangeStage({ state: "WAITING_FOR_USER", prompt: { stepId: "x", options: ["ABORT"] } }), "busy");
+  assert.equal(toolChangeStage({ state: "WAITING_FOR_USER" }), "busy");
+  assert.equal(
+    toolChangeStage({ state: "WAITING_FOR_USER", prompt: { stepId: "toolChange.changeTool", options: ["ABORT", "CONTINUE"] } }),
+    "continue"
+  );
 });

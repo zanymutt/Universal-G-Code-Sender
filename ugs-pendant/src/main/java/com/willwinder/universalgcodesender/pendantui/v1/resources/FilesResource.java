@@ -25,10 +25,12 @@ import com.willwinder.universalgcodesender.pendantui.v1.model.FileStatus;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileEntry;
 import com.willwinder.universalgcodesender.pendantui.v1.model.WorkspaceFileList;
 import com.willwinder.universalgcodesender.services.LookupService;
+import com.willwinder.universalgcodesender.services.interceptor.CommandInterceptorService;
 import com.willwinder.universalgcodesender.utils.GcodeFileExtensions;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.ClientErrorException;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -36,6 +38,7 @@ import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.Response;
 import org.glassfish.jersey.media.multipart.FormDataContentDisposition;
 import org.glassfish.jersey.media.multipart.FormDataParam;
 
@@ -112,6 +115,15 @@ public class FilesResource {
     @Path("send")
     @Produces(MediaType.APPLICATION_JSON)
     public void send() throws Exception {
+        // A tool change that UGS is running for an M6 is part of the job in progress: starting the file again
+        // now (a Start button, a keyboard shortcut or a game controller button) would only collide with it.
+        // The answer to a waiting tool change is POST /interceptor/respond.
+        CommandInterceptorService interceptorService = backendAPI.getInterceptorService();
+        if (interceptorService != null && interceptorService.isActive()) {
+            throw new ClientErrorException(
+                    "A tool change is in progress. Answer it (continue or abort) instead of starting the file.",
+                    Response.Status.CONFLICT);
+        }
         if (backendAPI.isPaused()) {
             backendAPI.pauseResume();
         } else {

@@ -17,6 +17,7 @@ import { refreshFileState } from "../store/refreshFileState";
 import { uiActions } from "../store/uiSlice";
 import { JOB_START_EVENT } from "../hooks/useKeyboardShortcuts";
 import OpenFileModal from "./OpenFileModal";
+import { toolChangeStage } from "../utils/toolChangePrompt";
 import ConfirmDialog from "./ConfirmDialog";
 import "./JobBar.scss";
 
@@ -46,6 +47,9 @@ const JobBar = () => {
   const dispatch = useAppDispatch();
   const fileStatus = useAppSelector((state) => state.fileStatus);
   const status = useAppSelector((state) => state.status);
+  // The controller reads IDLE while UGS holds the job for a tool change, so Start has to be held back by
+  // the tool change itself: starting the file again would collide with the job that is waiting.
+  const toolChangeActive = useAppSelector((state) => toolChangeStage(state.interceptor.status) !== "none");
   const armedRunFromLine = useAppSelector((state) => state.ui.runFromLine);
   const editorIsDirty = useAppSelector((state) => state.ui.editorIsDirty);
   const [showOpenFile, setShowOpenFile] = useState(false);
@@ -192,7 +196,10 @@ const JobBar = () => {
         </Button>
         <Button
           variant="success"
-          disabled={fileStatus.fileName === "" || (status.state !== "IDLE" && status.state !== "HOLD")}
+          disabled={
+            fileStatus.fileName === "" || toolChangeActive || (status.state !== "IDLE" && status.state !== "HOLD")
+          }
+          title={toolChangeActive ? "A tool change is in progress: answer it in the Tool change prompt" : undefined}
           onClick={handleStartClick}
         >
           <FontAwesomeIcon icon={faPlay} /> Start
