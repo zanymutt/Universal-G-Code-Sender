@@ -9,13 +9,13 @@ assert.deepStrictEqual(job.pens,[1,2,3]);
 assert.deepStrictEqual(job.paths.map(p=>p.id),['a','c','b','d']);
 assert.deepStrictEqual(job.paths.map(p=>p.number),[1,2,3,4]);
 let g=core.gcode(job,o);
-assert.strictEqual((g.match(/^M0$/gm)||[]).length,3);
-assert(/\(Pen 2 \(#0000ff\)\)\nM0/.test(g));
+assert.strictEqual((g.match(/^M0\b/gm)||[]).length,3);
+assert(/\(Pen 2: blue #0000ff\)\nM0 \(MSG, Load pen 2: blue #0000ff\)/.test(g),'comment above, message on the pause line');
 // M6
-g=core.gcode(job,{...o,penChange:'M6'});assert(/T2 M6/.test(g)&&!/^M0$/m.test(g));
+g=core.gcode(job,{...o,penChange:'M6'});assert(/\(Pen 2: blue #0000ff\)\nT2 M6 \(MSG, Load pen 2: blue #0000ff\)/.test(g)&&!/^M0\b/m.test(g));
 // two colors sharing a pen: one group, no change
 o={...base,penMap:{'#ff0000':1,'#0000ff':1,'#00ff00':1},penChange:'M0'};job=core.plan(doc,o);
-assert.deepStrictEqual(job.pens,[1]);assert(!/^M0$/m.test(core.gcode(job,o)));
+assert.deepStrictEqual(job.pens,[1]);assert(!/^M0\b/m.test(core.gcode(job,o)));
 // skip
 o={...base,penMap:{'#ff0000':1,'#0000ff':0,'#00ff00':0},penChange:'M0'};job=core.plan(doc,o);
 assert.deepStrictEqual(job.paths.map(p=>p.id),['a','c']);
@@ -26,7 +26,7 @@ o={...base,penMap:{'#ff0000':2,'#0000ff':1,'#00ff00':1},penChange:'files'};job=c
 assert.deepStrictEqual(job.pens,[1,2]);
 const files=core.gcodeFiles(job,o);
 assert.strictEqual(files.length,2);assert.deepStrictEqual(files.map(f=>f.paths),[2,2]);
-assert(files.every(f=>f.text.includes('G21')&&!/^M0$|M6/m.test(f.text)));
+assert(files.every(f=>f.text.includes('G21')&&!/^M0\b|M6/m.test(f.text)));
 assert.throws(()=>core.gcode(job,o),/gcodeFiles/);
 // inner-first never crosses pens (no deadlock)
 const outer={id:'o',name:'o',color:'#ff0000',closed:true,points:[{x:0,y:0},{x:50,y:0},{x:50,y:50},{x:0,y:50}]};
@@ -65,7 +65,7 @@ console.log('dxf color ok');
 // display color override changes the pen label only
 {const o={...base,penMap:{'#ff0000':1,'#0000ff':1},penColors:{'#ff0000':'#aa0000'},penChange:'M0'};
 const j=core.plan(doc,o),other={...o,penMap:{'#ff0000':1,'#0000ff':2}};
-assert(/\(Pen 1 \(#aa0000\)\)/.test(core.gcode(core.plan(doc,other),other)));console.log('pen color label ok');}
+assert(/\(Pen 1: red #aa0000\)/.test(core.gcode(core.plan(doc,other),other)));console.log('pen color label ok');}
 
 // ---- grouping colors onto N pens
 {
@@ -129,3 +129,19 @@ assert(/\(Pen 1 \(#aa0000\)\)/.test(core.gcode(core.plan(doc,other),other)));con
   assert.deepStrictEqual(core.clusterColors(demo,4),core.clusterColors(demo,4));
   console.log('neutral grouping ok');
 }
+
+// ---- pen-change messages: a comment above and a (MSG, ...) on the pause line, with a color name
+{
+  const names=[['#000000','black'],['#ffffff','white'],['#808080','gray'],['#303030','dark gray'],['#d0d0d0','light gray'],['#ff0000','red'],['#aa0000','red'],['#550000','dark red'],['#ff8080','light red'],['#ff8000','orange'],['#804000','brown'],['#ffee00','yellow'],['#00ff00','green'],['#008000','dark green'],['#00ffff','cyan'],['#0000ff','blue'],['#000080','dark blue'],['#8040c0','purple'],['#ff00ff','magenta'],['#ff80c0','light pink']];
+  for(const [hex,want] of names)assert.strictEqual(core.colorName(hex),want,hex+' should be '+want+', got '+core.colorName(hex));
+  // several colors on one pen are listed (capped at three), and no comment is ever nested
+  const many={...base,penMap:{'#ff0000':1,'#00ff00':1,'#0000ff':1,'#ffee00':1,'#000000':2},penChange:'M0'};
+  const doc2={paths:['#ff0000','#00ff00','#0000ff','#ffee00','#000000'].map((c,i)=>sq('s'+i,i*10,c)),page:doc.page};
+  const text=core.gcode(core.plan(doc2,many),many);
+  assert(/\(Pen 1: red #ff0000, green #00ff00, blue #0000ff \+1 more\)\nM0 \(MSG, Load pen 1: red #ff0000, green #00ff00, blue #0000ff \+1 more\)/.test(text),'the capped list appears above and on the pause line');
+  assert(text.split('\n').filter(l=>l.includes('MSG')||/^\(Pen/.test(l)).every(l=>(l.match(/\(/g)||[]).length<=1),'a comment is never nested');
+  // the per-pen files keep a header comment and need no pause
+  const o2={...many,penChange:'files'},files=core.gcodeFiles(core.plan(doc2,o2),o2);
+  assert(files[0].text.startsWith('(Pen 1: red #ff0000, green #00ff00, blue #0000ff +1 more only)'));
+}
+console.log('pen messages ok');

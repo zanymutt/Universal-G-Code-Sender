@@ -80,6 +80,19 @@ Your plugin opens as a **floating, draggable, resizable window** on top of the d
 - **Size to the window.** Windows are resizable down to about 220 px wide; use media or container queries
   and test narrow.
 
+## Larger examples
+
+Besides `rotate-gcode` (the small reference plugin), `ugs-pendant/examples/` has bigger plugins worth reading
+when you need a pattern the minimal example does not show:
+
+- **`plotter-studio`** - a pen-plotter tool for SVG and 2D DXF artwork: color-to-pen assignment, hatch / wavy /
+  zigzag fills, hidden-line removal and multi-pen output (`M0`, `M6` or one file per pen). It shows a floating,
+  draggable popup inside the plugin window, settings that persist with `getSettings()` / `saveSettings()` (saved
+  presets and fill styles, popup position and size), `saveGcodeAs()` for output, and a pure `core.js` planner with
+  Node tests (`node pens.test.cjs`, `node fill.test.cjs`). See its `README.md`.
+- **`svg-to-gcode`** - the plugin Plotter Studio was forked from; it stays as it was and also covers drag-knife and
+  laser output.
+
 ## Talking to the dashboard
 
 Everything goes through `postMessage`. Send a `fluid-request`, get back a `fluid-response` with the same `id`:

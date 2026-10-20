@@ -231,3 +231,96 @@ console.log('wavy cross + hidden lines ok');
   assert(flush.paths.filter(p=>p.id.startsWith('low.')).some(p=>p.points.some(q=>Math.abs(boundaryDist(q))<1e-6)));
 }
 console.log('hidden-line gap ok');
+
+// ---- Fill source: no fill / as in the original / all closed paths
+{
+  const base6={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
+  const shape=(id,pts,fillColor,group)=>({id,name:id,closed:true,color:'#ff0000',fillColor,group,points:pts});
+  const doc={paths:[shape('filled',rect(0,0,10,10),'#ff0000',1),shape('plain',rect(20,0,30,10),null,2)],page:rect(0,0,30,10)};
+  const o={...base6,penMap:{'#ff0000':1},fills:{1:{mode:'hatch',angle:0,spacing:2,gap:.5}}};
+  const filledOnly=core.plan(doc,{...o,fillSource:'original'});
+  assert(filledOnly.paths.some(p=>p.fill)&&!filledOnly.paths.some(p=>p.fill&&p.points.some(q=>q.x>15)),'original: only the shape with a fill');
+  assert.strictEqual(core.plan(doc,o).fills,filledOnly.fills,'no setting behaves as the original');
+  assert.strictEqual(core.plan(doc,{...o,fillSource:'none'}).fills,0,'none: no hatch at all');
+  const all=core.plan(doc,{...o,fillSource:'all'});
+  assert(all.paths.some(p=>p.fill&&p.points.some(q=>q.x>15)),'all: the unfilled shape is hatched too');
+  assert.strictEqual(all.fills,core.plan(doc,{...o,fillAll:true}).fills,'old fillAll flag still means all');
+}
+console.log('fill source ok');
+
+// ---- hidden-line removal leaves lines that lie on a covering shape's own edge
+{
+  const base7={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
+  const mk=(id,pts,group)=>({id,name:id,closed:true,color:'#000000',fillColor:'#ff0000',group,points:pts});
+  const run=(upperX0)=>core.plan({paths:[mk('low',rect(0,0,10,10),1),mk('up',rect(upperX0,0,upperX0+10,10),2)],page:rect(0,0,20,10)},{...base7,penMap:{'#000000':1,'#ff0000':1},hideCovered:true,fills:{1:{mode:'none',angle:0,spacing:1,gap:0}}});
+  // neighbors that touch exactly, and with 0.01 mm of rounding noise on the shared edge
+  for(const x of [10,10-.01,10+.01,10-.02]){
+    const job=run(x);
+    assert.strictEqual(job.paths.filter(p=>p.id==='low'&&p.closed).length,1,'outline stays whole when the neighbor starts at x='+x);
+    assert.strictEqual(job.hidden.trimmed,0);
+  }
+  // a real overlap still hides the covered part
+  const real=run(8);assert(real.hidden.trimmed>0&&real.paths.some(p=>p.id.startsWith('low.')));
+}
+console.log('shared edge ok');
+
+// ---- zigzag joins ends across every piece of a line, not just one per line
+{
+  const rect2=(x0,y0,x1,y1)=>[{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1}];
+  const dseg=(m,p,q)=>{const dx=q.x-p.x,dy=q.y-p.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((m.x-p.x)*dx+(m.y-p.y)*dy)/l)):0;return Math.hypot(m.x-p.x-t*dx,m.y-p.y-t*dy);};
+  const outline=[rect2(0,0,30,30),rect2(10,10,20,20)];        // a square with a square hole: lines through the middle split in two
+  const edges=outline.flatMap(c=>c.map((p,i)=>[p,c[(i+1)%c.length]]));
+  const gap=.6,spacing=1;
+  const plain=core.hatchLines(outline,0,spacing,gap,{});
+  const zig=core.hatchLines(outline,0,spacing,gap,{zigzag:true});
+  const count=ls=>ls.reduce((n,l)=>n+l.length,0);
+  assert(plain.length>=36,'lines through the hole are split into pieces: '+plain.length);
+  assert(zig.length<=plain.length/5,'zigzag joins most of them: '+plain.length+' pieces -> '+zig.length+' paths');
+  assert.strictEqual(count(zig),count(plain),'no hatch point is lost or repeated');
+  // no segment, including the connectors, enters the hole or comes closer to an outline than 0.6 x the gap
+  for(const path of zig)for(let i=1;i<path.length;i++)for(const t of [.1,.25,.5,.75,.9]){
+    const m={x:path[i-1].x+(path[i].x-path[i-1].x)*t,y:path[i-1].y+(path[i].y-path[i-1].y)*t};
+    assert(!(m.x>10&&m.x<20&&m.y>10&&m.y<20),'a connector crossed the hole at '+JSON.stringify(m));
+    assert(m.x>0&&m.x<30&&m.y>0&&m.y<30,'a connector left the shape');
+    assert(Math.min(...edges.map(([p,q])=>dseg(m,p,q)))>=gap*.6-1e-6,'a connector came too close to an outline at '+JSON.stringify(m));
+  }
+  // an L shape and the green-region case: joins also work across separate lobes and in wavy lines
+  const wavy=core.hatchLines(outline,0,spacing,gap,{wave:true,amp:.3,wavelength:4,shift:0}),wavyZig=core.hatchLines(outline,0,spacing,gap,{wave:true,amp:.3,wavelength:4,shift:0,zigzag:true});
+  assert(wavyZig.length<=wavy.length/4,'wavy zigzag also joins across pieces: '+wavy.length+' -> '+wavyZig.length);
+  assert.strictEqual(count(wavyZig),count(wavy));
+  // the gap setting does not change how many ends get joined (it is not what limits zigzag)
+  const small=core.hatchLines(outline,0,spacing,.3,{zigzag:true}).length,big=core.hatchLines(outline,0,spacing,.9,{zigzag:true}).length;
+  assert(Math.abs(small-big)<=Math.max(4,small*.25),'gap 0.3 vs 0.9 gives similar path counts: '+small+' vs '+big);
+}
+console.log('zigzag pieces ok');
+
+// ---- zigzag connectors are never diagonal: square-on to the lines, or along the border
+{
+  const disc=(cx,cy,r,n)=>Array.from({length:n},(_,i)=>({x:cx+r*Math.cos(i/n*2*Math.PI),y:cy+r*Math.sin(i/n*2*Math.PI)}));
+  const star=(cx,cy,r)=>Array.from({length:10},(_,i)=>{const rr=i%2?r*.4:r,a=Math.PI/2+i*Math.PI/5;return {x:cx+rr*Math.cos(a),y:cy+rr*Math.sin(a)};}).reverse(); // clockwise = a hole
+  const contours=[disc(0,0,40,240),star(-12,14,6),star(10,18,6),star(0,-12,7),disc(18,-10,5,60).reverse()];
+  const edges=contours.flatMap(c=>c.map((p,i)=>[p,c[(i+1)%c.length]]));
+  const dseg=(m,p,q)=>{const dx=q.x-p.x,dy=q.y-p.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((m.x-p.x)*dx+(m.y-p.y)*dy)/l)):0;return Math.hypot(m.x-p.x-t*dx,m.y-p.y-t*dy);};
+  const spacing=6.65,gap=1.25;
+  for(const angle of [45,135,0,90,20]){
+    const th=angle*Math.PI/180,dx0=Math.cos(th),dy0=Math.sin(th);
+    const plain=core.hatchLines(contours,angle,spacing,gap,{}),zig=core.hatchLines(contours,angle,spacing,gap,{zigzag:true});
+    let connectors=0,diagonal=[];
+    for(const path of zig)for(let i=1;i<path.length;i++){
+      const a=path[i-1],b=path[i],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);if(len<1e-9)continue;
+      if(Math.abs(dx*dx0+dy*dy0)/len>.995)continue;                       // a hatch line itself
+      connectors++;
+      const offPerp=Math.asin(Math.min(1,Math.abs(dx*dx0+dy*dy0)/len))*180/Math.PI;
+      const m={x:(a.x+b.x)/2,y:(a.y+b.y)/2};let best=Infinity,edge=null;for(const e of edges){const d=dseg(m,e[0],e[1]);if(d<best){best=d;edge=e;}}
+      const ex=edge[1].x-edge[0].x,ey=edge[1].y-edge[0].y,offBorder=Math.acos(Math.min(1,Math.abs(dx*ex+dy*ey)/(len*Math.hypot(ex,ey))))*180/Math.PI;
+      if(!(offPerp<=3.2||(offBorder<=3.2&&best<=gap+Math.max(.3,spacing*.15)+.05)))diagonal.push({len:+len.toFixed(1),offPerp:+offPerp.toFixed(0),offBorder:+offBorder.toFixed(0)});
+      // and every connector is short, and stays clearly away from the border
+      assert(len<=Math.max(spacing*1.5,Math.min(spacing*3,3))+1e-6,'a connector of '+len.toFixed(1)+' mm is too long for this spacing');
+      for(const t of [0,.25,.5,.75,1]){const pt={x:a.x+dx*t,y:a.y+dy*t};assert(Math.min(...edges.map(([p,q])=>dseg(pt,p,q)))>=gap*.85-1e-6,'a connector comes closer than 0.85 x the gap to the border');}
+    }
+    assert.strictEqual(diagonal.length,0,'angle '+angle+': diagonal connectors '+JSON.stringify(diagonal.slice(0,3)));
+    assert(connectors>0&&zig.length<=plain.length*.75,'angle '+angle+': still joins most ends: '+plain.length+' pieces -> '+zig.length+' paths');
+  }
+}
+console.log('zigzag connectors tidy ok');
+
