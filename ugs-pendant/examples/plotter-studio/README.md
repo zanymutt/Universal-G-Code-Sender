@@ -1,6 +1,6 @@
 # Plotter Studio — Dashboard plugin
 
-Version 0.5.36. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
+Version 0.5.39. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
 
 It generates millimeter, absolute-coordinate G-code for inspection in the UGS Dashboard. It never sends machine commands or starts a job.
 
@@ -142,6 +142,10 @@ Zoom and pan now stay put when you change a setting (fills, pens, borders, pen w
 ## Registration cross position (0.5.36)
 
 The cross center is the given X / Y distance from the edge of the artwork as imported (its bounding box), so "8" is exactly 8 mm. Before, it was measured from the drawn lines, which sit a little inside when borders are drawn "just inside" their regions, so the numbers came out a fraction of a millimeter off.
+
+## Hatch gap from the outline's edge (0.5.37)
+
+The fill **Gap from outline** is now measured from the outer edge of the drawn outline to the center of a hatch line, in both border modes (before, with "One pen keeps the shared line", it was measured from the outline's center, so the two pens overlapped by half a line). A gap of half the pen width therefore puts the hatch pen's edge just against the outline's edge, and a bigger gap leaves clear paper. Shapes whose outline is not plotted (the option to skip unstroked shapes is on, or the outline's color is set to Skip) keep the old behavior, measured from the region edge.
 
 ## Install
 

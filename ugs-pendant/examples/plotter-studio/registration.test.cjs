@@ -77,11 +77,11 @@ const at=(lines,pattern,from=0)=>{for(let i=from;i<lines.length;i++)if(pattern.t
 }
 // ---- hatch gap with both pens is measured from the moved outline
 {
-  const sqr={id:'s',name:'s',color:'#154c2a',fillColor:'#154c2a',closed:true,points:rect(0,0,20,20)};
+  const sqr={id:'s',name:'s',color:'#154c2a',fillColor:'#154c2a',noStroke:true,closed:true,points:rect(0,0,20,20)};
   const o={fillSource:'original',fills:{2:{mode:'hatch',angle:0,spacing:1,gap:.5}},penWidths:{2:.5}};
   const edge=extra=>{const pts=core.plan({paths:[sqr],page:rect(0,0,20,20)},{...base,penMap:{'#154c2a':2},...o,...extra}).paths.filter(q=>q.fill).flatMap(q=>q.points.map(v=>v.x));return [Math.min(...pts),Math.max(...pts)];};
   const one=edge({borders:'one'}),both=edge({borders:'both'});
-  assert(Math.abs(one[0]-.5)<.05,'one pen: hatch starts at the gap from the region edge');
+  assert(Math.abs(one[0]-.75)<.05,'one pen: the gap starts at the outer edge of the outline (half its width from the region edge)');
   assert(Math.abs(both[0]-(.5+.25+.25))<.05,'both pens: the gap starts after the outline inset (half width) and half its width');
   assert(Math.abs(both[1]-(20-1))<.05);
 }
@@ -90,5 +90,12 @@ console.log('registration ok');
   // inset outlines shrink the drawn bounds, but the cross is still exactly the distance from the artwork edge
   const r=run({regCross:true,regCorner:'tl',regMargin:8,regMarginY:50,borders:'both',penWidths:{1:1,2:1,3:1}}).job.registration;
   assert.deepStrictEqual([r.x,r.y],[-8,55],'artwork spans X0-25 Y0-5 as imported');
+}
+{
+  // an outline color set to Skip draws nothing, so the hatch gap has nothing to clear
+  const sqr={id:'s',name:'s',color:'#000000',fillColor:'#154c2a',closed:true,points:rect(0,0,20,20)};
+  const xs=map=>{const j=core.plan({paths:[sqr],page:rect(0,0,20,20)},{...base,penMap:map,penWidths:{2:.5,1:.5},fillSource:'original',fills:{2:{mode:'hatch',angle:0,spacing:1,gap:.5}}});return Math.min(...j.paths.filter(q=>q.fill).flatMap(q=>q.points.map(v=>v.x)));};
+  assert(Math.abs(xs({'#154c2a':2,'#000000':0})-.5)<.05,'outline skipped: gap from the region edge');
+  assert(Math.abs(xs({'#154c2a':2,'#000000':1})-.75)<.05,'outline plotted: gap from its outer edge');
 }
 console.log('registration corner ok');

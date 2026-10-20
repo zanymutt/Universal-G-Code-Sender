@@ -315,9 +315,10 @@
       const key=(p.group??p.id)+'|'+color;
       if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,group:p.group,contours:[],edge:0});
       groups.get(key).contours.push(p.points);
-      // With each pen drawing its own outline just inside the region, the hatch gap is measured from that moved
-      // outline (its inset plus half its width), not from the original edge, so the hatch never meets the line.
-      if(o.mode==='plotter'&&o.borders==='both'){const w=penWidthOf(o,penOf(p.color)),d=(o.borderInset>0?o.borderInset:w/2)+w/2;groups.get(key).edge=Math.max(groups.get(key).edge,d);}
+      // The gap is measured from the outer edge of the drawn outline to the center of a hatch line, so a gap of half
+      // the pen width puts the hatch pen's edge just against the outline. The outline is centered on the region edge,
+      // or, with each pen drawing its own outline just inside the region, moved in by the inset.
+      if(o.mode==='plotter'&&penOf(p.color)>0&&!(o.skipUnstroked&&p.noStroke)){const w=penWidthOf(o,penOf(p.color)),d=(o.borders==='both'?(o.borderInset>0?o.borderInset:w/2):0)+w/2;groups.get(key).edge=Math.max(groups.get(key).edge,d);}
     }
     const boxes=[];
     for(const g of groups.values()){
