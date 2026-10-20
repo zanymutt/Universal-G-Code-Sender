@@ -1,6 +1,6 @@
 # Plotter Studio — Dashboard plugin
 
-Version 0.5.35. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
+Version 0.5.36. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
 
 It generates millimeter, absolute-coordinate G-code for inspection in the UGS Dashboard. It never sends machine commands or starts a job.
 
@@ -138,6 +138,10 @@ Zoom and pan now stay put when you change a setting (fills, pens, borders, pen w
 
 - **Registration cross corner:** choose bottom or top, left or right, and set the **X** and **Y** distance outside the artwork separately (default bottom left, 8 mm each).
 - **Hatch gap with "Both pens, each just inside its own region":** the hatch gap is now measured from the moved outline, not the original region edge. The hatch stops its **Gap** short of the outline's inner side (inset plus half the outline pen's width), so hatch tips no longer merge into the outline. Only applies in that mode.
+
+## Registration cross position (0.5.36)
+
+The cross center is the given X / Y distance from the edge of the artwork as imported (its bounding box), so "8" is exactly 8 mm. Before, it was measured from the drawn lines, which sit a little inside when borders are drawn "just inside" their regions, so the numbers came out a fraction of a millimeter off.
 
 ## Install
 

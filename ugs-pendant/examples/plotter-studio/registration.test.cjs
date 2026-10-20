@@ -86,3 +86,9 @@ const at=(lines,pattern,from=0)=>{for(let i=from;i<lines.length;i++)if(pattern.t
   assert(Math.abs(both[1]-(20-1))<.05);
 }
 console.log('registration ok');
+{
+  // inset outlines shrink the drawn bounds, but the cross is still exactly the distance from the artwork edge
+  const r=run({regCross:true,regCorner:'tl',regMargin:8,regMarginY:50,borders:'both',penWidths:{1:1,2:1,3:1}}).job.registration;
+  assert.deepStrictEqual([r.x,r.y],[-8,55],'artwork spans X0-25 Y0-5 as imported');
+}
+console.log('registration corner ok');

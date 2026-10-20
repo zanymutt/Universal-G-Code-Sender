@@ -783,7 +783,10 @@
       if(!['bl','br','tl','tr'].includes(corner))throw Error('Registration cross corner: choose bottom or top, left or right.');
       if(!(Number.isFinite(size)&&size>0&&size<=50))throw Error('Registration cross size must be 0-50 mm.');
       // Outside the chosen corner of the artwork (default bottom left), at known work coordinates, so the same G10 L20 command works for every pen.
-      job.registration={x:corner[1]==='l'?job.bounds.minX-margin:job.bounds.maxX+margin,y:corner[0]==='b'?job.bounds.minY-marginY:job.bounds.maxY+marginY,size};
+      // Measured from the artwork as imported, not from what is drawn: moving outlines inside their regions (or hiding
+      // covered lines) would otherwise shift the cross by a fraction of a millimeter.
+      const art=bounds(transformed.paths.flatMap(p=>p.points));
+      job.registration={x:corner[1]==='l'?art.minX-margin:art.maxX+margin,y:corner[0]==='b'?art.minY-marginY:art.maxY+marginY,size};
     }
     return o.mode==='knife'?compensateKnife(job,o):job;
   }
