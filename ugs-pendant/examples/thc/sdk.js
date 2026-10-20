@@ -3,6 +3,7 @@
   let nextId = 1;
   const pending = new Map();
   const listeners = new Map(); // event name -> Set<callback>
+  const colorHandlers = new Map(); // pickColor token -> onChange callback
 
   window.addEventListener("message", event => {
     const data = event.data;
@@ -13,6 +14,12 @@
       pending.delete(data.id);
       if (data.error !== undefined) request.reject(new Error(data.error));
       else request.resolve(data.result);
+      return;
+    }
+    // A color the person settled on in a pickColor() picker that is still open.
+    if (data.type === "fluid-event" && data.event === "color") {
+      const handler = data.data && colorHandlers.get(data.data.token);
+      if (handler) handler(data.data.color);
       return;
     }
     if (data.type === "fluid-event") {
@@ -46,6 +53,26 @@
     // a "theme" event (see on() below) whenever the person changes either
     // one while this window is open.
     getTheme: () => call("getTheme"),
+    // Opens the dashboard's own color picker beside one of your controls and resolves, once it is closed, with
+    // { color } - the last color the person settled on, or { color: null } if they closed it without picking.
+    //   color     "#rrggbb" it starts on
+    //   anchor    the control to open beside: an element, or { x, y, width, height } in this page's pixels
+    //             (without one it opens in the middle of the window)
+    //   onChange  (color) => void, called each time they let go of the mouse or finger on a color, while the
+    //             picker is still open - not for every step of a drag
+    // Use this instead of <input type="color">: that pop-up is the browser's, so it opens in the wrong place when
+    // the dashboard is zoomed, and the page never hears when the mouse is released in it.
+    pickColor(options) {
+      const { color, anchor, onChange } = options || {};
+      let box = anchor;
+      if (anchor && typeof anchor.getBoundingClientRect === "function") {
+        const rect = anchor.getBoundingClientRect();
+        box = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+      }
+      const token = nextId++;
+      if (onChange) colorHandlers.set(token, onChange);
+      return call("pickColor", { color, token, ...(box || {}) }).finally(() => colorHandlers.delete(token));
+    },
     // Subscribes on the first callback registered for an event, unsubscribes
     // once the last one is removed. Event names: "status", "line", "theme".
     on(event, callback) {

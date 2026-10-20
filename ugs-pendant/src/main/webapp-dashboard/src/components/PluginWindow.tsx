@@ -5,7 +5,8 @@ import { useAppSelector } from "../hooks/useAppSelector";
 import { useAppDispatch } from "../hooks/useAppDispatch";
 import { useLayoutRect } from "../hooks/useLayoutRect";
 import { useDockRect } from "../hooks/useDockRect";
-import { layoutScale } from "../utils/layoutRect";
+import { normalizeHex } from "../utils/colorUtils";
+import { layoutRect, layoutScale } from "../utils/layoutRect";
 import { Box, ResizeDirection, moveBox, resizeBox } from "../utils/pluginWindowGeometry";
 import { PluginInfo, getPluginSettings, savePluginSettings } from "../services/plugins";
 import { getFileContent, saveFileContent, saveFileContentAs } from "../services/fileContent";
@@ -27,6 +28,7 @@ import { getPluginThemeSnapshot } from "../theme/palette";
 import { Status } from "../model/Status";
 import SaveAsModal from "./SaveAsModal";
 import OpenFileModal from "./OpenFileModal";
+import { ColorPickerPopover } from "./ColorPicker";
 import "./PluginWindow.scss";
 
 type Props = {
@@ -92,6 +94,20 @@ type SaveAsRequest = {
 type PickFileRequest = {
   resolve: (result: { path: string }) => void;
   reject: (error: Error) => void;
+};
+
+// A plugin's in-flight pickColor() call, waiting on the dashboard color picker it opened beside the control
+// the plugin pointed at. `last` is the most recent color the person settled on (a release in the picker);
+// the call resolves with it when the picker closes, or null if they never settled on one.
+type ColorRequest = {
+  color: string;
+  // The plugin's control, in the iframe's own pixels; null when it gave none (the picker then opens at the
+  // middle of the plugin window).
+  anchor: { x: number; y: number; width: number; height: number } | null;
+  // Handed back with each color so the plugin can tell its own picker's colors apart.
+  token: unknown;
+  last: string | null;
+  resolve: (result: { color: string | null }) => void;
 };
 
 const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, isFront, focusRequest, onActivate, dockSlot = null, dockOptions = [], onDock }: Props) => {
@@ -160,6 +176,8 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
   const [pickFileRequest, setPickFileRequest] = useState<PickFileRequest | null>(null);
   // Reserve synchronously: React state alone leaves a gap before the next render.
   const pickFileRequestRef = useRef<PickFileRequest | null>(null);
+  const [colorRequest, setColorRequest] = useState<ColorRequest | null>(null);
+  const colorRequestRef = useRef<ColorRequest | null>(null);
 
   const status = useAppSelector((state) => state.status);
   const consoleMessages = useAppSelector((state) => state.console.messages);
@@ -413,6 +431,32 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
             setPickFileRequest(request);
           });
 
+        case "pickColor": {
+          // The dashboard's own color picker, opened next to the plugin's control (x, y, width, height in
+          // the iframe's pixels - a native <input type="color"> pop-up misplaces itself under the dashboard
+          // zoom and the page can't tell when it is released). Each time the person settles on a color
+          // (releases the mouse or finger, enters a hex code) a "color" event goes to the plugin with the
+          // request's token; the call itself resolves with the last of them when the picker closes.
+          if (colorRequestRef.current) {
+            return Promise.reject(new Error("A color picker is already open for this plugin"));
+          }
+          const number = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+          return new Promise((resolve) => {
+            const request: ColorRequest = {
+              color: normalizeHex(String(params.color ?? "")) ?? "#000000",
+              anchor:
+                typeof params.x === "number" && typeof params.y === "number"
+                  ? { x: params.x, y: params.y, width: number(params.width), height: number(params.height) }
+                  : null,
+              token: params.token,
+              last: null,
+              resolve,
+            };
+            colorRequestRef.current = request;
+            setColorRequest(request);
+          });
+        }
+
         case "getFileStatus":
           // The one place a plugin can find out *which* file the backend actually has loaded
           // and how far a send has gotten - getStatus()'s flattened status has neither, since
@@ -574,6 +618,34 @@ const PluginWindow = ({ plugin, initialOffset, onClose, onMinimize, minimized, i
           // actually matters for the cancel path, where nothing else does.
           saveAsRequest.reject(new Error("Save cancelled"));
           setSaveAsRequest(null);
+        }}
+      />
+    )}
+    {colorRequest && (
+      <ColorPickerPopover
+        value={colorRequest.color}
+        label={`${plugin.name} color picker`}
+        closeOnWindowBlur
+        anchor={() => {
+          const frame = iframeRef.current;
+          if (!frame) return null;
+          const rect = layoutRect(frame);
+          const spot = colorRequest.anchor ?? { x: rect.width / 2, y: rect.height / 2, width: 0, height: 0 };
+          const left = rect.left + spot.x;
+          const top = rect.top + spot.y;
+          return {
+            box: { left, top, right: left + spot.width, bottom: top + spot.height },
+            scale: layoutScale(frame),
+          };
+        }}
+        onCommit={(color) => {
+          colorRequest.last = color;
+          postToPlugin({ type: "fluid-event", event: "color", data: { token: colorRequest.token, color } });
+        }}
+        onClose={() => {
+          colorRequest.resolve({ color: colorRequest.last });
+          colorRequestRef.current = null;
+          setColorRequest(null);
         }}
       />
     )}
