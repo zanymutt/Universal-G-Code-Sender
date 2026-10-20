@@ -217,6 +217,27 @@ export const scanTools = (text: string): ToolScan => {
   return { changes, hints };
 };
 
+// A plotter file that never picks a pen is drawn with pen 1: the scan gets a change to it from before the
+// first line, so everything is pen 1's and the pen table has a row to edit. Dark ink, not a palette color.
+// (Only for the plotter's own use: the real scan still has no tool change, so the simulation doesn't stop
+// for one.)
+export const IMPLIED_PEN = 1;
+export const IMPLIED_PEN_COLOR = "#1f1f1f";
+
+export const withImpliedPen = (scan: ToolScan): ToolScan =>
+  scan.changes.length > 0
+    ? scan
+    : {
+        changes: [{ line: 0, tool: IMPLIED_PEN }],
+        hints: {
+          ...scan.hints,
+          [IMPLIED_PEN]: { color: IMPLIED_PEN_COLOR, ...scan.hints[IMPLIED_PEN], tool: IMPLIED_PEN },
+        },
+      };
+
+// True for a scan made by withImpliedPen (its one change is not on any line of the file).
+export const isImpliedPen = (scan: ToolScan): boolean => scan.changes.length === 1 && scan.changes[0].line === 0;
+
 // The tool in effect at each segment (by tool number), -1 where none has been
 // chosen yet. `changes` must be in file order (as scanTools returns them).
 export const segmentToolNumbers = (segments: { lineNumber: number }[], changes: ToolChange[]): Int32Array => {

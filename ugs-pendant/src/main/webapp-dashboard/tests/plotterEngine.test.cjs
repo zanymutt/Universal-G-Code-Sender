@@ -138,3 +138,22 @@ test("stored paper options are put back into range", () => {
   assert.deepEqual(plain(P.sanitizePlotterOptions(undefined)), plain(P.DEFAULT_PLOTTER_OPTIONS));
   assert.equal(P.sanitizePlotterOptions({ paperColor: "#FFF0E0" }).paperColor, "#fff0e0");
 });
+
+test("a file with no pen is drawn with pen 1, which the pen table can edit", () => {
+  const base = { shape: "flat", diameter: 0.5, vAngle: 60, cornerRadius: 0, tipDiameter: 0 };
+  const scan = T.scanTools("G21\nG1 X1 Y1\n");
+  assert.equal(scan.changes.length, 0);
+  const implied = T.withImpliedPen(scan);
+  assert.equal(T.isImpliedPen(implied), true);
+  assert.equal(T.isImpliedPen(scan), false);
+  // Every segment belongs to pen 1, and the table has a row for it with dark ink.
+  assert.deepEqual(Array.from(T.segmentToolNumbers([{ lineNumber: 1 }, { lineNumber: 40 }], implied.changes)), [1, 1]);
+  const rows = T.buildToolRows(implied, {}, base);
+  assert.deepEqual(plain(rows.map((row) => [row.tool, row.inFile, row.color])), [[1, true, "#1f1f1f"]]);
+  // The user's edit still wins, and a color the file gives for pen 1 beats the dark default.
+  assert.equal(T.buildToolRows(implied, { 1: { color: "#ff0000" } }, base)[0].color, "#ff0000");
+  assert.equal(T.buildToolRows(T.withImpliedPen(T.scanTools("(Pen 1: blue #0000ff)\nG1 X1\n")), {}, base)[0].color, "#0000ff");
+  // A file that does pick pens is left alone.
+  const real = T.scanTools("T3 M6\nG1 X1\n");
+  assert.equal(T.withImpliedPen(real), real);
+});

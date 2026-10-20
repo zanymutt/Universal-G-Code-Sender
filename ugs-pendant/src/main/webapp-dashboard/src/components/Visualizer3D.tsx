@@ -30,6 +30,7 @@ import {
   EMPTY_SCAN,
   scanTools,
   segmentToolNumbers,
+  withImpliedPen,
   ToolScan,
   toolColors,
   toolsUsed,
@@ -485,13 +486,16 @@ const Visualizer3D = () => {
   }, [stockOn, simActive, bounds]);
   const scanReady = toolScan.forBounds === bounds;
   const scan = scanReady ? toolScan.scan : EMPTY_SCAN;
+  // A plotter file with no pen in it is drawn with pen 1 (see withImpliedPen). The simulation's stops and
+  // messages still come from the real scan, so it doesn't stop for a pen change the file never made.
+  const penScan = useMemo(() => (stockIsPlotter ? withImpliedPen(scan) : scan), [scan, stockIsPlotter]);
 
   // The tool in effect at each segment, the table the user sees (the file's
   // tools plus their edits), and what the simulator needs from it.
   const segmentTools = useMemo(
-    () => segmentToolNumbers(segmentsRef.current, scan.changes),
+    () => segmentToolNumbers(segmentsRef.current, penScan.changes),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scan, bounds]
+    [penScan, bounds]
   );
   const toolsInUse = useMemo(
     () => toolsUsed(segmentTools, (index) => segmentsRef.current[index]?.rapid === true),
@@ -502,10 +506,10 @@ const Visualizer3D = () => {
   const toolRows = useMemo(
     () =>
       stockIsPlotter
-        ? buildToolRows(scan, stockProfiles.pens, stockSettings)
+        ? buildToolRows(penScan, stockProfiles.pens, stockSettings)
         : buildToolRows(scan, stockProfiles.tools, stockProfiles.settings.router),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [scan, stockIsPlotter, stockProfiles.pens, stockProfiles.tools, stockProfiles.settings.router, stockSettings]
+    [scan, penScan, stockIsPlotter, stockProfiles.pens, stockProfiles.tools, stockProfiles.settings.router, stockSettings]
   );
   // Each pen's ink color and line width, for the plotter.
   const penStylesKey = JSON.stringify(
@@ -1353,7 +1357,7 @@ const Visualizer3D = () => {
             <StockSettings
               profiles={stockProfiles}
               status={stockStatus}
-              scan={scan}
+              scan={penScan}
               toolsUsed={toolsInUse.length}
               onChange={setStockProfiles}
             />

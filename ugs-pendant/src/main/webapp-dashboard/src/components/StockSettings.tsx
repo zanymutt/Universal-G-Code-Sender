@@ -9,7 +9,7 @@ import { PaperSheet, PlotterOptions, SHEET_LABELS } from "../utils/plotterEngine
 import { autoCellSize, StockProcess, StockSettings as StockSettingsValue } from "../utils/stockSimEngine";
 import { StockProfiles } from "../utils/stockSettingsStore";
 import { StockStatus } from "../utils/stockModel";
-import { buildToolRows, SavedTools, ToolScan } from "../utils/toolTable";
+import { buildToolRows, isImpliedPen, SavedTools, ToolScan } from "../utils/toolTable";
 import ColorPicker from "./ColorPicker";
 import CutterFields from "./CutterFields";
 import NumberField from "./StockNumberField";
@@ -228,7 +228,9 @@ const StockSettings = ({ profiles, status, scan, toolsUsed, onChange }: Props) =
                 <div className="stockSettingsHeading">{plotter ? "Pens" : "Tools"}</div>
                 <div className="stockSettingsHint">
                   {plotter
-                    ? "Read from the file's T words and M6; a comment like (Pen 3: orange #f99e0e) names the pen and sets its ink color. The default pen is used for anything not listed."
+                    ? isImpliedPen(scan)
+                      ? "This file doesn't choose a pen, so it is drawn with pen 1. Edit it to set the ink color and line width."
+                      : "Read from the file's T words and M6; a comment like (Pen 3: orange #f99e0e) names the pen and sets its ink color. The default pen is used for anything not listed."
                     : "Read from the file's T words and M6. The cutter above is used for anything not listed."}
                 </div>
                 <div className="stockSettingsToolsLine">
