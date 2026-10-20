@@ -19,6 +19,9 @@ export type ToolHint = {
   shape?: StockShape;
   diameter?: number;
   vAngle?: number;
+  // Pen plotter files: "(Pen 3: orange #f99e0e)" gives the pen a name and an ink color.
+  name?: string;
+  color?: string;
 };
 
 export type ToolScan = {
@@ -125,7 +128,27 @@ export const describeCutter = (text: string, fileInches: boolean): Omit<ToolHint
 };
 
 const hasHint = (hint: Omit<ToolHint, "tool">) =>
-  hint.shape !== undefined || hint.diameter !== undefined || hint.vAngle !== undefined;
+  hint.shape !== undefined ||
+  hint.diameter !== undefined ||
+  hint.vAngle !== undefined ||
+  hint.name !== undefined ||
+  hint.color !== undefined;
+
+// "Pen 3: orange #f99e0e" (also inside "Load pen 3: orange #f99e0e"): the pen number, its name and
+// its color, whatever of them the comment gives. A bare "#rrggbb" in any other comment is a color.
+export const describePen = (text: string): { tool?: number; name?: string; color?: string } => {
+  const pen = /\bpen\s*#?(\d+)\s*[:=-]\s*(.*?)\s*(#[0-9a-f]{6})?\s*$/i.exec(text);
+  if (pen) {
+    const name = pen[2].trim();
+    return {
+      tool: Number(pen[1]),
+      ...(name !== "" ? { name } : {}),
+      ...(pen[3] ? { color: pen[3].toLowerCase() } : {}),
+    };
+  }
+  const color = /#([0-9a-f]{6})\b/i.exec(text);
+  return color ? { color: `#${color[1].toLowerCase()}` } : {};
+};
 
 // Reads the tool changes and what the comments say about each tool.
 //
@@ -161,10 +184,12 @@ export const scanTools = (text: string): ToolScan => {
         if (value !== null && value > 0) merge(Number(header[1]), { diameter: toMm(value, undefined, inches) });
         continue;
       }
-      const described = describeCutter(comment, inches);
+      const { tool: penTool, ...penFields } = describePen(comment);
+      const described = { ...describeCutter(comment, inches), ...penFields };
       if (!hasHint(described)) continue;
-      const named = /\bT(?:OOL)?\s*#?(\d+)\b/i.exec(comment);
-      if (named) merge(Number(named[1]), described);
+      const named = /\b(?:T(?:OOL)?|PEN)\s*#?(\d+)\b/i.exec(comment);
+      if (penTool !== undefined) merge(penTool, described);
+      else if (named) merge(Number(named[1]), described);
       else descriptions.push({ line, hint: described });
     }
 
@@ -268,6 +293,8 @@ export type ToolRow = {
   inFile: boolean;
   cutter: CutterSpec;
   color: string;
+  // A pen plotter file's name for the pen ("orange"), when its comment gives one.
+  name?: string;
   // The user changed the cutter or color, so Reset has something to undo.
   edited: boolean;
   // Deleted: segments with this tool use the default cutter.
@@ -288,7 +315,8 @@ export const buildToolRows = (scan: ToolScan, saved: SavedTools, base: CutterSpe
         tool,
         inFile: inFile.has(tool),
         cutter: entry?.cutter ?? cutterFromHint(base, scan.hints[tool]),
-        color: entry?.color ?? defaultToolColor(tool),
+        color: entry?.color ?? scan.hints[tool]?.color ?? defaultToolColor(tool),
+        name: scan.hints[tool]?.name,
         edited: entry !== undefined && (entry.cutter !== undefined || entry.color !== undefined),
         removed: entry?.removed === true,
       };

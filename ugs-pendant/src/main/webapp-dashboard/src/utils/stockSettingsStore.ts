@@ -6,6 +6,7 @@ import {
   StockProcess,
   StockSettings,
 } from "./stockSimEngine";
+import { DEFAULT_PLOTTER_OPTIONS, PlotterOptions, sanitizePlotterOptions } from "./plotterEngine";
 import { isHexColor, MAX_TOOL_NUMBER, SavedTool, SavedTools } from "./toolTable";
 
 // Each process keeps its own cutter/stock numbers (a 6 mm endmill and a 0.2 mm
@@ -21,6 +22,10 @@ export type StockProfiles = {
   warnRapids: boolean;
   // Router: what the user changed in the tool table, by tool number.
   tools: SavedTools;
+  // Plotter: the paper, and what the user changed in the pen table (a pen is a tool number with a
+  // color and, as `cutter.diameter`, a line width in mm).
+  plotter: PlotterOptions;
+  pens: SavedTools;
   settings: Record<StockProcess, StockSettings>;
 };
 
@@ -32,15 +37,20 @@ export const DEFAULT_STOCK_PROFILES: StockProfiles = {
   colorByTool: true,
   warnRapids: true,
   tools: {},
+  plotter: DEFAULT_PLOTTER_OPTIONS,
+  pens: {},
   settings: {
     router: { ...DEFAULT_STOCK_SETTINGS, process: "router", shape: "flat", diameter: 6, cell: 0.5 },
     // cell 0 = automatic (kerf / 2), so a different kerf gets a matching grid.
     laser: { ...DEFAULT_STOCK_SETTINGS, process: "laser", shape: "flat", diameter: 0.2, cell: 0, thickness: 3 },
     plasma: { ...DEFAULT_STOCK_SETTINGS, process: "plasma", shape: "flat", diameter: 1.5, cell: 0, thickness: 3 },
+    // diameter = the pen width for a pen the file doesn't describe; margin = the border of a
+    // "fit the drawing" sheet; topZ = the paper surface (the pen draws at or below it).
+    plotter: { ...DEFAULT_STOCK_SETTINGS, process: "plotter", shape: "flat", diameter: 0.5, cell: 0, margin: 10 },
   },
 };
 
-const PROCESSES: StockProcess[] = ["router", "laser", "plasma"];
+const PROCESSES: StockProcess[] = ["router", "laser", "plasma", "plotter"];
 const SHAPES = ["flat", "ball", "bullnose", "v", "taperball"];
 
 const finite = (value: unknown, fallback: number, min: number, max: number) =>
@@ -108,6 +118,8 @@ export const readStockProfiles = (): StockProfiles => {
       colorByTool: parsed.colorByTool !== false,
       warnRapids: parsed.warnRapids !== false,
       tools: sanitizeSavedTools(parsed.tools, settings.router),
+      plotter: sanitizePlotterOptions(parsed.plotter),
+      pens: sanitizeSavedTools(parsed.pens, settings.plotter),
       settings,
     };
   } catch {

@@ -92,3 +92,10 @@
   line-height: 1.3;
   cursor: help;
 }
+
+// The paper color picker: a swatch, not a full-width bar.
+.stockSettings .stockSettingsColor {
+  width: 56px;
+  height: 36px;
+  padding: 2px;
+}

@@ -17,6 +17,7 @@ import {
   setToolCutter,
   ToolRow,
 } from "../utils/toolTable";
+import ColorPicker from "./ColorPicker";
 import ConfirmDialog from "./ConfirmDialog";
 import "./ToolEditorPanel.scss";
 
@@ -74,6 +75,8 @@ type Props = {
   panelRef: RefObject<HTMLDivElement | null>;
   onChange: (saved: SavedTools) => void;
   onClose: () => void;
+  // The plotter's pen table: the same panel with a name and a line width in place of the cutter shape.
+  pens?: boolean;
 };
 
 // The Stock view's tool table as a floating grid. It never blocks the page: no
@@ -82,7 +85,9 @@ type Props = {
 // color; Reset goes back to what the file says, Delete drops the tool so it is
 // cut with the default cutter (Restore undoes that), Add sets up a tool number
 // the file doesn't mention.
-const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onClose }: Props) => {
+const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onClose, pens = false }: Props) => {
+  const label = (tool: number) => (pens ? `Pen ${tool}` : `T${tool}`);
+  const noun = pens ? "pen" : "tool";
   const [position, setPosition] = useState<{ left: number; top: number } | null>(null);
   const [size, setSize] = useState({ width: PANEL_WIDTH, maxHeight: 600 });
   const [newTool, setNewTool] = useState("");
@@ -149,9 +154,9 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
       {createPortal(
     <div
       ref={panelRef}
-      className="toolEditorPanel"
+      className={`toolEditorPanel${pens ? " toolEditorPens" : ""}`}
       role="dialog"
-      aria-label="Tool editor"
+      aria-label={pens ? "Pen editor" : "Tool editor"}
       style={{
         left: position?.left ?? 0,
         top: position?.top ?? 0,
@@ -197,9 +202,17 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
         onPointerUp={() => (drag.current = null)}
         onPointerCancel={() => (drag.current = null)}
       >
-        <strong>Tools</strong>
-        <span className="toolEditorHeaderHint">Drag to move. The carve updates as you edit.</span>
-        <Button size="sm" variant="outline-secondary" aria-label="Close tool editor" title="Close" onClick={onClose}>
+        <strong>{pens ? "Pens" : "Tools"}</strong>
+        <span className="toolEditorHeaderHint">
+          Drag to move. The {pens ? "drawing" : "carve"} updates as you edit.
+        </span>
+        <Button
+          size="sm"
+          variant="outline-secondary"
+          aria-label={pens ? "Close pen editor" : "Close tool editor"}
+          title="Close"
+          onClick={onClose}
+        >
           <FontAwesomeIcon icon={faXmark} />
         </Button>
       </div>
@@ -207,22 +220,32 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
       <div className="toolEditorBody">
         {visibleRows.length === 0 ? (
           <div className="toolEditorEmpty">
-            This file has no tool changes, so everything is cut with the cutter in the settings. Add a tool number to
-            set one up ahead of time; it takes effect when a file uses it.
+            {pens
+              ? "This file has no pen changes, so everything is drawn with the default pen in the settings. Add a pen number to set one up ahead of time; it takes effect when a file uses it."
+              : "This file has no tool changes, so everything is cut with the cutter in the settings. Add a tool number to set one up ahead of time; it takes effect when a file uses it."}
           </div>
         ) : (
-          <div className="toolEditorGrid" role="table" aria-label="Tools">
+          <div className="toolEditorGrid" role="table" aria-label={pens ? "Pens" : "Tools"}>
             <div className="toolEditorRow toolEditorColumns" role="row">
-              <span role="columnheader">Tool</span>
-              <span role="columnheader" className="toolEditorShapeColumn">
-                Shape
-              </span>
-              <span role="columnheader">Diameter (mm)</span>
-              <span role="columnheader">Angle (&deg;)</span>
-              <span role="columnheader">Corner radius (mm)</span>
-              <span role="columnheader" title="V-bit: width of the flat tip. Taper ball: diameter of the tip ball.">
-                Tip (mm)
-              </span>
+              <span role="columnheader">{pens ? "Pen" : "Tool"}</span>
+              {pens ? (
+                <>
+                  <span role="columnheader">Name</span>
+                  <span role="columnheader">Line width (mm)</span>
+                </>
+              ) : (
+                <>
+                  <span role="columnheader" className="toolEditorShapeColumn">
+                    Shape
+                  </span>
+                  <span role="columnheader">Diameter (mm)</span>
+                  <span role="columnheader">Angle (&deg;)</span>
+                  <span role="columnheader">Corner radius (mm)</span>
+                  <span role="columnheader" title="V-bit: width of the flat tip. Taper ball: diameter of the tip ball.">
+                    Tip (mm)
+                  </span>
+                </>
+              )}
               <span role="columnheader">
                 <span className="visually-hidden">Actions</span>
               </span>
@@ -237,20 +260,40 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
                   className={`toolEditorRow${row.removed ? " toolEditorRowRemoved" : ""}`}
                 >
                   <div className="toolEditorIdentity">
-                    <input
-                      type="color"
+                    <ColorPicker
                       className="toolEditorSwatch"
-                      aria-label={`T${row.tool} color`}
-                      title="Color for this tool"
+                      aria-label={`${label(row.tool)} color`}
+                      title={pens ? "Ink color for this pen" : "Color for this tool"}
                       value={row.color}
                       disabled={row.removed}
-                      onChange={(event) => onChange(setToolColor(saved, row.tool, event.target.value))}
+                      onCommit={(color) => onChange(setToolColor(saved, row.tool, color))}
                     />
-                    <strong>T{row.tool}</strong>
+                    <strong>{label(row.tool)}</strong>
                     {!row.inFile && !row.removed && <span className="toolEditorBadge">not in file</span>}
                   </div>
                   {row.removed ? (
-                    <div className="toolEditorRemovedNote">Removed: uses the default cutter</div>
+                    <div className="toolEditorRemovedNote">
+                      Removed: uses the default {pens ? "pen" : "cutter"}
+                    </div>
+                  ) : pens ? (
+                    <div className="toolEditorFields">
+                      <label>
+                        <span className="toolEditorCellLabel">Name</span>
+                        <span className="toolEditorPenName" title={row.name}>
+                          {row.name ?? <NotApplicable />}
+                        </span>
+                      </label>
+                      <label>
+                        <span className="toolEditorCellLabel">Line width (mm)</span>
+                        <Cell
+                          label={`${label(row.tool)} line width`}
+                          value={cutter.diameter}
+                          min={0.01}
+                          step={0.05}
+                          onCommit={(diameter) => edit(row, { diameter })}
+                        />
+                      </label>
+                    </div>
                   ) : (
                     <div className="toolEditorFields">
                       <label className="toolEditorShapeColumn">
@@ -331,8 +374,8 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
                       <Button
                         size="sm"
                         variant="outline-secondary"
-                        aria-label={`Restore T${row.tool}`}
-                        title="Restore this tool"
+                        aria-label={`Restore ${label(row.tool)}`}
+                        title={`Restore this ${noun}`}
                         onClick={() => onChange(restoreTool(saved, row.tool))}
                       >
                         <FontAwesomeIcon icon={faRotateLeft} />
@@ -342,8 +385,12 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
                         <Button
                           size="sm"
                           variant="outline-secondary"
-                          aria-label={`Reset T${row.tool}`}
-                          title={row.inFile ? "Reset to what the file says" : "Reset to the default cutter"}
+                          aria-label={`Reset ${label(row.tool)}`}
+                          title={
+                            row.inFile
+                              ? "Reset to what the file says"
+                              : `Reset to the default ${pens ? "pen" : "cutter"}`
+                          }
                           disabled={!row.edited}
                           onClick={() => onChange(resetTool(saved, row.tool))}
                         >
@@ -352,8 +399,12 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
                         <Button
                           size="sm"
                           variant="outline-danger"
-                          aria-label={`Delete T${row.tool}`}
-                          title={row.inFile ? "Delete: cut this tool with the default cutter" : "Delete this saved tool"}
+                          aria-label={`Delete ${label(row.tool)}`}
+                          title={
+                            row.inFile
+                              ? `Delete: ${pens ? "draw with the default pen" : "cut this tool with the default cutter"}`
+                              : `Delete this saved ${noun}`
+                          }
                           onClick={() => onChange(deleteTool(saved, row.tool, row.inFile))}
                         >
                           <FontAwesomeIcon icon={faTrash} />
@@ -373,7 +424,7 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
           type="switch"
           id="tool-editor-show-saved"
           className="toolEditorShowSaved"
-          label={`Show ${savedOnlyCount} saved tool${savedOnlyCount === 1 ? "" : "s"} not in this file`}
+          label={`Show ${savedOnlyCount} saved ${noun}${savedOnlyCount === 1 ? "" : "s"} not in this file`}
           checked={showSaved}
           onChange={(event) => setShowSaved(event.target.checked)}
         />
@@ -386,8 +437,8 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
           max={MAX_TOOL_NUMBER}
           step={1}
           size="sm"
-          placeholder="Tool number"
-          aria-label="New tool number"
+          placeholder={pens ? "Pen number" : "Tool number"}
+          aria-label={pens ? "New pen number" : "New tool number"}
           value={newTool}
           isInvalid={newTool.trim() !== "" && (!valid || exists)}
           onChange={(event) => setNewTool(event.target.value)}
@@ -398,8 +449,8 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
         <Button
           size="sm"
           variant="outline-secondary"
-          aria-label="Add tool"
-          title={exists ? "That tool is already listed" : "Add a tool"}
+          aria-label={pens ? "Add pen" : "Add tool"}
+          title={exists ? `That ${noun} is already listed` : `Add a ${noun}`}
           disabled={!valid || exists}
           onClick={add}
         >
@@ -409,7 +460,7 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
         <Button
           size="sm"
           variant="outline-secondary"
-          title="Forget every edit, color and deletion, for every file: tools go back to what their file says"
+          title={`Forget every edit, color and deletion, for every file: ${noun}s go back to what their file says`}
           disabled={!anySaved}
           onClick={() => setConfirmingResetAll(true)}
         >
@@ -422,14 +473,14 @@ const ToolEditorPanel = ({ rows, saved, base, anchorRef, panelRef, onChange, onC
       {/* Beside the panel, not inside it: a key press in the dialog must not reach the panel's Escape handler. */}
       <ConfirmDialog
         show={confirmingResetAll}
-        title="Reset all tools?"
+        title={`Reset all ${noun}s?`}
         message={
-          `This erases every tool you have edited, recolored or deleted - for all files, not just the one that is ` +
-          `open.\n\n${savedCount} saved tool${savedCount === 1 ? "" : "s"}` +
+          `This erases every ${noun} you have edited, recolored or deleted - for all files, not just the one that is ` +
+          `open.\n\n${savedCount} saved ${noun}${savedCount === 1 ? "" : "s"}` +
           (savedOnlyCount > 0 ? `, ${savedOnlyCount} of them not in this file` : "") +
-          `. Each tool goes back to what its file says, or to the default cutter.`
+          `. Each ${noun} goes back to what its file says, or to the default ${pens ? "pen" : "cutter"}.`
         }
-        confirmLabel="Reset all tools"
+        confirmLabel={`Reset all ${noun}s`}
         confirmVariant="danger"
         onCancel={() => setConfirmingResetAll(false)}
         onConfirm={() => {

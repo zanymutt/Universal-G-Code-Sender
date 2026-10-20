@@ -1,0 +1,136 @@
+// The swatch that opens the picker. Callers add their own size (and, for the pen table, a corner radius).
+.colorPickerSwatch {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--dashboard-border-strong);
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 1px;
+  }
+}
+
+// Placed inline by ColorPicker.tsx (left/top/width/max-height), fixed inside .app. Above the stock
+// settings popover (60) and the tool editor panel (61) that it is opened from.
+.colorPicker {
+  position: fixed;
+  z-index: 62;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--dashboard-bg);
+  border: 1px solid var(--dashboard-border);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  color: var(--dashboard-text);
+  user-select: none;
+
+  .colorPickerHeader {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    .btn {
+      min-width: 28px;
+      min-height: 28px;
+      padding: 0;
+    }
+  }
+
+  // Saturation (left to right) and brightness (bottom to top) over the hue's own color.
+  .colorPickerSquare {
+    position: relative;
+    height: 140px;
+    border-radius: 6px;
+    background-image:
+      linear-gradient(to top, #000, rgba(0, 0, 0, 0)),
+      linear-gradient(to right, #fff, rgba(255, 255, 255, 0));
+    cursor: crosshair;
+    touch-action: none;
+  }
+
+  .colorPickerHue {
+    position: relative;
+    height: 16px;
+    border-radius: 8px;
+    background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00);
+    cursor: ew-resize;
+    touch-action: none;
+  }
+
+  .colorPickerSquare:focus-visible,
+  .colorPickerHue:focus-visible {
+    outline: 2px solid var(--dashboard-accent);
+    outline-offset: 2px;
+  }
+
+  .colorPickerThumb {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+    pointer-events: none;
+  }
+
+  .colorPickerFooter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  // The color it was (left) beside the color being picked (right).
+  .colorPickerChips {
+    display: flex;
+    flex: none;
+    border: 1px solid var(--dashboard-border-strong);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .colorPickerChip {
+    width: 24px;
+    height: 28px;
+  }
+
+  .colorPickerHex {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: var(--bs-font-monospace, monospace);
+  }
+
+  // Touch: bigger things to grab.
+  @media (any-pointer: coarse) {
+    .colorPickerSquare {
+      height: 170px;
+    }
+
+    .colorPickerHue {
+      height: 28px;
+      border-radius: 14px;
+    }
+
+    .colorPickerThumb {
+      width: 24px;
+      height: 24px;
+      margin: -12px 0 0 -12px;
+    }
+
+    .colorPickerHeader .btn,
+    .colorPickerHex {
+      min-height: 44px;
+      min-width: 44px;
+    }
+  }
+}

@@ -11,7 +11,9 @@
 // A heightfield can't represent undercuts (a T-slot, a dovetail, 4th/5th-axis
 // work); for router, laser and plasma work on flat stock that's not a limit.
 
-export type StockProcess = "router" | "laser" | "plasma";
+// "plotter" is ink on paper rather than material removed: see plotterEngine.ts (it does not use this
+// simulator, only the settings and the packed toolpath).
+export type StockProcess = "router" | "laser" | "plasma" | "plotter";
 export type StockShape = "flat" | "ball" | "bullnose" | "v" | "taperball";
 
 // All lengths are in millimetres here whatever units the file uses; the

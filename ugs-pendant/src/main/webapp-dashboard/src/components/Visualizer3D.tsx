@@ -18,6 +18,8 @@ import {
   ToolpathSimulation,
 } from "../utils/toolpathSimulation";
 import { StockModel, StockStatus, IDLE_STOCK_STATUS } from "../utils/stockModel";
+import { PlotterModel } from "../utils/plotterModel";
+import type { PenStyle } from "../utils/plotterEngine";
 import { readStockProfiles, StockProfiles, writeStockProfiles } from "../utils/stockSettingsStore";
 import { describeRapidHits } from "../utils/rapidWarning";
 import { mergeProgramEvents, ProgramEvent, scanProgramEvents, toolChangeEvents } from "../utils/programEvents";
@@ -353,6 +355,8 @@ const Visualizer3D = () => {
   // Stock-removal view: the block of material with the cut taken out of it,
   // computed in a worker (utils/stockSimEngine.ts) and drawn in the scene.
   const stockRef = useRef<StockModel | null>(null);
+  // The plotter process draws ink on a sheet of paper instead (utils/plotterModel.ts).
+  const plotterRef = useRef<PlotterModel | null>(null);
   const [stockOn, setStockOn] = useState(false);
   const stockOnRef = useRef(false);
   stockOnRef.current = stockOn;
@@ -454,6 +458,7 @@ const Visualizer3D = () => {
 
   const stockSettings = stockProfiles.settings[stockProfiles.process];
   const stockIsRouter = stockProfiles.process === "router";
+  const stockIsPlotter = stockProfiles.process === "plotter";
 
   useEffect(() => {
     writeStockProfiles(stockProfiles);
@@ -493,9 +498,20 @@ const Visualizer3D = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [segmentTools]
   );
+  // For a plotter the table is the pens: the same rows, with the line width in the cutter's diameter.
   const toolRows = useMemo(
-    () => buildToolRows(scan, stockProfiles.tools, stockProfiles.settings.router),
-    [scan, stockProfiles.tools, stockProfiles.settings.router]
+    () =>
+      stockIsPlotter
+        ? buildToolRows(scan, stockProfiles.pens, stockSettings)
+        : buildToolRows(scan, stockProfiles.tools, stockProfiles.settings.router),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [scan, stockIsPlotter, stockProfiles.pens, stockProfiles.tools, stockProfiles.settings.router, stockSettings]
+  );
+  // Each pen's ink color and line width, for the plotter.
+  const penStylesKey = JSON.stringify(
+    Object.fromEntries(
+      toolRows.filter((row) => !row.removed).map((row) => [row.tool, { color: row.color, width: row.cutter.diameter }])
+    )
   );
   const toolSpecsKey = JSON.stringify(cutterTable(toolRows));
   const toolColorsKey = JSON.stringify(toolColors(toolRows));
@@ -518,11 +534,15 @@ const Visualizer3D = () => {
     if (!scanReady) return [];
     const describe = (tool: number) => {
       const row = toolRows.find((candidate) => candidate.tool === tool && candidate.inFile && !candidate.removed);
+      if (stockIsPlotter) return row?.name ? `Pen ${tool} (${row.name})` : `Pen ${tool}`;
       return row ? `T${tool} (${cutterSummary(row.cutter)})` : `T${tool}`;
     };
     return mergeProgramEvents(toolChangeEvents(scan.changes, describe), toolScan.events);
-  }, [scanReady, scan, toolRows, toolScan.events]);
-  const tintByTool = stockIsRouter && stockProfiles.colorByTool && toolsInUse.length >= 2;
+  }, [scanReady, scan, toolRows, toolScan.events, stockIsPlotter]);
+  // A plotter's pens always show in their ink color (with the toolpath over the paper, too).
+  const tintByTool = stockIsPlotter
+    ? toolsInUse.length >= 1
+    : stockIsRouter && stockProfiles.colorByTool && toolsInUse.length >= 2;
   const lineColorsOn = stockOn && stockProfiles.showPath && tintByTool;
   const toolLineColors = useMemo<ToolColorFn | null>(() => {
     if (!lineColorsOn) return null;
@@ -633,14 +653,20 @@ const Visualizer3D = () => {
   // per fetch). Off, it stops the worker and frees its memory.
   useEffect(() => {
     const stock = stockRef.current;
-    if (!stock) return;
-    stock.setEnabled(stockOn);
+    const plotter = plotterRef.current;
+    if (!stock || !plotter) return;
+    stock.setEnabled(stockOn && !stockIsPlotter);
+    plotter.setEnabled(stockOn && stockIsPlotter);
     // Until the file's tools have been read, show nothing rather than a result
     // for the wrong cutters.
-    if (stockOn) stock.load(scanReady ? segmentsRef.current : [], engineSettings, scanReady ? segmentTools : undefined);
-    else setStockStatus(IDLE_STOCK_STATUS);
+    const segments = scanReady ? segmentsRef.current : [];
+    const tools = scanReady ? segmentTools : undefined;
+    if (!stockOn) setStockStatus(IDLE_STOCK_STATUS);
+    else if (stockIsPlotter) {
+      plotter.load(segments, engineSettings, stockProfiles.plotter, tools, JSON.parse(penStylesKey) as Record<number, PenStyle>);
+    } else stock.load(segments, engineSettings, tools);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stockOn, engineSettings, bounds, scanReady, segmentTools]);
+  }, [stockOn, engineSettings, bounds, scanReady, segmentTools, stockIsPlotter, stockProfiles.plotter, penStylesKey]);
 
   // Tinting the cut only changes how the result is painted, so it never
   // restarts the simulation.
@@ -666,8 +692,10 @@ const Visualizer3D = () => {
       count = 0;
       while (count < segments.length && segments[count].lineNumber <= lastCompletedLineNumber) count++;
     }
-    stock.setProgress(count, stockSimSegments >= 0 ? stockSimFraction : 0);
-  }, [stockOn, stockSimSegments, stockSimFraction, isJobActive, lastCompletedLineNumber, bounds, stockStatus.state]);
+    const fraction = stockSimSegments >= 0 ? stockSimFraction : 0;
+    if (stockIsPlotter) plotterRef.current?.setProgress(count, fraction);
+    else stock.setProgress(count, fraction);
+  }, [stockOn, stockIsPlotter, stockSimSegments, stockSimFraction, isJobActive, lastCompletedLineNumber, bounds, stockStatus.state]);
 
   // While the simulation is up, the machine's own tool marker and the live
   // toolpath step aside so only one "tool" and one toolpath are on screen.
@@ -1083,6 +1111,8 @@ const Visualizer3D = () => {
     const stock = new StockModel(scene, setStockStatus);
     stock.setEnabled(stockOnRef.current);
     stockRef.current = stock;
+    const plotter = new PlotterModel(scene, setStockStatus);
+    plotterRef.current = plotter;
 
     const applyFrustum = () => {
       const { clientWidth, clientHeight } = container;
@@ -1140,6 +1170,8 @@ const Visualizer3D = () => {
       simRef.current = null;
       stock.dispose();
       stockRef.current = null;
+      plotter.dispose();
+      plotterRef.current = null;
       renderer.dispose();
       toolpathLinesRef.current?.geometry.dispose();
       gridRef.current?.dispose();
@@ -1311,7 +1343,7 @@ const Visualizer3D = () => {
             variant={stockOn ? "primary" : "outline-primary"}
             disabled={!bounds}
             onClick={() => setStockOn(!stockOn)}
-            title="Show the block of material with the cut removed, for the cutter set in the settings (router, laser or plasma)"
+            title="Show the block of material with the cut removed, for the cutter set in the settings (router, laser or plasma), or the drawing on its paper (plotter)"
             aria-label="Stock"
           >
             <span className="visualizer3DButtonIcon"><FontAwesomeIcon icon={faCube} /></span>

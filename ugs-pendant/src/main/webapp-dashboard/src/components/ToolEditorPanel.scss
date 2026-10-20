@@ -91,6 +91,18 @@
     text-transform: uppercase;
   }
 
+  // The pen table: pen, name and line width instead of the cutter's columns.
+  &.toolEditorPens .toolEditorRow {
+    grid-template-columns: 112px minmax(100px, 1.6fr) minmax(90px, 1fr) 72px;
+  }
+
+  .toolEditorPenName {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .toolEditorRowRemoved {
     border-style: dashed;
     color: var(--dashboard-text-subtle);
@@ -228,7 +240,8 @@
       display: none;
     }
 
-    .toolEditorRow {
+    .toolEditorRow,
+    &.toolEditorPens .toolEditorRow {
       grid-template-columns: 1fr auto;
       row-gap: 6px;
     }

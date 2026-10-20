@@ -17,8 +17,9 @@ in memory and a reload starts over.
 - Plugins: Nesting and Transform G-code are offered, copied from
   `ugs-pendant/examples/<id>` at build time (`DEMO_PLUGINS` in
   `vite.demo.config.ts`) - so they always match the repo. svg-to-gcode is left out.
-- Sample library: ten larger programs (GANESHA.gcode, eight router/laser/plasma
-  files, `mountains.nc` and the three-tool `multi-tool-stock.nc`) live in `src/demo/library` and show up under
+- Sample library: eleven larger programs (GANESHA.gcode, eight router/laser/plasma
+  files, `mountains.nc`, the three-tool `multi-tool-stock.nc` and the three-pen
+  `plotter-pens.nc`) live in `src/demo/library` and show up under
   `Samples/` in the demo workspace. They are not bundled: `vite.demo.config.ts`
   copies them to `dist-demo/samples` and lists them in `__DEMO_LIBRARY__`, and
   `demoMachine.ts` fetches one the first time it is opened. The review test covers
