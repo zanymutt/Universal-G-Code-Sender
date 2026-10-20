@@ -313,8 +313,11 @@
       const pen=penOf(color),s=o.fills&&o.fills[pen];
       if(!(pen>0)||!s||s.mode==='none'||!s.mode)continue;
       const key=(p.group??p.id)+'|'+color;
-      if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,group:p.group,contours:[]});
+      if(!groups.has(key))groups.set(key,{color,pen,s,name:p.name,group:p.group,contours:[],edge:0});
       groups.get(key).contours.push(p.points);
+      // With each pen drawing its own outline just inside the region, the hatch gap is measured from that moved
+      // outline (its inset plus half its width), not from the original edge, so the hatch never meets the line.
+      if(o.mode==='plotter'&&o.borders==='both'){const w=penWidthOf(o,penOf(p.color)),d=(o.borderInset>0?o.borderInset:w/2)+w/2;groups.get(key).edge=Math.max(groups.get(key).edge,d);}
     }
     const boxes=[];
     for(const g of groups.values()){
@@ -324,7 +327,7 @@
       if(wavy&&(!(s.amp>=0&&s.amp<=20)||!(s.wavelength>=.5&&s.wavelength<=500)||!Number.isFinite(s.shift)))throw Error('Pen '+g.pen+' fill: wave height must be 0-20 mm, wavelength 0.5-500 mm, and the shift a number.');
       const opt={wave:wavy,amp:s.amp,wavelength:s.wavelength,shift:s.shift,zigzag:!!s.zigzag};
       for(const angle of s.mode==='cross'||s.mode==='wavycross'?[s.angle,s.angle+90]:[s.angle])
-        for(const points of hatchLines(g.contours,angle,s.spacing,s.gap,opt)){
+        for(const points of hatchLines(g.contours,angle,s.spacing,s.gap+g.edge,opt)){
           if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
           out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,gap:s.gap,points});
         }
@@ -774,6 +777,14 @@
     }
     if(ordered.reduce((n,p)=>n+p.points.length*z.length,0)>1000000)throw Error('Output exceeds one million moves. Reduce passes or increase sampling spacing.');
     const job={paths:ordered,pens,thick,merged,inset,fills:filled.paths.length,fillOverlaps:o.hideCovered?0:filled.overlaps,hidden:hiding,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
+    if(plotter&&o.regCross){
+      const margin=o.regMargin??8,marginY=o.regMarginY??margin,size=o.regSize??6,corner=o.regCorner||'bl';
+      if(!(Number.isFinite(margin)&&margin>=0&&margin<=200&&Number.isFinite(marginY)&&marginY>=0&&marginY<=200))throw Error('Registration cross distance must be 0-200 mm.');
+      if(!['bl','br','tl','tr'].includes(corner))throw Error('Registration cross corner: choose bottom or top, left or right.');
+      if(!(Number.isFinite(size)&&size>0&&size<=50))throw Error('Registration cross size must be 0-50 mm.');
+      // Outside the chosen corner of the artwork (default bottom left), at known work coordinates, so the same G10 L20 command works for every pen.
+      job.registration={x:corner[1]==='l'?job.bounds.minX-margin:job.bounds.maxX+margin,y:corner[0]==='b'?job.bounds.minY-marginY:job.bounds.maxY+marginY,size};
+    }
     return o.mode==='knife'?compensateKnife(job,o):job;
   }
   // Passive drag knife: the holder is offset ahead of the blade along its heading.
@@ -975,12 +986,22 @@
     if(base==='orange'&&l<.4)return 'brown';
     return (l<.3?'dark ':l>.72?'light ':'')+base;
   }
-  // "Pen 2: blue #0000ff" (several colors on one pen are listed, with a cap so the line stays short).
+  // The comments that name a pen, in the form the dashboard's plotter view reads (`Pen 2: dark green #154c2a`: the
+  // pen number, a color name and the hex code, with the hex last). A pen has one main color; any other colors
+  // on the same pen go in a separate comment, by name only, so they cannot be mistaken for the pen's own color.
   const penColorsOf=(o,pen)=>[...new Set(Object.entries(o.penMap||{}).filter(([,v])=>v===pen).map(([c])=>(o.penColors||{})[c]||c))];
+  const colorWords=c=>/^#[0-9a-f]{6}$/i.test(c)?colorName(c):c;
   const penLabel=(o,pen)=>{
-    const colors=penColorsOf(o,pen),shown=colors.slice(0,3).map(c=>/^#[0-9a-f]{6}$/i.test(c)?colorName(c)+' '+c:c);
-    return 'Pen '+pen+(colors.length?': '+shown.join(', ')+(colors.length>3?' +'+(colors.length-3)+' more':''):'');
+    const colors=penColorsOf(o,pen);
+    return 'Pen '+pen+(colors.length?': '+(/^#[0-9a-f]{6}$/i.test(colors[0])?colorName(colors[0])+' '+colors[0]:colors[0]):'');
   };
+  const penAlso=(o,pen)=>{
+    const colors=penColorsOf(o,pen);if(colors.length<2)return null;
+    return 'Pen '+pen+' also draws '+colors.slice(1,4).map(colorWords).join(', ')+(colors.length>4?' +'+(colors.length-4)+' more':'');
+  };
+  // Everything a G-code file says about one pen: the label, its line width (its own comment, so the dashboard
+  // reads the "0.4 mm" as the pen's width) and the other colors it draws.
+  const penComments=(o,pen)=>[penLabel(o,pen),'Pen '+pen+' line width '+num(penWidthOf(o,pen))+' mm',penAlso(o,pen)].filter(Boolean).map(t=>'('+t+')');
   // 'M0' pauses for a manual pen swap, 'M6' sends T<n> M6, 'files' is handled by gcodeFiles.
   function gcode(job,o) {
     if(o.mode==='knife')return knifeGcode(job,o);
@@ -993,28 +1014,45 @@
     out.push('G0 Z'+num(o.safe));
     if(o.approach!==undefined&&!(Number.isFinite(o.approach)&&o.approach>=0&&o.approach<=50))throw Error('Rapid-down height must be 0-50 mm above the surface.');
     const approachZ=o.mode==='plotter'&&o.approach>0&&o.surface+o.approach<o.safe?o.surface+o.approach:null;
+    // Registration cross: a small + left of and below the artwork. A pen that has just been swapped is centered
+    // on it (G10 L20 sets the work position there), so every pen is aligned to the same mark. The comments
+    // carry no sizes ("N mm"), which the Dashboard would read as a pen width.
+    const reg=o.regCross?job.registration:null,regX=reg&&num(reg.x),regY=reg&&num(reg.y);
+    const regCommand=reg?'G10 L20 P1 X'+regX+' Y'+regY:'';
+    const firstPen=o.regFirstPen!==undefined?o.regFirstPen:(job.pens||[])[0];
+    const crossFor=pen=>reg&&(o.regEvery!==false||pen===firstPen);
+    const crossStrokes=reg?[[{x:reg.x-reg.size/2,y:reg.y},{x:reg.x+reg.size/2,y:reg.y}],[{x:reg.x,y:reg.y-reg.size/2},{x:reg.x,y:reg.y+reg.size/2}]]:[];
+    if(reg)out.push('(Registration cross at X'+regX+' Y'+regY+'. After changing to a new pen, center its tip on the cross and send '+regCommand+'.)');
+    const emitPath=(points,label)=>job.depths.forEach((z,pass)=>{
+      out.push(`(${label} - pass ${pass+1}/${job.depths.length})`);
+      if(enabled)out.push('M5');
+      out.push('G0 Z'+num(o.safe),'G0 X'+num(points[0].x)+' Y'+num(points[0].y));
+      // Rapid (G0) down to just above the surface, then lower the last bit at the lowering feed (G1).
+      if(approachZ!==null&&approachZ>z)out.push('G0 Z'+num(approachZ));
+      out.push('G1 Z'+num(z)+' F'+num(o.plunge));
+      if(enabled)out.push(o.tool+' S'+num(o.power));
+      simplify(points,o.outputTolerance??.01).slice(1).forEach((q,j)=>out.push('G1 X'+num(q.x)+' Y'+num(q.y)+(j===0?' F'+num(o.feed):'')));
+      if(enabled)out.push('M5');
+      out.push('G0 Z'+num(o.safe));
+    });
     let currentPen=null;
     job.paths.forEach((p,i)=>{
-      if(change!=='none'&&p.pen!==currentPen){
+      // A new pen group starts at a pen change; with no pen changes the whole job is one group.
+      const startsGroup=change!=='none'?p.pen!==currentPen:currentPen===null;
+      if(startsGroup){
+        const firstGroup=currentPen===null;
         currentPen=p.pen;
-        // A comment on the line above, and the same message on the pause / tool-change line itself: GRBL
-        // prints "(MSG, ...)" in the console, so the person at the machine sees which pen to load.
-        const label=penLabel(o,p.pen);
-        out.push('G0 Z'+num(o.safe),'('+label+')');
-        out.push((change==='M0'?'M0':'T'+p.pen+' M6')+' (MSG, Load '+label.replace(/^Pen /,'pen ')+')');
+        if(change!=='none'){
+          // Over the cross before the swap, so the person starts the jog from the right place.
+          out.push('G0 Z'+num(o.safe));
+          if(reg&&!firstGroup)out.push('G0 X'+regX+' Y'+regY);
+          out.push(...penComments(o,p.pen));
+          if(reg&&!firstGroup)out.push('(MSG, Register: center the tip on the cross at X'+regX+' Y'+regY+', then send '+regCommand+')');
+          out.push((change==='M0'?'M0':'T'+p.pen+' M6')+' (MSG, Load '+penLabel(o,p.pen).replace(/^Pen /,'pen ')+')');
+        }
+        if(crossFor(p.pen))crossStrokes.forEach((stroke,k)=>emitPath(stroke,'Registration cross '+(k+1)));
       }
-      job.depths.forEach((z,pass)=>{
-        out.push(`(Path ${p.number ?? i+1} - pass ${pass+1}/${job.depths.length})`);
-        if(enabled)out.push('M5');
-        out.push('G0 Z'+num(o.safe),'G0 X'+num(p.points[0].x)+' Y'+num(p.points[0].y));
-        // Rapid (G0) down to just above the surface, then lower the last bit at the lowering feed (G1).
-        if(approachZ!==null&&approachZ>z)out.push('G0 Z'+num(approachZ));
-        out.push('G1 Z'+num(z)+' F'+num(o.plunge));
-        if(enabled)out.push(o.tool+' S'+num(o.power));
-        simplify(p.points,o.outputTolerance??.01).slice(1).forEach((q,j)=>out.push('G1 X'+num(q.x)+' Y'+num(q.y)+(j===0?' F'+num(o.feed):'')));
-        if(enabled)out.push('M5');
-        out.push('G0 Z'+num(o.safe));
-      });
+      emitPath(p.points,'Path '+(p.number??i+1));
     });
     if(enabled)out.push('M5');
     out.push('(End - remains at safe Z)');return modal(out);
@@ -1024,8 +1062,11 @@
     if(o.mode!=='plotter')throw Error('Separate pen files are only available in plotter mode.');
     return (job.pens||[1]).map(pen=>{
       const paths=job.paths.filter(p=>(p.pen??1)===pen);
-      const text=gcode({...job,pens:[pen],paths},{...o,penChange:'none'});
-      return {pen,label:penLabel(o,pen),paths:paths.length,text:'('+penLabel(o,pen)+' only)\n'+text};
+      const text=gcode({...job,pens:[pen],paths},{...o,penChange:'none',regFirstPen:(job.pens||[])[0]});
+      const extra=penColorsOf(o,pen).length-1;
+      const first=pen===(job.pens||[])[0],reg=o.regCross&&job.registration;
+      const note=reg?(first?'(This file draws the registration cross at X'+num(reg.x)+' Y'+num(reg.y)+'. Set work zero as usual.)':'(Before running: center this pen on the registration cross and send G10 L20 P1 X'+num(reg.x)+' Y'+num(reg.y)+')')+'\n':'';
+      return {pen,label:penLabel(o,pen)+(extra>0?' (+'+extra+' color'+(extra===1?'':'s')+')':''),paths:paths.length,text:penComments(o,pen).join('\n')+'\n(This file plots pen '+pen+' only)\n'+note+text};
     });
   }
   const api={colorName,simplify,cleanPoints,bounds,area,depths,transform,plan,gcode,gcodeFiles,hatchLines,clusterColors,offsetPath,removeLoops,dedupeOutlines,insetOutlines,dist,length};

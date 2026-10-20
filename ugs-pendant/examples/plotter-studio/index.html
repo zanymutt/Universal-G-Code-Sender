@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Plotter Studio</title><link rel="stylesheet" href="style.css"></head>
 <body>
-<header><h1>Plotter Studio <small>Preview · 0.5.30</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each color is assigned to a pen; every pen is finished before the next.</p>
+<header><h1>Plotter Studio <small>Preview · 0.5.35</small></h1><p>Plot SVG and DXF artwork with one or more pens. Each color is assigned to a pen; every pen is finished before the next.</p>
 <div class="importBar"><label>SVG or DXF file<input id="file" type="file" accept=".svg,.dxf,image/svg+xml,application/dxf,image/vnd.dxf"></label><button id="example">Load example artwork</button></div></header>
 <div id="busy" hidden role="status" aria-live="polite"><span class="spinner" aria-hidden="true"></span><span id="busyText">Opening SVG…</span><progress id="busyProgress" max="1"></progress><button id="cancelWork" type="button">Cancel</button></div>
 <main>
@@ -69,6 +69,13 @@
 <label class="check"><input id="fillFirst" type="checkbox">Hatch before outlines</label>
 <label class="check"><input id="hideCovered" type="checkbox">Hide lines covered by shapes above (hidden-line removal)</label>
 <label class="check"><input id="skipUnstroked" type="checkbox">Don't outline shapes that have a fill but no stroke</label>
+<h3 class="subhead">Registration</h3>
+<label class="check"><input id="regCross" type="checkbox">Registration cross</label>
+<label>Corner<select id="regCorner"><option value="bl" selected>Bottom left</option><option value="br">Bottom right</option><option value="tl">Top left</option><option value="tr">Top right</option></select></label>
+<div class="pair"><label>X distance outside the artwork (mm)<input id="regMargin" type="number" min="0" max="200" step="1" value="8"></label><label>Y distance outside the artwork (mm)<input id="regMarginY" type="number" min="0" max="200" step="1" value="8"></label></div>
+<label>Cross size (mm)<input id="regSize" type="number" min="1" max="50" step="1" value="6"></label>
+<label class="check"><input id="regEvery" type="checkbox" checked>Every pen draws it (to check the alignment)</label>
+<p class="hint">Plots a small + outside the chosen corner of the artwork, at known coordinates, so you can bring every pen back to the same point after swapping it. Before each pen change the pen moves over the cross; swap the pen, jog its tip onto the center of the cross, send the <b>G10 L20 P1 X.. Y..</b> command shown in the message (it sets the work position to the cross), then resume. With separate files, do the same before running each pen's file. Keep the cross on the paper. With a plain pause (M0), GRBL will not accept jogging while paused; a controller such as FluidNC that handles M6 does.</p>
 <label>Merge duplicate lines within (mm)<input id="dedupeTol" type="number" min="0" max="2" step="0.01" value="0.05"></label>
 <label>Where regions meet<select id="borders"><option value="one" selected>One pen keeps the shared line</option><option value="both">Both pens, each just inside its own region</option></select></label>
 <label>Border inset (mm, 0 = half the pen width)<input id="borderInset" type="number" min="0" max="5" step="0.05" value="0"></label>

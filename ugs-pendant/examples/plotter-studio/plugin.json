@@ -1,7 +1,7 @@
 {
   "name": "Plotter Studio",
   "description": "Pen plotter workflow for SVG and 2D DXF artwork: color-to-pen assignment, multi-pen G-code with M0, M6 or separate files, plus drag-knife and laser modes.",
-  "version": "0.5.30",
+  "version": "0.5.35",
   "entry": "index.html",
   "allowMultipleInstances": false
 }

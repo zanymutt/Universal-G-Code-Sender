@@ -2,9 +2,9 @@
   'use strict';
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
   const importFields=['dpi','spacing','cleanup','curveSegments','tolerance','equalDistance','mergeDistance','joinDistance'];
-  const numeric=['approach','borderInset','dedupeTol','penWidth','outputTolerance','feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
+  const numeric=['regMargin','regMarginY','regSize','approach','borderInset','dedupeTol','penWidth','outputTolerance','feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
   const knifeNumeric=['knifeArcAngle','knifeOffset','knifeSwivelZ','knifePasses','knifeAngle','knifeFeed','knifeLead','knifeHeading'];
-  const choices=['mode','tool','origin','originBounds','order','start','penChange','penOrder','fillSource','dedupeKeep','borders'];
+  const choices=['mode','tool','origin','originBounds','order','start','penChange','penOrder','fillSource','dedupeKeep','borders','regCorner'];
   const tabs=[...document.querySelectorAll('[role=tab]')];
   function showTab(tab){tabs.forEach(t=>{const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;});window.Dropdowns?.refresh();}
   tabs.forEach((tab,i)=>{tab.onclick=()=>showTab(tab);tab.onkeydown=e=>{let index;if(e.key==='ArrowRight')index=(i+1)%tabs.length;else if(e.key==='ArrowLeft')index=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;e.preventDefault();showTab(tabs[index]);tabs[index].focus({preventScroll:true});};});
@@ -17,13 +17,16 @@
   function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
-  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered'].forEach(k=>o[k]=$(k).checked);o.fillAll=o.fillSource==='all';o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.penWidths=Object.fromEntries(Object.entries(penWidths).filter(([,v])=>v>0));o.penThickness={...penThickness};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy',wavycross:'wavycross'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
+  function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered','regCross','regEvery'].forEach(k=>o[k]=$(k).checked);o.fillAll=o.fillSource==='all';o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.penWidths=Object.fromEntries(Object.entries(penWidths).filter(([,v])=>v>0));o.penThickness={...penThickness};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy',wavycross:'wavycross'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
   function message(text,error=false){$('message').textContent=text;$('message').classList.toggle('error',error);}
   $('preview').setAttribute('tabindex','-1');
   function setPick(value){pick=value;$('preview').classList.toggle('picking',!!value);}
   function invalidate(){setPick(null);revision++;code='';generatedFiles=[];$('fileChoiceLabel').hidden=true;$('output').value='';$('save').disabled=true;$('copy').disabled=true;}
   function el(tag,attrs,parent){const n=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))n.setAttribute(k,String(v));parent.append(n);return n;}
   let fitBox=null,viewBox=null;
+  // The preview keeps its zoom and pan across changes. It re-fits only for new artwork, or when a change moves the
+  // artwork itself (scale, rotation, origin), because the old view would then be looking at the wrong place.
+  let freshArtwork=true,lastTransformKey=null,lastImportKey=null;
   function applyView(){if(viewBox)$('preview').setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);$('zoomLevel').textContent=fitBox&&viewBox?Math.round(fitBox.w/viewBox.w*100)+'%':'100%';}
   function colorList(){
     const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0,closed:0});return counts.get(c);};
@@ -40,6 +43,7 @@
     list.forEach(([color,count,fills])=>{
       const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display color for '+color);
       // 'change' fires when the picker is closed; 'input' fires on every drag step and would redraw the whole job each time.
+      useDashboardPicker(swatch);
       swatch.addEventListener('change',()=>{penColors[color]=swatch.value;if($('penOrder').value==='light'||$('penOrder').value==='dark')update();else draw();});
       // The box turns a color off entirely (pen 0) and remembers its pen for turning it back on.
       const plot=document.createElement('input');plot.type='checkbox';plot.checked=penAssign[color]>0;plot.disabled=$('mode').value!=='plotter';
@@ -152,6 +156,8 @@
   const warnBlock=()=>{const w=fillWarnings();return w.length?w.join('\n')+'\n':'';};
   const mergeNote=()=>{const m=job&&job.merged;if(!m||!(m.length>0))return '';return `Merged duplicate lines: ${m.length.toFixed(0)} mm of overlapping outline removed (${m.removed} duplicate path(s) dropped, ${m.trimmed} trimmed); each shared line is plotted once, by ${({dark:'the darkest pen',light:'the lightest pen',first:'the pen plotted first',last:'the pen plotted last'})[$('dedupeKeep').value]||'one pen'}.\n`+(m.emptied&&m.emptied.length?`Pen${m.emptied.length>1?'s':''} ${m.emptied.join(', ')} ${m.emptied.length>1?'have':'has'} nothing left to plot: every line ${m.emptied.length>1?'they':'it'} would draw is already drawn by another pen. Use Fill source to give ${m.emptied.length>1?"them their color":"it its color"} as hatch, or change "A shared line is kept by" to give ${m.emptied.length>1?"them":"it"} the shared lines.\n`:'');};
   const insetNote=()=>{const i=job&&job.inset;if(!i||!i.count)return '';return `Borders: ${i.count} outline${i.count===1?'':'s'} moved just inside ${i.count===1?'its':'their'} own region${i.count===1?'':'s'}`+(i.skipped?`; ${i.skipped} too thin to move`:'')+'.\n';};
+  const BR='\n';
+  const regNote=()=>{const r=job&&job.registration;if(!r||!$('regCross').checked)return '';const x=r.x.toFixed(4).replace(/0+$/,'').replace(/[.]$/,''),y=r.y.toFixed(4).replace(/0+$/,'').replace(/[.]$/,'');return `Registration cross at X${x} Y${y}: after swapping a pen, center its tip on the cross and send G10 L20 P1 X${x} Y${y}.`+BR;};
   const thickNote=()=>{const t=job&&job.thick;if(!t||!t.bands)return '';return `Thick lines: ${t.bands} path(s) drawn as bands, ${t.strokes} strokes in all`+(t.clamped?`; ${t.clamped} closed shape(s) were limited so the inner strokes stay inside the shape`:'')+'.\n';};
   function updateDialogWarn(){
     if($('fillDialog').hidden||fillDialogPen===null)return;
@@ -271,8 +277,8 @@
   }
   function draw(){
     window.Dropdowns?.refresh();
-    const svg=$('preview');svg.replaceChildren();if(!job){el('text',{x:50,y:50,'text-anchor':'middle','font-size':5},svg).textContent='Import SVG or DXF to preview toolpaths';return;}
-    const b=SvgCam.bounds([...job.paths.flatMap(p=>p.points),...(job.knife?[{x:job.knife.bounds.minX,y:job.knife.bounds.minY},{x:job.knife.bounds.maxX,y:job.knife.bounds.maxY}]:[]),{x:0,y:0}]),size=Math.max(b.maxX-b.minX,b.maxY-b.minY,1),pad=size*.08;
+    const svg=$('preview');svg.replaceChildren();if(!job){if(!documentData)svg.setAttribute('viewBox','0 0 100 100');el('text',{x:50,y:50,'text-anchor':'middle','font-size':5},svg).textContent='Import SVG or DXF to preview toolpaths';return;}
+    const b=SvgCam.bounds([...job.paths.flatMap(p=>p.points),...(job.knife?[{x:job.knife.bounds.minX,y:job.knife.bounds.minY},{x:job.knife.bounds.maxX,y:job.knife.bounds.maxY}]:[]),...(job.registration&&$('regCross').checked?[{x:job.registration.x-job.registration.size/2,y:job.registration.y-job.registration.size/2},{x:job.registration.x+job.registration.size/2,y:job.registration.y+job.registration.size/2}]:[]),{x:0,y:0}]),size=Math.max(b.maxX-b.minX,b.maxY-b.minY,1),pad=size*.08;
     fitBox={x:b.minX-pad,y:-b.maxY-pad,w:Math.max(b.maxX-b.minX,1)+2*pad,h:Math.max(b.maxY-b.minY,1)+2*pad};
     if(!viewBox)viewBox={...fitBox};applyView();
     const defs=el('defs',{},svg),marker=el('marker',{id:'arrow',viewBox:'0 0 10 10',refX:8,refY:5,markerWidth:5,markerHeight:5,orient:'auto'},defs);
@@ -308,6 +314,11 @@
       }
       prev=p.points.at(-1);
     });
+    // The registration cross is part of the drawing, so declutter keeps it.
+    if(job.registration&&$('regCross').checked){
+      const r=job.registration,h=r.size/2,cross=el('path',{d:`M ${r.x-h} ${-r.y} H ${r.x+h} M ${r.x} ${-r.y-h} V ${-r.y+h}`,fill:'none',stroke:'var(--plugin-mark)','stroke-width':2,'vector-effect':'non-scaling-stroke','data-registration':'cross'},cutLayer);
+      el('title',{},cross).textContent='Registration cross at X'+r.x.toFixed(2)+' Y'+r.y.toFixed(2);
+    }
     for(const {stroke,w,d} of fillPaths.values())el('path',{d:d.join(''),fill:'none',stroke,...(toScale?{'stroke-width':w,...scaled}:{'stroke-width':1,'vector-effect':'non-scaling-stroke',opacity:.85})},fillLayer);
     if(job.knife&&$('knifeOverlay').checked){
       let previous={x:0,y:0};
@@ -336,10 +347,12 @@
     $('summary').textContent='Recalculating…';updateTimer=setTimeout(update,350);
   }
   function updateNow(){
-    viewBox=null;invalidate();job=null;$('generate').disabled=true;pick=null;
+    const transformKey=[$('scale').value,$('rotation').value,$('origin').value,$('originBounds').value].join('|');
+    if(transformKey!==lastTransformKey){lastTransformKey=transformKey;viewBox=null;}
+    invalidate();job=null;$('generate').disabled=true;pick=null;
     const o=settings();$('depthSettings').hidden=o.mode==='laser';$('laserSettings').hidden=o.mode!=='laser';
     $('knifeSettings').hidden=o.mode!=='knife';$('knifeOverlayControl').hidden=o.mode!=='knife';
-    $('penChange').disabled=o.mode!=='plotter';$('penOrder').disabled=o.mode!=='plotter';$('dedupeTol').disabled=o.mode!=='plotter';$('borders').disabled=o.mode!=='plotter';$('borderInset').disabled=o.mode!=='plotter'||o.borders!=='both';$('approach').disabled=o.mode!=='plotter';$('dedupeKeep').disabled=o.mode!=='plotter'||!(o.dedupeTol>0);$('penSizeRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('button').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRandomAll').disabled=o.mode!=='plotter'||!fillPens.length;['fillSource','fillFirst','skipUnstroked','hideCovered'].forEach(k=>$(k).disabled=o.mode!=='plotter');
+    $('penChange').disabled=o.mode!=='plotter';$('penOrder').disabled=o.mode!=='plotter';$('dedupeTol').disabled=o.mode!=='plotter';$('regCross').disabled=o.mode!=='plotter';for(const id of ['regCorner','regMargin','regMarginY','regSize','regEvery'])$(id).disabled=o.mode!=='plotter'||!o.regCross;$('borders').disabled=o.mode!=='plotter';$('borderInset').disabled=o.mode!=='plotter'||o.borders!=='both';$('approach').disabled=o.mode!=='plotter';$('dedupeKeep').disabled=o.mode!=='plotter'||!(o.dedupeTol>0);$('penSizeRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('penRows').querySelectorAll('input').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRows').querySelectorAll('button').forEach(i=>i.disabled=o.mode!=='plotter');$('fillRandomAll').disabled=o.mode!=='plotter'||!fillPens.length;['fillSource','fillFirst','skipUnstroked','hideCovered'].forEach(k=>$(k).disabled=o.mode!=='plotter');
     $('tool').disabled=o.mode==='knife';$('power').disabled=o.mode==='knife';$('powerMax').disabled=o.mode==='knife';
     if(o.mode==='knife'){$('tool').value='none';o.tool='none';}
     $('knifeSwivelZ').disabled=!o.knifeAlign&&!o.knifeLift;$('knifeLead').disabled=!o.knifeAlign;$('knifeHeading').disabled=!o.knifeAlign;
@@ -354,12 +367,14 @@
       if(job.paths.some(p=>p.id===selected&&!p.fill))$('selected').value=selected;
       const b=job.bounds;
       $('summary').textContent=`${job.paths.length-job.fills} paths${job.fills?` + ${job.fills} hatch lines`:''} · ${(b.maxX-b.minX).toFixed(2)} × ${(b.maxY-b.minY).toFixed(2)} mm · ${job.depths.length} passes/path · travel ${job.travel.toFixed(1)} mm`+(o.mode==='plotter'&&job.pens.length>1?` · ${job.pens.length} pens`:'')+(job.knife?` · ${job.knife.swivels} corner swivels · holder ${(job.knife.bounds.maxX-job.knife.bounds.minX).toFixed(2)} × ${(job.knife.bounds.maxY-job.knife.bounds.minY).toFixed(2)} mm`:'');
-      message(warnBlock()+insetNote()+mergeNote()+thickNote()+(job.hidden&&(job.hidden.trimmed||job.hidden.removed)?`Hidden-line removal trimmed ${job.hidden.trimmed} path(s) and removed ${job.hidden.removed} that were fully covered.
+      message(warnBlock()+regNote()+insetNote()+mergeNote()+thickNote()+(job.hidden&&(job.hidden.trimmed||job.hidden.removed)?`Hidden-line removal trimmed ${job.hidden.trimmed} path(s) and removed ${job.hidden.removed} that were fully covered.
 `:'')+(job.fillOverlaps?`${job.fillOverlaps} pair(s) of filled shapes overlap; each is hatched in full (turn on hidden-line removal to hide covered lines).\n`:'')+(job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
     }catch(e){$('passes').textContent='Check settings';$('summary').textContent='Preview invalid — correct settings before generating.';$('preview').replaceChildren();message(e.message,true);}finally{window.Dropdowns?.refresh();}
   }
   async function importSvg(){
     const request=++loadId;importController?.abort();const controller=new AbortController();importController=controller;
+    const importKey=[$('scale').value,$('rotation').value,$('origin').value,$('originBounds').value,$('dpi').value].join('|');
+    if(freshArtwork||importKey!==lastImportKey){viewBox=null;freshArtwork=false;lastImportKey=importKey;}   // a re-import of the same artwork keeps the view
     const source=svgText,format=fileFormat,options={...Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),joinEndpoints:$('joinEndpoints').checked,dxfUnits:$('dxfUnits').value},started=performance.now();
     busy('Opening '+format.toUpperCase()+'…');
     invalidate();job=null;documentData=null;locks={};directions={};$('generate').disabled=true;$('selected').replaceChildren();renderPens();
@@ -382,7 +397,7 @@
     const file=$('file').files[0];if(!file)return;cancelImport();const request=++loadId;busy('Reading '+file.name+'…');
     invalidate();documentData=null;job=null;$('generate').disabled=true;$('reimport').disabled=true;$('preview').replaceChildren();
     if(file.size>5000000){endBusy();message('File exceeds 5 MB.',true);return;}
-    try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('reimport').disabled=false;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
+    try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('reimport').disabled=false;freshArtwork=true;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
   });
   const isWhite=hex=>/^#[0-9a-f]{6}$/i.test(hex)&&[1,3,5].every(i=>parseInt(hex.slice(i,i+2),16)>=230);
   $('penSkipWhite').onclick=()=>{
@@ -406,14 +421,14 @@
   $('penAllOne').onclick=()=>{assignDefaults(true);renderPens();update();};
   $('reimport').onclick=importSvg;
   $('reimportDxf').onclick=importSvg;
-  function svgExample(){fileFormat='svg';$('dxfControls').hidden=true;$('dpi').disabled=false;}
+  function svgExample(){freshArtwork=true;fileFormat='svg';$('dxfControls').hidden=true;$('dpi').disabled=false;}
   $('example').onclick=()=>{
     svgExample();loadId++;
     svgText='<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="outer" x="5" y="5" width="70" height="50" rx="4"/><circle id="hole" cx="20" cy="20" r="6"/><path id="wave" d="M32 20 C40 5 55 35 65 18 M15 42 Q40 22 65 42"/></svg>';
     $('file').value='';$('reimport').disabled=false;importSvg();
   };
   [...importFields,'dxfUnits','joinEndpoints'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='joinEndpoints')syncEndpointJoinControl();cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
-  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered'].forEach(id=>$(id).addEventListener('input',()=>{
+  [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered','regCross','regEvery'].forEach(id=>$(id).addEventListener('input',()=>{
     if(id==='mode')$('tool').value=$('mode').value==='laser'?'M4':'none';if(id==='fillSource')renderFills();updateSoon();if(id==='penWidth')updateDialogWarn();
   }));
   $('knifeOverlay').onchange=draw;
@@ -426,6 +441,7 @@
   // While the picker is open only the background itself changes (cheap); the redraw and save wait for 'change'.
   $('previewBg').addEventListener('input',()=>{$('preview').style.background=$('previewBg').value;});
   $('previewBg').addEventListener('change',()=>{applyBackground($('previewBg').value);saveBackground();});
+  useDashboardPicker($('previewBg'));
   $('previewBgReset').onclick=()=>{applyBackground(null);saveBackground();};
   $('knifeCalibration').onclick=()=>{
     svgExample();loadId++;svgText='<svg xmlns="http://www.w3.org/2000/svg" width="90mm" height="55mm" viewBox="0 0 90 55"><path id="square" d="M10 10 H30 V30 H10 Z"/><circle id="circle" cx="48" cy="20" r="10"/><path id="triangle" d="M65 30 L75 10 L85 30 Z"/><path id="open-line" d="M10 45 H30"/></svg>';
@@ -545,8 +561,30 @@
       const p=pending.get(event.data.id);if(!p)return;pending.delete(event.data.id);event.data.error?p.reject(Error(event.data.error)):p.resolve(event.data.result);
     }else if(event.data?.type==='fluid-event'&&event.data.event==='theme'){
       applyTheme(event.data.data);
+    }else if(event.data?.type==='fluid-event'&&event.data.event==='color'){
+      const handler=colorHandlers.get(event.data.data?.token);if(handler)handler(event.data.data.color);
     }
   });
+  // The Dashboard offers plugins its own color picker (Fluid.pickColor). It opens beside the control even when the
+  // Dashboard is zoomed, reports each color when the mouse is released rather than on every drag step, and has a
+  // close button. Older Dashboards, and this page opened on its own, do not have it, so those keep the browser's
+  // <input type="color"> (the first refused request switches back to it for good).
+  let dashboardPicker=window.parent!==window?null:false;   // null: not tried yet, true: works, false: not available
+  let colorTokens=0;const colorHandlers=new Map();
+  function useDashboardPicker(input){
+    input.addEventListener('click',event=>{
+      if(input.dataset.native==='1'){delete input.dataset.native;return;}   // our own retry with the browser's picker
+      if(dashboardPicker===false)return;
+      event.preventDefault();
+      const rect=input.getBoundingClientRect(),token=++colorTokens;
+      const apply=color=>{if(typeof color==='string'&&color.toLowerCase()!==input.value.toLowerCase()){input.value=color;input.dispatchEvent(new Event('change',{bubbles:true}));}};
+      colorHandlers.set(token,apply);
+      host('pickColor',{color:input.value,token,x:rect.left,y:rect.top,width:rect.width,height:rect.height})
+        .then(result=>{dashboardPicker=true;apply(result&&result.color);})
+        .catch(()=>{if(dashboardPicker===true)return;dashboardPicker=false;input.dataset.native='1';input.click();})
+        .finally(()=>colorHandlers.delete(token));
+    });
+  }
   function host(method,params={}){
     return new Promise((resolve,reject)=>{const id=++requestId;pending.set(id,{resolve,reject});window.parent.postMessage({type:'fluid-request',id,method,params},'*');});
   }
@@ -573,7 +611,7 @@
     host('subscribe',{event:'theme'}).catch(()=>{});
   }
   let stored={},presets=[];
-  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','fillFirst','skipUnstroked','hideCovered','joinEndpoints',...importFields,'dxfUnits'];
+  const presetFields=[...numeric,...knifeNumeric,...choices,'knifeAlign','knifeLift','inner','largest','reverse','fillFirst','skipUnstroked','hideCovered','regCross','regEvery','joinEndpoints',...importFields,'dxfUnits'];
   const importState=()=>JSON.stringify([...importFields,'dxfUnits'].map(k=>$(k).value).concat($('joinEndpoints').checked));
   function presetList(){
     $('presets').replaceChildren(new Option('Choose a preset',''));

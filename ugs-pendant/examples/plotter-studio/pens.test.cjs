@@ -10,9 +10,9 @@ assert.deepStrictEqual(job.paths.map(p=>p.id),['a','c','b','d']);
 assert.deepStrictEqual(job.paths.map(p=>p.number),[1,2,3,4]);
 let g=core.gcode(job,o);
 assert.strictEqual((g.match(/^M0\b/gm)||[]).length,3);
-assert(/\(Pen 2: blue #0000ff\)\nM0 \(MSG, Load pen 2: blue #0000ff\)/.test(g),'comment above, message on the pause line');
+assert(/\(Pen 2: blue #0000ff\)\n\(Pen 2 line width 0.5 mm\)\nM0 \(MSG, Load pen 2: blue #0000ff\)/.test(g),'comment, line width, then the message on the pause line');
 // M6
-g=core.gcode(job,{...o,penChange:'M6'});assert(/\(Pen 2: blue #0000ff\)\nT2 M6 \(MSG, Load pen 2: blue #0000ff\)/.test(g)&&!/^M0\b/m.test(g));
+g=core.gcode(job,{...o,penChange:'M6'});assert(/\(Pen 2: blue #0000ff\)\n\(Pen 2 line width 0.5 mm\)\nT2 M6 \(MSG, Load pen 2: blue #0000ff\)/.test(g)&&!/^M0\b/m.test(g));
 // two colors sharing a pen: one group, no change
 o={...base,penMap:{'#ff0000':1,'#0000ff':1,'#00ff00':1},penChange:'M0'};job=core.plan(doc,o);
 assert.deepStrictEqual(job.pens,[1]);assert(!/^M0\b/m.test(core.gcode(job,o)));
@@ -134,14 +134,14 @@ assert(/\(Pen 1: red #aa0000\)/.test(core.gcode(core.plan(doc,other),other)));co
 {
   const names=[['#000000','black'],['#ffffff','white'],['#808080','gray'],['#303030','dark gray'],['#d0d0d0','light gray'],['#ff0000','red'],['#aa0000','red'],['#550000','dark red'],['#ff8080','light red'],['#ff8000','orange'],['#804000','brown'],['#ffee00','yellow'],['#00ff00','green'],['#008000','dark green'],['#00ffff','cyan'],['#0000ff','blue'],['#000080','dark blue'],['#8040c0','purple'],['#ff00ff','magenta'],['#ff80c0','light pink']];
   for(const [hex,want] of names)assert.strictEqual(core.colorName(hex),want,hex+' should be '+want+', got '+core.colorName(hex));
-  // several colors on one pen are listed (capped at three), and no comment is ever nested
+  // one main color per pen; the other colors on the same pen are named in a separate comment, and no comment is nested
   const many={...base,penMap:{'#ff0000':1,'#00ff00':1,'#0000ff':1,'#ffee00':1,'#000000':2},penChange:'M0'};
   const doc2={paths:['#ff0000','#00ff00','#0000ff','#ffee00','#000000'].map((c,i)=>sq('s'+i,i*10,c)),page:doc.page};
   const text=core.gcode(core.plan(doc2,many),many);
-  assert(/\(Pen 1: red #ff0000, green #00ff00, blue #0000ff \+1 more\)\nM0 \(MSG, Load pen 1: red #ff0000, green #00ff00, blue #0000ff \+1 more\)/.test(text),'the capped list appears above and on the pause line');
+  assert(/\(Pen 1: red #ff0000\)\n\(Pen 1 line width 0.5 mm\)\n\(Pen 1 also draws green, blue, yellow\)\nM0 \(MSG, Load pen 1: red #ff0000\)/.test(text),'one main color, the others by name in their own comment');
   assert(text.split('\n').filter(l=>l.includes('MSG')||/^\(Pen/.test(l)).every(l=>(l.match(/\(/g)||[]).length<=1),'a comment is never nested');
   // the per-pen files keep a header comment and need no pause
   const o2={...many,penChange:'files'},files=core.gcodeFiles(core.plan(doc2,o2),o2);
-  assert(files[0].text.startsWith('(Pen 1: red #ff0000, green #00ff00, blue #0000ff +1 more only)'));
+  assert(files[0].text.startsWith('(Pen 1: red #ff0000)\n(Pen 1 line width 0.5 mm)\n(Pen 1 also draws green, blue, yellow)\n(This file plots pen 1 only)'));
 }
 console.log('pen messages ok');

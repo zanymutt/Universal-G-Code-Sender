@@ -1,6 +1,6 @@
 # Plotter Studio — Dashboard plugin
 
-Version 0.5.30. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
+Version 0.5.35. A fork of the **SVG to G-code** plugin (0.7.2) aimed at pen plotting. The original `svg-to-gcode` plugin is unchanged and still installs separately; this one has its own id (`plotter-studio`), its own saved presets, and is where new plotter features go. Everything the original does (SVG and 2D DXF import, drag knife, laser, ordering, endpoint joining, presets, Save As) still works the same way; see `../svg-to-gcode/README.md` for those details.
 
 It generates millimeter, absolute-coordinate G-code for inspection in the UGS Dashboard. It never sends machine commands or starts a job.
 
@@ -117,6 +117,28 @@ Such art has no overlap: every region is cut to exactly its visible area, and th
 
 The **Declutter** checkbox above the preview hides everything that is not the drawing itself: the path numbers, the start and end points, the direction arrows and the dashed rapid (pen-up) moves between paths (and the holder's travel moves in knife mode). The outlines, hatch and fills, the knife holder overlay and the red origin cross stay. The setting is remembered between sessions and only affects the preview, never the G-code.
 
+## Pen widths for the dashboard, and its color picker (0.5.31, 0.5.32)
+
+- **0.5.31, pen width in the G-code:** the Dashboard's plotter (paper) view reads each pen's name, color and line width from G-code comments, so each pen change now carries them in the form it understands: `(Pen 2: dark green #154c2a)` (the pen number, a color name and the hex code, hex last), then `(Pen 2 line width 0.3 mm)` as its own comment (the pen's own width from the Pens tab, else the default pen width), then `T2 M6 (MSG, Load pen 2: dark green #154c2a)` or the `M0` form. A pen that holds several colors names its main (first) color on the first line and lists the others, by name only, in a separate `(Pen 2 also draws red, blue)` comment, so they cannot be mistaken for the pen's own color. The per-pen files start with the same comments plus `(This file plots pen 2 only)`. A test (`node dashboard.test.cjs`) runs the dashboard's real `scanTools` parser on the output and checks the tool changes, colors, names and widths it reads; it is skipped if the dashboard sources are not present. Note the dashboard only sees a pen change as a tool change when the file has `T<n> M6` lines, so use the tool-change option rather than the plain pause if you want its simulation to stop at each pen.
+- **0.5.32, the dashboard's color picker:** the pen color swatches and the preview background swatch open the Dashboard's own picker (`Fluid.pickColor`) when it is there: it opens beside the swatch even when the Dashboard is zoomed, reports a color each time you let go rather than for every drag step, and has a close button. On an older Dashboard, or when the page is opened on its own, the first request is refused and the swatches fall back to the browser's picker.
+
+## Registration cross (0.5.33)
+
+Pens never go back in a holder in exactly the same place, so colors drawn by different pens can end up a few tenths of a millimeter out of register. **Registration cross** (Pens tab) adds a small + to the job, left of and below the artwork (**Distance from the artwork**, default 8 mm; **Cross size**, default 6 mm), at known work coordinates, so every pen can be brought back to the same point:
+
+- **One program with tool changes** (`T<n> M6`, or the pause): the first pen plots the cross. Before each later pen change the pen lifts and moves over the cross, and the message gives the exact command, for example `Register: center the tip on the cross at X-8 Y-8, then send G10 L20 P1 X-8 Y-8`. Swap the pen, jog its tip onto the center of the cross, send that command (it tells the controller the tip is at the cross, shifting the work position to match), and resume. After the change the pen draws the cross again, on top of the first one, so a pen that is still off shows as a doubled mark. Untick **Every pen draws it** if you want only the first pen to draw it.
+- **Separate file per pen:** the first pen's file draws the cross and says so in its header; each other file's header says to center the pen on the cross and send the `G10 L20 P1` command before running it, and (with **Every pen draws it**) starts by plotting the cross for a visual check.
+- **Notes:** keep the cross on the paper (make the distance fit your margin). The comments never contain sizes in millimeters, which the Dashboard would read as a pen width. GRBL does not accept jogging during an `M0` hold, so use a controller that handles `M6` (FluidNC does) or the separate files. The cross is shown in the preview (and kept by Declutter), and the message area gives its coordinates and the command.
+
+## The preview keeps its view (0.5.34)
+
+Zoom and pan now stay put when you change a setting (fills, pens, borders, pen width and so on), so you can stay zoomed in on a detail while you adjust it. The view re-fits to the drawing only when the artwork changes (a new file, the example or the calibration drawing) or when a change moves the artwork itself (scale, rotation, origin or origin bounds), because the old view would then be looking at the wrong place. Re-importing the same file (Reimport, or a preset that changes the import settings) keeps the view too. The **Fit** button always re-fits.
+
+## Registration corner, and hatch gap with both pens (0.5.35)
+
+- **Registration cross corner:** choose bottom or top, left or right, and set the **X** and **Y** distance outside the artwork separately (default bottom left, 8 mm each).
+- **Hatch gap with "Both pens, each just inside its own region":** the hatch gap is now measured from the moved outline, not the original region edge. The hatch stops its **Gap** short of the outline's inner side (inset plus half the outline pen's width), so hatch tips no longer merge into the outline. Only applies in that mode.
+
 ## Install
 
 Copy these files into `~/.ugs/dashboard-plugins/plotter-studio/` on the computer running UGS:
@@ -127,6 +149,6 @@ Then reload Dashboard and choose **Plotter Studio** under Plugins. No Platform r
 
 ## Development and validation
 
-No dependencies or build step. Run `node pens.test.cjs` (pen grouping, M0/M6/files output, skip, shared pens, DXF color), `node fill.test.cjs` (hatch geometry, gap, holes, ordering), `node thick.test.cjs` (thick lines and pen order), `node large.test.cjs` (a detailed drawing that used to exceed the containment limit), `node dedupe.test.cjs` (duplicate-line merging), `node inset.test.cjs` (approach height and region insets), plus `core.test.cjs`, `knife.test.cjs`, `dxf.test.cjs`, `geometry.test.cjs` and `cleanup.test.cjs`. `preview-host.html` runs the plugin sandboxed and simulates the Save As bridge without writing a file or contacting a controller.
+No dependencies or build step. Run `node pens.test.cjs` (pen grouping, M0/M6/files output, skip, shared pens, DXF color), `node fill.test.cjs` (hatch geometry, gap, holes, ordering), `node thick.test.cjs` (thick lines and pen order), `node large.test.cjs` (a detailed drawing that used to exceed the containment limit), `node dashboard.test.cjs` (runs the Dashboard's own pen-comment parser on the G-code), `node registration.test.cjs` (the registration cross), `node dedupe.test.cjs` (duplicate-line merging), `node inset.test.cjs` (approach height and region insets), plus `core.test.cjs`, `knife.test.cjs`, `dxf.test.cjs`, `geometry.test.cjs` and `cleanup.test.cjs`. `preview-host.html` runs the plugin sandboxed and simulates the Save As bridge without writing a file or contacting a controller.
 
 Not validated: a physical multi-pen plot, M6 on a real controller, and the real Dashboard Save As dialog for this plugin.
