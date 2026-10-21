@@ -284,6 +284,24 @@ try {
 }
 ```
 
+### `pickColor(options)`
+
+Opens the dashboard's own color picker (a saturation/brightness square, a hue slider and a hex box) beside one of your controls. Use it instead of `<input type="color">`: the browser's picker is drawn outside the page, so under the dashboard's zoom it opens in the wrong place, and your page never hears when the mouse is released in it - a preview that repaints for every step of a drag stutters.
+
+The call resolves **when the picker closes** (its x button, Esc, or the person clicking back into your plugin) with `{ color }`: the last color the person settled on, or `{ color: null }` if they closed it without choosing one. While it is open, `onChange` is called each time they **let go** of the mouse or finger on a color (or enter a hex code, or press an arrow key) - never for the steps of a drag, so it is the moment to update your preview.
+
+```js
+const swatch = document.getElementById("penColor");
+const { color } = await Fluid.pickColor({
+  color: "#336699",            // where it starts (a "#rrggbb" string)
+  anchor: swatch,              // an element, or { x, y, width, height } in your page's pixels; omit it to open in the middle
+  onChange: c => redraw(c),    // each time they release on a color, while it is still open
+});
+if (color) saveSetting(color);
+```
+
+Only one can be open at a time: a second call while one is pending rejects. The `sdk.js` in the `rotate-gcode` and `thc` examples has `pickColor` built in. A plugin with its own bridge needs two things: send `call("pickColor", { color, token, x, y, width, height })` with a unique `token`, and handle the `{ type: "fluid-event", event: "color", data: { token, color } }` messages that arrive while it is open (match `data.token` to yours).
+
 ### `getFileStatus()`
 
 Returns the currently loaded file's name and send progress. Separate from `getStatus()` because this isn't controller state - it's the backend's own tracking of the file it's sending.
