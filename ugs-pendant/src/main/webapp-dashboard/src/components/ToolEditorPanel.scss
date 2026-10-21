@@ -2,6 +2,9 @@
 // ToolEditorPanel.tsx (left/top/width/max-height), fixed inside .app. One above
 // the stock settings popover (60), still under nothing it needs to cover.
 .toolEditorPanel {
+  // Room for the Reset and Delete buttons side by side: 2 x 32px and a gap, or 2 x 44px for a finger.
+  // (A fixed 72px let the touch-size buttons spill left over the last input.)
+  --tool-editor-actions-width: 72px;
   position: fixed;
   z-index: 61;
   box-sizing: border-box;
@@ -73,7 +76,7 @@
   // .toolEditorFields is display: contents, so its cells sit in those columns.
   .toolEditorRow {
     display: grid;
-    grid-template-columns: 112px minmax(140px, 1.6fr) repeat(4, minmax(64px, 1fr)) 72px;
+    grid-template-columns: 112px minmax(140px, 1.6fr) repeat(4, minmax(64px, 1fr)) var(--tool-editor-actions-width);
     align-items: center;
     column-gap: 8px;
     padding: 4px 6px;
@@ -93,7 +96,7 @@
 
   // The pen table: pen, name and line width instead of the cutter's columns.
   &.toolEditorPens .toolEditorRow {
-    grid-template-columns: 112px minmax(100px, 1.6fr) minmax(90px, 1fr) 72px;
+    grid-template-columns: 112px minmax(100px, 1.6fr) minmax(90px, 1fr) var(--tool-editor-actions-width);
   }
 
   .toolEditorPenName {
@@ -211,6 +214,8 @@
 
   // Touch: 44px targets.
   @media (any-pointer: coarse) {
+    --tool-editor-actions-width: 100px;
+
     .toolEditorHeader .btn,
     .toolEditorActions .btn {
       min-width: 44px;

@@ -1,14 +1,34 @@
 import { RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Button, Form } from "react-bootstrap";
+import { Button, ButtonGroup, Form } from "react-bootstrap";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faXmark } from "@fortawesome/free-solid-svg-icons";
-import { fractionInBox, Hsv, hexToHsv, hsvToHex, hueColor, normalizeHex } from "../utils/colorUtils";
+import { faEyeDropper, faXmark } from "@fortawesome/free-solid-svg-icons";
+import { fractionInBox, Hsv, hexToHsv, hexToRgb, hsvToHex, hueColor, normalizeHex, rgbToHex } from "../utils/colorUtils";
 import { layoutRect, layoutScale } from "../utils/layoutRect";
 import { Box, placePopover } from "../utils/placePopover";
 import "./ColorPicker.scss";
 
-const POPOVER_WIDTH = 232;
+const POPOVER_WIDTH = 252;
+
+// Whether the numbers are shown as one hex code or as red / green / blue, remembered for next time.
+type Mode = "hex" | "rgb";
+const MODE_STORAGE_KEY = "ugs.dashboard.colorPickerMode";
+const readMode = (): Mode => {
+  try {
+    return window.localStorage.getItem(MODE_STORAGE_KEY) === "rgb" ? "rgb" : "hex";
+  } catch {
+    return "hex";
+  }
+};
+const rgbStrings = (hex: string): [string, string, string] => hexToRgb(hex).map(String) as [string, string, string];
+
+// The browser's eyedropper (Chrome and Edge on a secure context such as localhost; not Firefox, Safari or
+// Android): click any pixel on the screen, in or out of the browser.
+type EyeDropperLike = { open: () => Promise<{ sRGBHex: string }> };
+const eyeDropperConstructor = (): (new () => EyeDropperLike) | null =>
+  typeof window !== "undefined" && "EyeDropper" in window
+    ? (window as unknown as { EyeDropper: new () => EyeDropperLike }).EyeDropper
+    : null;
 
 type Drag = "sv" | "hue" | null;
 
@@ -55,6 +75,11 @@ export const ColorPickerPopover = ({
 }: PopoverProps) => {
   const [hsv, setHsv] = useState<Hsv>(() => hexToHsv(value));
   const [hexText, setHexText] = useState(value);
+  const [rgbText, setRgbText] = useState<[string, string, string]>(() => rgbStrings(value));
+  const [mode, setMode] = useState<Mode>(readMode);
+  // True while the eyedropper is open: the page loses focus to it, which must not close the picker.
+  const picking = useRef(false);
+  const EyeDropper = eyeDropperConstructor();
   const popoverRef = useRef<HTMLDivElement>(null);
   const squareRef = useRef<HTMLDivElement>(null);
   const hueRef = useRef<HTMLDivElement>(null);
@@ -69,6 +94,7 @@ export const ColorPickerPopover = ({
     latest.current.hsv = next;
     setHsv(next);
     setHexText(hsvToHex(next));
+    setRgbText(rgbStrings(hsvToHex(next)));
     latest.current.onLive?.(hsvToHex(next));
   };
   // The last color committed, so the same color isn't handed on twice (the opening value to begin with).
@@ -120,7 +146,9 @@ export const ColorPickerPopover = ({
         latest.current.onClose("outside");
       }
     };
-    const onBlur = () => latest.current.onClose("blur");
+    const onBlur = () => {
+      if (!picking.current) latest.current.onClose("blur");
+    };
     document.addEventListener("pointerdown", onPointerDown, true);
     window.addEventListener("resize", place);
     if (closeOnWindowBlur) window.addEventListener("blur", onBlur);
@@ -186,16 +214,53 @@ export const ColorPickerPopover = ({
     event.preventDefault();
   };
 
-  const commitHex = () => {
-    const hex = normalizeHex(hexText);
-    if (!hex) {
-      setHexText(hsvToHex(latest.current.hsv));
-      return;
-    }
+  // Takes a typed or picked color as the new one: shown, and committed.
+  const applyHex = (hex: string) => {
     const next = hexToHsv(hex);
     // A gray has no hue of its own: keep the one the slider was on.
     show(next.s === 0 || next.v === 0 ? { ...next, h: latest.current.hsv.h } : next);
     commit(next);
+  };
+
+  const commitHex = () => {
+    const hex = normalizeHex(hexText);
+    if (hex) applyHex(hex);
+    else setHexText(hsvToHex(latest.current.hsv));
+  };
+
+  // Red, green and blue: each 0-255 (a decimal is rounded, a number outside is brought into range); anything
+  // that isn't a number puts the boxes back to the current color.
+  const commitRgb = () => {
+    const channels = rgbText.map((text) => (text.trim() === "" ? NaN : Number(text)));
+    if (channels.some((channel) => !Number.isFinite(channel))) {
+      setRgbText(rgbStrings(hsvToHex(latest.current.hsv)));
+      return;
+    }
+    applyHex(rgbToHex(channels[0], channels[1], channels[2]));
+  };
+
+  const chooseMode = (next: Mode) => {
+    setMode(next);
+    try {
+      window.localStorage.setItem(MODE_STORAGE_KEY, next);
+    } catch {
+      // Not remembering the choice is fine.
+    }
+  };
+
+  const pickFromScreen = async () => {
+    if (!EyeDropper || picking.current) return;
+    picking.current = true;
+    try {
+      const picked = await new EyeDropper().open();
+      const hex = normalizeHex(picked.sRGBHex);
+      // Clicking a pixel is a release: the color is settled on.
+      if (hex) applyHex(hex);
+    } catch {
+      // Escape, or the browser refused: nothing was picked.
+    } finally {
+      picking.current = false;
+    }
   };
 
   return createPortal(
@@ -216,9 +281,30 @@ export const ColorPickerPopover = ({
     >
       <div className="colorPickerHeader">
         <strong>Color</strong>
-        <Button size="sm" variant="outline-secondary" aria-label="Close color picker" title="Close" onClick={() => onClose("button")}>
-          <FontAwesomeIcon icon={faXmark} />
-        </Button>
+        <span className="colorPickerTools">
+          <ButtonGroup size="sm" aria-label="Show the color as">
+            <Button variant={mode === "hex" ? "secondary" : "outline-secondary"} aria-pressed={mode === "hex"} onClick={() => chooseMode("hex")}>
+              Hex
+            </Button>
+            <Button variant={mode === "rgb" ? "secondary" : "outline-secondary"} aria-pressed={mode === "rgb"} onClick={() => chooseMode("rgb")}>
+              RGB
+            </Button>
+          </ButtonGroup>
+          {EyeDropper && (
+            <Button
+              size="sm"
+              variant="outline-secondary"
+              aria-label="Pick a color from the screen"
+              title="Pick a color from anywhere on the screen"
+              onClick={pickFromScreen}
+            >
+              <FontAwesomeIcon icon={faEyeDropper} />
+            </Button>
+          )}
+          <Button size="sm" variant="outline-secondary" aria-label="Close color picker" title="Close" onClick={() => onClose("button")}>
+            <FontAwesomeIcon icon={faXmark} />
+          </Button>
+        </span>
       </div>
       <div
         ref={squareRef}
@@ -261,6 +347,37 @@ export const ColorPickerPopover = ({
           <span className="colorPickerChip" style={{ backgroundColor: value }} title="Starting color" />
           <span className="colorPickerChip" style={{ backgroundColor: shown }} title="New color" />
         </span>
+        {mode === "rgb" ? (
+          <span className="colorPickerRgb">
+            {(["Red", "Green", "Blue"] as const).map((name, index) => (
+              <Form.Control
+                key={name}
+                size="sm"
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={255}
+                step={1}
+                aria-label={name}
+                title={name}
+                value={rgbText[index]}
+                onChange={(event) => {
+                  const next = [...rgbText] as [string, string, string];
+                  next[index] = event.target.value;
+                  setRgbText(next);
+                }}
+                onBlur={commitRgb}
+                onKeyDown={(event) => {
+                  // Enter commits itself: a blur only follows when the page has focus.
+                  if (event.key === "Enter") {
+                    commitRgb();
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            ))}
+          </span>
+        ) : (
         <Form.Control
           size="sm"
           className="colorPickerHex"
@@ -279,6 +396,7 @@ export const ColorPickerPopover = ({
             }
           }}
         />
+        )}
       </div>
     </div>,
     document.querySelector(".app") ?? document.body

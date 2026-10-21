@@ -38,11 +38,25 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 8px;
 
     .btn {
       min-width: 28px;
       min-height: 28px;
       padding: 0;
+    }
+  }
+
+  // The Hex / RGB switch, the eyedropper and the close button.
+  .colorPickerTools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .btn-group .btn {
+      min-width: 38px;
+      padding: 0 8px;
+      font-size: 0.8rem;
     }
   }
 
@@ -110,6 +124,30 @@
     font-family: var(--bs-font-monospace, monospace);
   }
 
+  // Red, green and blue side by side: no spin buttons, they would eat half of each box.
+  .colorPickerRgb {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    gap: 6px;
+
+    .form-control {
+      flex: 1 1 0;
+      min-width: 0;
+      padding: 2px 4px;
+      text-align: center;
+      font-family: var(--bs-font-monospace, monospace);
+      appearance: textfield;
+      -moz-appearance: textfield;
+
+      &::-webkit-outer-spin-button,
+      &::-webkit-inner-spin-button {
+        margin: 0;
+        -webkit-appearance: none;
+      }
+    }
+  }
+
   // Touch: bigger things to grab.
   @media (any-pointer: coarse) {
     .colorPickerSquare {
@@ -128,9 +166,20 @@
     }
 
     .colorPickerHeader .btn,
-    .colorPickerHex {
+    .colorPickerHex,
+    .colorPickerRgb .form-control {
       min-height: 44px;
       min-width: 44px;
+    }
+
+    // Three 44px boxes would not fit beside the preview chips in a 252px pop-up.
+    .colorPickerRgb .form-control {
+      min-width: 0;
+    }
+
+    // Touch-sized buttons: three of them no longer fit beside the title.
+    .colorPickerHeader {
+      flex-wrap: wrap;
     }
   }
 }
