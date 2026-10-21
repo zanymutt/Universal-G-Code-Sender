@@ -20,10 +20,23 @@
   color: var(--dashboard-text);
 }
 
+// Where the person has dragged it to: placed by left/top inline, so the centering transform goes.
+.toolChangePrompt.toolChangePromptMoved {
+  transform: none;
+}
+
+// The drag handle.
 .toolChangePromptHeader {
   display: flex;
   align-items: center;
   gap: 10px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 
 .toolChangePromptTitle {
