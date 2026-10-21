@@ -1,0 +1,18 @@
+{
+  "name": "UGS Dashboard",
+  "short_name": "UGS",
+  "description": "Touchscreen dashboard for Universal Gcode Sender",
+  "start_url": "/dashboard/",
+  "scope": "/dashboard/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#1c1e1f",
+  "theme_color": "#1c1e1f",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

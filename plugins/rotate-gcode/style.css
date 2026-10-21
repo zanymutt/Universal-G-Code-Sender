@@ -1,0 +1,120 @@
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+:root {
+  /* Overwritten from Fluid.getTheme()/onThemeChange (see app.js's applyTheme)
+     to match the dashboard's own theme and accent color once the plugin
+     bridge responds - these literals are just the standalone/offline look. */
+  --plugin-bg: #171a1d;
+  --plugin-surface: #101417;
+  --plugin-surface-raised: #252c32;
+  --plugin-border: #394149;
+  --plugin-border-strong: #46515b;
+  --plugin-text: #e6ebf0;
+  --plugin-text-muted: #94a1ad;
+  --plugin-accent: #8dbbff;
+}
+body {
+  margin: 0;
+  min-width: 560px;
+  overflow: hidden;
+  background: var(--plugin-bg);
+  color: var(--plugin-text);
+  font: 14px/1.35 system-ui, sans-serif;
+}
+button, input, select, textarea { font: inherit; }
+button {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--plugin-border-strong);
+  border-radius: 5px;
+  background: var(--plugin-surface-raised);
+  color: inherit;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { border-color: var(--plugin-accent); }
+button:disabled { cursor: default; opacity: .45; }
+button.primary { border-color: var(--plugin-accent); background: var(--plugin-accent); color: var(--plugin-surface); }
+button.danger { border-color: #a35a5a; }
+input, select, textarea {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--plugin-border-strong);
+  border-radius: 5px;
+  background: var(--plugin-surface);
+  color: inherit;
+  padding: 7px 8px;
+}
+input[type=range] { padding: 0; accent-color: var(--plugin-accent); }
+label { display: flex; min-width: 0; flex-direction: column; gap: 5px; color: var(--plugin-text-muted); }
+.app { height: 100%; display: grid; grid-template-columns: minmax(250px, 330px) minmax(260px, 1fr); gap: 14px; padding: 10px; }
+.settings, .previewCard, .codeCard { min-width: 0; min-height: 0; border: 1px solid var(--plugin-border-strong); border-radius: 7px; background: var(--plugin-surface-raised); }
+.settings { display: flex; flex-direction: column; overflow: hidden; }
+.tabs { display: flex; flex-wrap: wrap; gap: 3px; padding: 7px; border-bottom: 1px solid var(--plugin-border-strong); background: var(--plugin-surface-raised); }
+.tabs button { min-height: 32px; flex: 1 1 auto; padding: 5px 8px; border-color: transparent; background: transparent; }
+.tabs button[aria-selected=true] { border-color: var(--plugin-accent); background: var(--plugin-surface); }
+.settingsBody { min-width: 0; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 10px; }
+.settingsBody fieldset { min-width: 0; max-width: 100%; margin: 0 0 10px; padding: 10px; border: 1px solid var(--plugin-border-strong); border-radius: 6px; }
+.settingsBody fieldset:last-child { margin-bottom: 0; }
+.settingsBody legend { padding: 0 5px; color: var(--plugin-text); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; min-width: 0; }
+.row > * { flex: 1 1 140px; min-width: 0; }
+.stack { display: flex; flex-direction: column; gap: 9px; }
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; }
+.check { flex-direction: row; align-items: center; gap: 7px; padding: 7px 8px; border: 1px solid var(--plugin-border-strong); border-radius: 5px; }
+.check input { width: auto; }
+.hint, .muted { color: var(--plugin-text-muted); font-size: 12px; }
+.hint { overflow-wrap: anywhere; }
+.fileInfo, .summary { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--plugin-text-muted); }
+.work { min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, var(--split, 58%)) 8px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); gap: 0; }
+.previewCard, .codeCard { display: flex; flex-direction: column; overflow: hidden; }
+.cardHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 9px; border-bottom: 1px solid var(--plugin-border-strong); background: var(--plugin-surface-raised); }
+.cardHeader h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.toolbar { display: flex; align-items: center; gap: 5px; }
+.toolbar button { min-height: 28px; padding: 3px 8px; }
+.summary { flex: none; max-height: 62px; overflow: auto; padding: 7px 9px; font-size: 12px; }
+/* The preview's own cut/rapid/axis/origin stroke colors are toolpath
+   visualization, not UI chrome - left fixed, same reasoning as the
+   dashboard's own 3D visualizer staying constant across themes. */
+#preview { display: block; flex: 1; min-height: 60px; width: 100%; touch-action: none; background: var(--plugin-surface); cursor: grab; }
+#preview:active { cursor: grabbing; }
+#preview.picking { cursor: crosshair; }
+#preview .cut { fill: none; stroke: #91cf9e; stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+#preview .rapid { fill: none; stroke: #d99b55; stroke-width: 1; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+#preview .axis { stroke: #607080; stroke-width: 1; vector-effect: non-scaling-stroke; }
+#preview .origin { stroke: #ff7272; stroke-width: 1.8; vector-effect: non-scaling-stroke; }
+#divider { cursor: col-resize; background: var(--plugin-border-strong); }
+#divider:hover { background: var(--plugin-accent); }
+.codeCard textarea { flex: 1; min-height: 0; resize: none; border: 0; border-radius: 0; background: var(--plugin-surface); color: var(--plugin-text); font: 12px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; }
+.status { min-height: 22px; margin: 0; padding: 6px 9px; color: var(--plugin-text-muted); font-size: 12px; }
+.status.error { color: #ff9b9b; }
+.presetList { max-height: 150px; overflow: auto; padding: 0; margin: 0; list-style: none; }
+.presetList li { display: flex; align-items: center; gap: 5px; padding: 4px 0; }
+.presetList li button:first-child { flex: 1; text-align: left; }
+#anglePresets { display: grid; grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); width: 100%; }
+#anglePresets button { min-width: 0; width: 100%; padding-left: 5px; padding-right: 5px; }
+/* Narrower than 1000px the settings stay on the left and the preview stacks above the generated G-code (the
+   same as the Nesting and SVG plugins); the divider turns into a horizontal bar. --split is set by dragging the
+   divider (app.js) for either direction, so it never overrides these layouts. */
+@media (max-width: 1000px) {
+  .app { grid-template-columns: minmax(200px, 250px) minmax(260px, 1fr); }
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, var(--split, 58%)) 8px minmax(0, 1fr); }
+  #divider { cursor: row-resize; }
+}
+/* Narrower than 850px everything stacks: settings, then the preview and G-code at a fixed height. */
+@media (max-width: 850px) {
+  body { min-width: 360px; overflow: auto; }
+  .app { height: auto; min-height: 100%; grid-template-columns: 1fr; grid-template-rows: auto 680px; }
+  .settings { max-height: none; }
+  .work { min-height: 680px; }
+}
+
+/* Dropdowns (dropdowns.js): the select is hidden and replaced by a button, and its list is drawn inside this
+   page, so it scales with the dashboard's zoom instead of the browser's native pop-up, which does not. */
+.selectBacking { display: none !important; }
+.selectButton { width: 100%; text-align: left; padding-right: 26px; position: relative; white-space: normal; overflow-wrap: anywhere; min-height: 38px; }
+.selectButton:after { content: "▾"; position: absolute; right: 8px; top: 10px; }
+.selectMenu { position: fixed; z-index: 1000; overflow: auto; overscroll-behavior: contain; background: var(--plugin-surface-raised); border: 1px solid var(--plugin-accent); border-radius: 5px; box-shadow: 0 6px 20px #0008; padding: 3px; scrollbar-gutter: stable; }
+.selectOption { padding: 9px 10px; border-radius: 3px; white-space: normal; overflow-wrap: anywhere; color: var(--plugin-text); cursor: pointer; min-height: 36px; }
+.selectOption:hover, .selectOption.active { background: color-mix(in srgb, var(--plugin-accent) 28%, var(--plugin-surface-raised)); }
+.selectOption[aria-selected=true] { font-weight: 600; color: var(--plugin-accent); }
+.selectOption[aria-disabled=true] { opacity: .4; cursor: default; }
