@@ -91,6 +91,9 @@ import java.util.List;
  * @author wwinder
  */
 public class GrblControllerTest {
+    // An update interval so long that the status poll timer never fires within a test.
+    private static final int STATUS_POLL_NEVER_MS = 3_600_000;
+
     public static final String VERSION_GRBL_1_1F = "1.1f";
     public static final String VERSION_GRBL_0_9 = "0.9";
     public static final String VERSION_GRBL_0_8 = "0.8";
@@ -600,6 +603,9 @@ public class GrblControllerTest {
         // 2nd cancel is from a soft reset.
         this.mgc = new MockGrblCommunicator();
         GrblController instance = initializeAndConnectController(VERSION_GRBL_0_8C);
+        // The poll timer starts with an interval of 0, so it would send a "?" every time a status reply re-arms
+        // it, racing the byte counts checked below. A long interval keeps it from firing during the test.
+        instance.setStatusUpdateRate(STATUS_POLL_NEVER_MS);
         instance.setStatusUpdatesEnabled(true);
         List<GcodeCommand> commands = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
@@ -657,6 +663,9 @@ public class GrblControllerTest {
         // Add 30 commands, start send, cancel after sending 15. (Grbl 0.8c)
         this.mgc = new MockGrblCommunicator();
         GrblController instance = initializeAndConnectController(VERSION_GRBL_0_8C);
+        // The poll timer starts with an interval of 0, so it would send a "?" every time a status reply re-arms
+        // it, racing the byte counts checked below. A long interval keeps it from firing during the test.
+        instance.setStatusUpdateRate(STATUS_POLL_NEVER_MS);
         instance.setStatusUpdatesEnabled(true);
         List<GcodeCommand> commands = new ArrayList<>();
         for (int i = 0; i < 30; i++) {
@@ -688,6 +697,9 @@ public class GrblControllerTest {
     public void cancelSendOnDoorStateShouldCancelCommandAndIssueReset() throws Exception {
         this.mgc = new MockGrblCommunicator();
         GrblController instance = initializeAndConnectController(VERSION_GRBL_1_1F);
+        // The poll timer starts with an interval of 0, so it would send a "?" every time a status reply re-arms
+        // it, racing the byte counts checked below. A long interval keeps it from firing during the test.
+        instance.setStatusUpdateRate(STATUS_POLL_NEVER_MS);
         instance.setStatusUpdatesEnabled(true);
         instance.rawResponseHandler("<Door|MPos:0.000,0.000,0.000|FS:0,0|Pn:XYZ>");
         mgc.sentBytes.clear();
