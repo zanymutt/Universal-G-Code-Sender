@@ -42,6 +42,17 @@ const page=rect(0,0,20,10);
   const edgeA=a.points.filter(p=>Math.abs(p.x-9.75)<1e-9);assert(edgeA.length>=2);
   assert(b.points.every(p=>dseg(p,{x:9.75,y:0},{x:9.75,y:10})>.2),'B never comes within a line width of A\'s edge');
 }
+
+// ---- Both pens remain available when hidden-line removal clips a small overlap
+{
+  // The upper region covers the last 0.1 mm of A. Its edge is still outside A's
+  // inset line, so both regions have a visible, closed border to plot.
+  const A=shape('A-overlap',rect(0,0,10,10),'#101010',1),B=shape('B-overlap',rect(9.9,0,20,10),'#ffee00',2);
+  const job=core.plan({paths:[A,B],page:rect(0,0,20,10)},{...base,penMap:{'#101010':1,'#ffee00':2},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0});
+  assert.strictEqual(job.inset.count,2,'both region outlines are inset before clipping');
+  assert(job.paths.some(p=>p.id==='A-overlap'&&p.closed),'the lower region keeps a closed inset outline');
+  assert(job.paths.some(p=>p.id==='B-overlap'&&p.closed),'the upper region keeps its closed inset outline');
+}
 // ---- a ring: the outer edge moves in, the hole's edge moves away from the hole (both into the filled ring)
 {
   const ring=[shape('outer',rect(0,0,20,20),'#101010',1),shape('hole',rect(6,6,14,14),'#101010',1)];
@@ -54,6 +65,33 @@ const page=rect(0,0,20,10);
   const cw=shape('cw',rect(0,0,10,10).reverse(),'#101010',1);
   const j2=core.plan({paths:[cw],page:rect(0,0,10,10)},{...base,penMap:{'#101010':1},penWidth:.5,borders:'both'});
   const bb2=core.bounds(j2.paths[0].points);assert(Math.abs(bb2.minX-.25)<1e-9&&Math.abs(bb2.maxX-9.75)<1e-9);
+}
+// ---- both pens derive the missing lower-region edge from an overlaid fill
+{
+  const lower=shape('lower',rect(0,0,10,10),'#777777',1),upper=shape('upper',rect(2,2,8,8),'#ffffff',2);
+  const job=core.plan({paths:[lower,upper],page:rect(0,0,10,10)},{...base,penMap:{'#777777':1,'#ffffff':2},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0,fills:{1:{mode:'none',angle:0,spacing:1,gap:0},2:{mode:'none',angle:0,spacing:1,gap:0}}});
+  assert(job.shared.count>0,'the overlaid white region creates shared-boundary candidates');
+  const gray=job.paths.filter(p=>p.derivedShared&&p.color==='#777777');
+  assert(gray.length>0,'the gray pen gets the missing companion boundary');
+  assert(gray.some(p=>p.points.some(q=>Math.abs(q.x-1.75)<1e-9||Math.abs(q.x-8.25)<1e-9)),'the gray companion is inset into the gray side');
+  assert(job.paths.some(p=>p.id==='upper'&&p.color==='#ffffff'),'the white outline remains independent');
+  const one=core.plan({paths:[lower,upper],page:rect(0,0,10,10)},{...base,penMap:{'#777777':1,'#ffffff':2},penWidth:.5,borders:'one',hideCovered:true,dedupeTol:.05,dedupeKeep:'dark',fills:{1:{mode:'none',angle:0,spacing:1,gap:0},2:{mode:'none',angle:0,spacing:1,gap:0}}});
+  assert(one.paths.some(p=>p.derivedShared&&p.color==='#777777'),'one-pen mode has a selectable gray shared candidate');
+  assert(!one.paths.some(p=>p.id==='upper'&&p.color==='#ffffff'),'dark shared-line selection removes the white duplicate');
+  const skipped=core.plan({paths:[lower,upper],page:rect(0,0,10,10)},{...base,penMap:{'#777777':1,'#ffffff':0},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0,fills:{1:{mode:'none',angle:0,spacing:1,gap:0}}});
+  assert(skipped.paths.some(p=>p.derivedShared&&p.color==='#777777'),'skipping white leaves the gray companion intact');
+}
+// ---- a sampled overlaid eye has one continuous companion outline
+{
+  const eye=Array.from({length:80},(_,i)=>{const a=i*2*Math.PI/80;return {x:5+3*Math.cos(a),y:5+2*Math.sin(a)};});
+  const gray=shape('gray',rect(0,0,10,10),'#777777',1),white=shape('white-eye',eye,'#ffffff',2);
+  const o={...base,penMap:{'#777777':1,'#ffffff':2},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0,fillSource:'none'};
+  const job=core.plan({paths:[gray,white],page:rect(0,0,10,10)},o);
+  const companion=job.paths.filter(p=>p.derivedShared&&p.color==='#777777');
+  assert.strictEqual(companion.length,1,'sampled eye segments form one gray companion path');
+  assert(companion[0].closed&&companion[0].points.length>=80,'the gray boundary is a closed, smooth polyline');
+  const code=core.gcode(job,o);
+  assert.strictEqual((code.match(/\(Path \d+ - pass 1\/1\)/g)||[]).length,job.paths.length,'each continuous outline lowers the pen once');
 }
 // ---- thin regions are not turned inside out; shapes with no fill are left alone
 {
@@ -89,5 +127,40 @@ const page=rect(0,0,20,10);
   const hole=star.map(p=>({x:(p.x-5)*.5+5,y:(p.y-5)*.5+5}));
   const ring=core.plan({paths:[shape('outer',rect(0,0,10,10),'#ffcc00',1),shape('hole',hole,'#ffcc00',1)],page:rect(0,0,10,10)},{...base,penMap:{'#ffcc00':1},penWidth:.5,borders:'both'});
   const h=ring.paths.find(p=>p.id==='hole');assert(h&&crossings(h.points.filter((p,i,a)=>i<a.length-1||Math.hypot(p.x-a[0].x,p.y-a[0].y)>1e-9))===0,'a star-shaped hole edge offset outward does not cross itself');
+}
+// A real converted letter from the Gadsden SVG has narrow diagonal strokes.
+// Its full 0.5 mm inset drops most of one contour; a smaller local inset keeps it.
+{
+  const G=require('./geometry.js');
+  const d='M -553.06203 519.09648 L -555.94203 519.09648 C -557.62207 519.09652 -558.80207 520.17651 -559.48203 522.33648 C -559.72207 523.09651 -559.84207 523.85651 -559.84203 524.61648 L -559.84203 557.07648 L -563.68203 557.07648 L -586.96203 521.19648 L -586.96203 549.87648 C -586.96204 551.67648 -586.40204 553.17648 -585.28203 554.37648 C -584.64205 555.05648 -583.90205 555.39648 -583.06203 555.39648 L -580.78203 555.39648 L -580.78203 557.07648 L -595.12203 557.07648 L -595.12203 555.39648 L -592.18203 555.39648 C -590.62204 555.39648 -589.46204 554.35648 -588.70203 552.27648 C -588.42204 551.43648 -588.28204 550.63648 -588.28203 549.87648 L -588.28203 521.25648 C -588.28204 520.37651 -588.72204 519.71651 -589.60203 519.27648 C -589.88204 519.11652 -590.16204 519.03652 -590.44203 519.03648 L -593.56203 519.03648 L -593.56203 517.41648 L -584.20203 517.41648 L -561.22203 552.27648 L -561.22203 524.61648 C -561.22207 522.53651 -561.80207 520.95651 -562.96203 519.87648 C -563.56207 519.35651 -564.26207 519.09652 -565.06203 519.09648 L -567.34203 519.09648 L -567.34203 517.41648 L -553.06203 517.41648 L -553.06203 519.09648';
+  const s=25.4/96,doc=G.run({items:[{d,closed:false,fillColor:'#101010',color:'#101010',group:2,matrix:[s,0,0,s,600*s,0],height:600*s,name:'letter'}],width:20,height:25,options:{spacing:.5,tolerance:.03,cleanup:0,curveSegments:8,equalDistance:0,mergeDistance:.001}});
+  assert(doc.paths[0].closed,'filled letter is implicitly closed');
+  const sourceLength=core.length([...doc.paths[0].points,doc.paths[0].points[0]]);
+  const yellow=shape('paper',rect(0,0,20,25),'#ffee00',1);
+  const o={...base,penMap:{'#ffee00':1,'#101010':2},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0,fillSource:'none'};
+  const job=core.plan({paths:[yellow,...doc.paths],page:rect(0,0,20,25)},o);
+  assert(job.inset.recovered>=1,'the thin letter receives an adaptive inset');
+  const black=job.paths.filter(p=>p.color==='#101010');
+  assert(black.reduce((n,p)=>n+core.length(p.points),0)>sourceLength*.9,'most of the black letter remains at 0.5 mm');
+  assert(job.paths.some(p=>p.derivedShared&&p.color==='#ffee00'),'the yellow companion is retained');
+  const ordinary=core.plan({paths:[shape('wide',rect(2,2,8,8),'#101010',1),shape('right',rect(8,2,14,8),'#ffee00',2)],page:rect(0,0,14,10)},o);
+  assert.equal(ordinary.inset.recovered,0,'wide neighboring regions keep their standard inset');
+}
+// A 0.2 mm black strip drawn with a 0.5 mm pen protrudes beyond its region.
+// Its yellow companion must move outward by that same protrusion.
+{
+  const yellow=shape('paper',rect(0,0,10,10),'#ffee00',1),black=shape('strip',rect(5,1,5.2,9),'#101010',2);
+  const o={...base,penMap:{'#ffee00':1,'#101010':2},penWidth:.5,borders:'both',hideCovered:true,dedupeTol:0,fillSource:'none'};
+  const job=core.plan({paths:[yellow,black],page:rect(0,0,10,10)},o);
+  const atY=(paths,y)=>paths.flatMap(p=>{
+    const xs=[];for(let i=0;i<p.points.length-1;i++){
+      const a=p.points[i],b=p.points[i+1];
+      if((a.y<=y&&b.y>y)||(b.y<=y&&a.y>y))xs.push(a.x+(y-a.y)*(b.x-a.x)/(b.y-a.y));
+    }return xs;
+  });
+  const bx=atY(job.paths.filter(p=>p.id==='strip'),5).sort((a,b)=>a-b);
+  const yx=atY(job.paths.filter(p=>p.derivedShared&&p.color==='#ffee00'),5).sort((a,b)=>a-b);
+  assert(bx.length>=2&&yx.length>=2,'both colors retain the narrow strip border');
+  assert(bx[0]-yx[0]>=.5-1e-6&&yx.at(-1)-bx.at(-1)>=.5-1e-6,'yellow ink sits just outside black ink on both sides');
 }
 console.log('inset ok');

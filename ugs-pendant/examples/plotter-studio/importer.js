@@ -92,6 +92,7 @@
     if(named[v])return named[v];
     return undefined;
   }
+  const MAX_PATHS=1000;
   function prepare(text,{dpi=96,spacing=.5,cleanup=0,curveSegments=12,tolerance=.01,equalDistance=0,mergeDistance=.001,joinEndpoints=false,joinDistance=.01}={}){
     if(!Number.isInteger(curveSegments)||curveSegments<1||curveSegments>1000)throw Error('Curve segments must be an integer from 1 to 1000.');
     if(!Number.isFinite(tolerance)||tolerance<.001||tolerance>1)throw Error('Curve tolerance must be 0.001–1 mm.');
@@ -134,10 +135,10 @@
       const mat=parent.multiply(matrix(el.getAttribute('transform')));
       if(![mat.a,mat.b,mat.c,mat.d,mat.e,mat.f].every(Number.isFinite))throw Error('Non-finite SVG transform.');
       if(tag==='g'||el===root){for(const child of el.children)walk(child,mat,depth+1,inherited);return;}
-      if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
+      if(items.length>=MAX_PATHS)throw Error(`Limit: ${MAX_PATHS} paths. Split this SVG into smaller jobs.`);
       const group=++elementCount;
       for(const source of shape(el))for(const sub of (source.ends?[source]:splitPath(source.d))){
-        if(items.length>=500)throw Error('Limit: 500 paths. Split this SVG into smaller jobs.');
+        if(items.length>=MAX_PATHS)throw Error(`Limit: ${MAX_PATHS} paths. Split this SVG into smaller jobs.`);
         if(sub.ends.length>3000)throw Error('A path exceeds 3000 segments. Simplify or split it first.');
         items.push({group,fillColor:inherited.fill||null,noStroke:!inherited.stroke,color:inherited.stroke||inherited.fill||'#000000',d:sub.d,closed:sub.closed,matrix:[mat.a,mat.b,mat.c,mat.d,mat.e,mat.f],height,name:(el.getAttribute('id')||tag)+'/'+(items.length+1)});
       }
@@ -176,5 +177,5 @@
       return step.value;
     }
   }
-  window.SvgImport={colorHex,parse,parseAsync,prepare,splitPath,processPreparedAsync};
+  window.SvgImport={colorHex,parse,parseAsync,prepare,splitPath,processPreparedAsync,MAX_PATHS};
 })();

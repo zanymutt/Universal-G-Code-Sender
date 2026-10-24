@@ -232,6 +232,21 @@ console.log('wavy cross + hidden lines ok');
 }
 console.log('hidden-line gap ok');
 
+// Zigzag joins are made on the visible fill, including the edge exposed by
+// clipping a lower color with an overlaid region.
+{
+  const base={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:false,largest:false,reverse:false,power:0,powerMax:1000};
+  const lower={id:'gray',name:'gray',closed:true,color:'#777777',fillColor:'#777777',group:1,points:rect(0,0,20,20)};
+  const upper={id:'white',name:'white',closed:true,color:'#ffffff',fillColor:'#ffffff',group:2,points:rect(10,-1,21,21)};
+  const doc={paths:[lower,upper],page:rect(0,-1,21,21)};
+  const run=zigzag=>core.plan(doc,{...base,hideCovered:true,penMap:{'#777777':1,'#ffffff':0},fills:{1:{mode:'hatch',angle:0,spacing:2,gap:.5,zigzag}}}).paths.filter(p=>p.fill&&p.group===1);
+  const straight=run(false),joined=run(true);
+  assert(joined.length<straight.length,'visible zigzag reduces pen lifts');
+  assert(joined.some(p=>p.points.some((q,i)=>i>0&&Math.abs(q.x-9.5)<1e-6&&Math.abs(p.points[i-1].x-9.5)<1e-6&&Math.abs(q.y-p.points[i-1].y)>1)),'a U-turn follows the newly visible boundary');
+  assert(joined.every(p=>p.points.every(q=>q.x<=9.5+1e-6)),'zigzag never enters the overlaid region or its gap');
+}
+console.log('visible zigzag ok');
+
 // ---- Fill source: no fill / as in the original / all closed paths
 {
   const base6={mode:'plotter',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-1,step:1,scale:100,rotation:0,overlap:0,originX:0,originY:0,origin:'bottom-left',originBounds:'artwork',order:'svg',start:'original',inner:true,largest:false,reverse:false,power:0,powerMax:1000};
@@ -323,4 +338,3 @@ console.log('zigzag pieces ok');
   }
 }
 console.log('zigzag connectors tidy ok');
-

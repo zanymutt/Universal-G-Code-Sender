@@ -2,6 +2,21 @@
   'use strict';
   const $=id=>document.getElementById(id),NS='http://www.w3.org/2000/svg';
   const importFields=['dpi','spacing','cleanup','curveSegments','tolerance','equalDistance','mergeDistance','joinDistance'];
+  const AUTO_TARGET=90000;
+  const AUTO_QUALITY=[
+    {spacing:.5,tolerance:.01,curveSegments:12},
+    {spacing:.75,tolerance:.015,curveSegments:12},
+    {spacing:1,tolerance:.02,curveSegments:12},
+    {spacing:1,tolerance:.02,curveSegments:8},
+    {spacing:1.25,tolerance:.02,curveSegments:8},
+    {spacing:1.5,tolerance:.03,curveSegments:8},
+    {spacing:2,tolerance:.03,curveSegments:8},
+    {spacing:2.5,tolerance:.04,curveSegments:6},
+    {spacing:3,tolerance:.05,curveSegments:6},
+    {spacing:4,tolerance:.08,curveSegments:6},
+    {spacing:5,tolerance:.1,curveSegments:4}
+  ];
+  const REDRAW_DEBOUNCE_MS=1000;
   const numeric=['regMargin','regMarginY','regSize','approach','borderInset','dedupeTol','penWidth','outputTolerance','feed','plunge','safe','surface','final','step','focus','laserPasses','power','powerMax','scale','rotation','overlap','originX','originY'];
   const knifeNumeric=['knifeArcAngle','knifeOffset','knifeSwivelZ','knifePasses','knifeAngle','knifeFeed','knifeLead','knifeHeading'];
   const choices=['mode','tool','origin','originBounds','order','start','penChange','penOrder','fillSource','dedupeKeep','borders','regCorner'];
@@ -9,12 +24,19 @@
   function showTab(tab){tabs.forEach(t=>{const active=t===tab;t.setAttribute('aria-selected',String(active));t.tabIndex=active?0:-1;$(t.getAttribute('aria-controls')).hidden=!active;});window.Dropdowns?.refresh();}
   tabs.forEach((tab,i)=>{tab.onclick=()=>showTab(tab);tab.onkeydown=e=>{let index;if(e.key==='ArrowRight')index=(i+1)%tabs.length;else if(e.key==='ArrowLeft')index=(i+tabs.length-1)%tabs.length;else if(e.key==='Home')index=0;else if(e.key==='End')index=tabs.length-1;else return;e.preventDefault();showTab(tabs[index]);tabs[index].focus({preventScroll:true});};});
   let documentData=null,svgText='',fileFormat='svg',locks={},directions={},job=null,code='',pick=null,savePending=false,revision=0,importDirty=false,loadId=0;
-  let importController=null;
+  let importController=null,updateTimer=null,updateRunTimer=null,updateResolve=null,updateSerial=0;
   // color -> pen number (0 = skip). Kept across reimports for colors that still exist.
-  let penAssign={},penMemory={},penColors={},penWidths={},penThickness={},fillSettings={},generatedFiles=[],previewBg=null;
+  let penAssign={},penMemory={},penColors={},penWidths={},penThickness={},fillSettings={},generatedFiles=[],previewBg=null,penView='colors';
   function busy(text,fraction){$('busy').hidden=false;$('busyText').textContent=text;document.querySelector('main').setAttribute('aria-busy','true');if(Number.isFinite(fraction))$('busyProgress').value=Math.max(0,Math.min(1,fraction));else $('busyProgress').removeAttribute('value');}
   function endBusy(){$('busy').hidden=true;document.querySelector('main').setAttribute('aria-busy','false');}
-  function cancelImport(){loadId++;importController?.abort();importController=null;endBusy();}
+  function showRecalc(text){$('recalcBusy').hidden=false;$('recalcBusyText').textContent=text;}
+  function endRecalc(){ $('recalcBusy').hidden=true; }
+  function cancelQueuedUpdate(){
+    clearTimeout(updateTimer);updateTimer=null;
+    if(updateRunTimer){clearTimeout(updateRunTimer);updateRunTimer=null;if(updateResolve){updateResolve(false);updateResolve=null;}}
+    endRecalc();
+  }
+  function cancelImport(){loadId++;importController?.abort();importController=null;cancelQueuedUpdate();endBusy();}
   function syncEndpointJoinControl(){$('joinDistance').disabled=!$('joinEndpoints').checked;}
   $('cancelWork').onclick=()=>{cancelImport();invalidate();documentData=null;job=null;importDirty=true;$('generate').disabled=true;$('summary').textContent='Import canceled';message('Import canceled. Choose another SVG or DXF or click Reimport.');};
   function settings(){const o={};numeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));choices.forEach(k=>o[k]=$(k).value);knifeNumeric.forEach(k=>o[k]=$(k).value.trim()===''?NaN:Number($(k).value));['inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered','regCross','regEvery'].forEach(k=>o[k]=$(k).checked);o.fillAll=o.fillSource==='all';o.spacing=Number($('spacing').value);o.penMap={...penAssign};o.penColors={...penColors};o.penWidths=Object.fromEntries(Object.entries(penWidths).filter(([,v])=>v>0));o.penThickness={...penThickness};o.fills=Object.fromEntries(Object.entries(fillSettings).map(([pen,f])=>[pen,{mode:({lines:'hatch',cross:'cross',wavy:'wavy',wavycross:'wavycross'})[f.pattern]||'none',angle:f.angle,spacing:f.spacing,gap:f.gap,amp:f.amp,wavelength:f.wavelength,shift:f.shift,zigzag:f.zigzag}]));return o;}
@@ -28,18 +50,24 @@
   // artwork itself (scale, rotation, origin), because the old view would then be looking at the wrong place.
   let freshArtwork=true,lastTransformKey=null,lastImportKey=null;
   function applyView(){if(viewBox)$('preview').setAttribute('viewBox',`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`);$('zoomLevel').textContent=fitBox&&viewBox?Math.round(fitBox.w/viewBox.w*100)+'%':'100%';}
+  let viewFrame=0;
+  function scheduleView(){if(!viewFrame)viewFrame=requestAnimationFrame(()=>{viewFrame=0;applyView();});}
   function colorList(){
-    const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0,closed:0});return counts.get(c);};
-    for(const p of documentData?.paths||[]){const e=entry(p.color||'#000000');e.paths++;if(p.closed)e.closed++;if(p.closed&&p.fillColor)entry(p.fillColor).fills++;}
-    return [...counts].map(([c,n])=>[c,n.paths,n.fills,n.closed]);
+    const counts=new Map(),entry=c=>{if(!counts.has(c))counts.set(c,{paths:0,fills:0,closed:0,weight:0});return counts.get(c);};
+    for(const p of documentData?.paths||[]){
+      const color=p.color||'#000000',e=entry(color);e.paths++;if(p.closed)e.closed++;
+      // Filled area is the best measure of how much of an image a traced color represents.
+      // Explicit strokes use an approximate 0.5 mm visual width. Keep a minimum fallback so
+      // a zero-area or degenerate color remains eligible for grouping.
+      if(!p.noStroke||!p.fillColor)e.weight+=SvgCam.length(p.points)*.5;
+      if(p.closed&&p.fillColor){const f=entry(p.fillColor);f.fills++;f.weight+=Math.abs(SvgCam.area(p.points));}
+    }
+    return [...counts].map(([c,n])=>[c,n.paths,n.fills,n.closed,Math.max(n.weight,1)]);
   }
   function assignDefaults(onePen){
     penAssign={};colorList().forEach(([c],i)=>{penAssign[c]=onePen?1:i+1;});
   }
-  function renderPens(){
-    const list=colorList(),rows=$('penRows');rows.replaceChildren();
-    $('penTable').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;$('penCluster').disabled=list.length<2;$('penSkipWhite').disabled=!list.length;$('penPlotAll').disabled=!list.length;$('penCount').max=String(Math.max(1,list.length));
-    $('penNote').textContent=list.length?(list.length+' color'+(list.length===1?'':'s')+' found. Untick a color to leave it out of the plot. Pens apply in plotter mode.'):'Import artwork to list its colors.';
+  function renderOriginalColors(list,rows){
     list.forEach(([color,count,fills])=>{
       const tr=document.createElement('tr'),swatch=document.createElement('input');swatch.type='color';swatch.value=penColors[color]||color;swatch.setAttribute('aria-label','Display color for '+color);
       // 'change' fires when the picker is closed; 'input' fires on every drag step and would redraw the whole job each time.
@@ -56,7 +84,7 @@
       tr.className=penAssign[color]>0?'':'skipped';
       const c1=document.createElement('td');c1.append(plot,swatch,document.createTextNode(color));
       const c2=document.createElement('td');c2.textContent=String(count)+(fills?' · '+fills+' fill'+(fills===1?'':'s'):'');
-      const input=document.createElement('input');input.type='number';input.min='0';input.max='99';input.step='1';input.value=String(penAssign[color]??1);input.setAttribute('aria-label','Pen for '+color+' (0 skips)');
+      const input=document.createElement('input');input.type='number';input.min='0';input.step='1';input.value=String(penAssign[color]??1);input.setAttribute('aria-label','Pen for '+color+' (0 skips)');
       input.disabled=$('mode').value!=='plotter';
       input.addEventListener('input',()=>{
         penAssign[color]=input.value.trim()===''?NaN:Number(input.value);if(penAssign[color]>0)penMemory[color]=penAssign[color];
@@ -66,8 +94,75 @@
       const c3=document.createElement('td');c3.append(input);
       tr.append(c1,c2,c3);rows.append(tr);
     });
+  }
+  function consolidatedGroups(list){
+    const groups=new Map();
+    // A fully skipped group remains visible under its remembered pen number, so the
+    // consolidated checkbox can restore it without visiting every source color.
+    for(const item of list){const color=item[0],pen=penAssign[color]>0?penAssign[color]:penMemory[color];if(!(pen>0))continue;if(!groups.has(pen))groups.set(pen,[]);groups.get(pen).push(item);}
+    return [...groups].sort((a,b)=>a[0]-b[0]);
+  }
+  function averageDisplayColor(items){
+    let total=0,r=0,g=0,b=0;
+    for(const [color,,,,weight] of items){const shown=penColors[color]||color,n=parseInt(shown.slice(1),16),w=Math.max(weight||1,1);if(!Number.isFinite(n))continue;total+=w;r+=(n>>16&255)*w;g+=(n>>8&255)*w;b+=(n&255)*w;}
+    const byte=n=>Math.max(0,Math.min(255,Math.round(n/(total||1)))).toString(16).padStart(2,'0');
+    return '#'+byte(r)+byte(g)+byte(b);
+  }
+  function automaticDisplayColor(items){
+    // Recalculate the same area-weighted representative that color grouping chooses,
+    // without changing this group's membership or any pen assignments.
+    return SvgCam.clusterColors(items.map(([color,,,,weight])=>({color,weight})),1).reps[0]||items[0]?.[0]||'#000000';
+  }
+  function renderConsolidatedPens(list,rows){
+    const total=list.reduce((sum,item)=>sum+item[4],0);
+    for(const [pen,items] of consolidatedGroups(list)){
+      const active=items.filter(([color])=>penAssign[color]>0),tr=document.createElement('tr'),shown=averageDisplayColor(items),autoColor=automaticDisplayColor(items),swatch=document.createElement('input'),plot=document.createElement('input'),resetColor=document.createElement('button');
+      plot.type='checkbox';plot.checked=active.length>0;plot.indeterminate=active.length>0&&active.length<items.length;plot.disabled=$('mode').value!=='plotter';plot.setAttribute('aria-label','Plot every original color assigned to pen '+pen);
+      plot.addEventListener('change',()=>{
+        for(const [color] of items){penMemory[color]=pen;penAssign[color]=plot.checked?pen:0;}
+        renderPens();update();
+      });
+      swatch.type='color';swatch.value=shown;swatch.setAttribute('aria-label','Display color for pen '+pen);useDashboardPicker(swatch);
+      swatch.addEventListener('change',()=>{for(const [color] of items)penColors[color]=swatch.value;if($('penOrder').value==='light'||$('penOrder').value==='dark')update();else draw();renderPens();});
+      resetColor.type='button';resetColor.className='penColorReset';resetColor.textContent='Auto';resetColor.title='Restore the automatically selected representative color '+autoColor;resetColor.setAttribute('aria-label','Restore automatic display color for pen '+pen);resetColor.disabled=items.every(([color])=>(penColors[color]||color).toLowerCase()===autoColor);
+      resetColor.addEventListener('click',()=>{
+        for(const [color] of items)penColors[color]=autoColor;
+        if($('penOrder').value==='light'||$('penOrder').value==='dark')update();else draw();
+        renderPens();message('Restored pen '+pen+' to its automatic display color '+autoColor+'. Group membership and pen assignments were not changed.');
+      });
+      tr.className=active.length?'':'skipped';const c1=document.createElement('td');c1.append(plot,swatch,document.createTextNode(shown),resetColor);
+      const paths=items.reduce((sum,item)=>sum+item[1],0),weight=items.reduce((sum,item)=>sum+item[4],0),coverage=total?weight/total*100:0;
+      const c2=document.createElement('td'),detail=document.createElement('span');detail.className='penCoverage';
+      c2.append(document.createTextNode((active.length?'':'Parked · ')+items.length+' original color'+(items.length===1?'':'s')),document.createElement('br'),detail);
+      detail.textContent=paths+' path'+(paths===1?'':'s')+' · '+(coverage<.1&&coverage>0?'<0.1':coverage.toFixed(1))+'% artwork';
+      const input=document.createElement('input');input.type='number';input.min='1';input.step='1';input.value=String(pen);input.setAttribute('aria-label','Assigned number for consolidated pen '+pen);input.disabled=$('mode').value!=='plotter';
+      input.addEventListener('change',()=>{
+        const next=Number(input.value);
+        if(!Number.isSafeInteger(next)||next<1){input.value=String(pen);message('Consolidated pen numbers must be positive whole numbers. Use Original colors to skip individual colors.',true);return;}
+        for(const [color] of items){if(penAssign[color]>0)penAssign[color]=next;penMemory[color]=next;}
+        renderPens();update();
+      });
+      const c3=document.createElement('td');c3.append(input);tr.append(c1,c2,c3);rows.append(tr);
+    }
+  }
+  function renderPens(){
+    const list=colorList(),rows=$('penRows'),groups=consolidatedGroups(list),skipped=list.filter(([color])=>!(penAssign[color]>0)).length,activeGroups=groups.filter(([,items])=>items.some(([color])=>penAssign[color]>0)).length,parkedGroups=groups.length-activeGroups;rows.replaceChildren();
+    $('penTable').hidden=!list.length;$('penViewToggle').hidden=!list.length;$('penPerColor').disabled=!list.length;$('penAllOne').disabled=!list.length;$('penCluster').disabled=list.length<2;$('penSkipWhite').disabled=!list.length;$('penPlotAll').disabled=!list.length;$('penCount').max=String(Math.max(1,list.length));
+    $('penViewPens').setAttribute('aria-pressed',String(penView==='pens'));$('penViewColors').setAttribute('aria-pressed',String(penView==='colors'));
+    if(!list.length)$('penNote').textContent='Import artwork to list its colors.';
+    else if(penView==='pens'){
+      $('penColorHead').textContent='Plot · display color';$('penColorHead').title='Untick the whole pen group or change its preview and label color';$('penUsageHead').textContent='Sources · coverage';$('penNumberHead').textContent='Pen';
+      $('penNote').textContent=activeGroups+' active consolidated pen group'+(activeGroups===1?'':'s')+(parkedGroups?' + '+parkedGroups+' parked':'')+' from '+list.length+' original color'+(list.length===1?'':'s')+(skipped?' · '+skipped+' skipped':'')+'. '+(parkedGroups?'Parked groups do not count against Pens available until restored.':'Untick a row to park that group.')+' Use Original colors for individual assignments.';
+      renderConsolidatedPens(list,rows);
+    }else{
+      $('penColorHead').textContent='Plot · Color';$('penColorHead').title='Untick a color to leave it out of the plot entirely';$('penUsageHead').textContent='Paths';$('penNumberHead').textContent='Pen';
+      $('penNote').textContent=list.length+' original color'+(list.length===1?'':'s')+' found'+(skipped?' · '+skipped+' skipped':'')+'. Untick a color to leave it out of the plot. Pens apply in plotter mode.';
+      renderOriginalColors(list,rows);
+    }
     renderFills();renderPenSizes();
   }
+  $('penViewPens').onclick=()=>{penView='pens';renderPens();};
+  $('penViewColors').onclick=()=>{penView='colors';renderPens();};
   // One row per pen in use: its own width and an optional line thickness (outlines drawn as a band).
   let penWidthSaveTimer=null;
   function savePenWidths(){
@@ -155,7 +250,7 @@
   }
   const warnBlock=()=>{const w=fillWarnings();return w.length?w.join('\n')+'\n':'';};
   const mergeNote=()=>{const m=job&&job.merged;if(!m||!(m.length>0))return '';return `Merged duplicate lines: ${m.length.toFixed(0)} mm of overlapping outline removed (${m.removed} duplicate path(s) dropped, ${m.trimmed} trimmed); each shared line is plotted once, by ${({dark:'the darkest pen',light:'the lightest pen',first:'the pen plotted first',last:'the pen plotted last'})[$('dedupeKeep').value]||'one pen'}.\n`+(m.emptied&&m.emptied.length?`Pen${m.emptied.length>1?'s':''} ${m.emptied.join(', ')} ${m.emptied.length>1?'have':'has'} nothing left to plot: every line ${m.emptied.length>1?'they':'it'} would draw is already drawn by another pen. Use Fill source to give ${m.emptied.length>1?"them their color":"it its color"} as hatch, or change "A shared line is kept by" to give ${m.emptied.length>1?"them":"it"} the shared lines.\n`:'');};
-  const insetNote=()=>{const i=job&&job.inset;if(!i||!i.count)return '';return `Borders: ${i.count} outline${i.count===1?'':'s'} moved just inside ${i.count===1?'its':'their'} own region${i.count===1?'':'s'}`+(i.skipped?`; ${i.skipped} too thin to move`:'')+'.\n';};
+  const insetNote=()=>{const i=job&&job.inset;if(!i||!i.count)return '';return `Borders: ${i.count} outline${i.count===1?'':'s'} moved just inside ${i.count===1?'its':'their'} own region${i.count===1?'':'s'}`+(i.recovered?`; ${i.recovered} narrow contour${i.recovered===1?'':'s'} kept with a smaller inset`:'')+(i.skipped?`; ${i.skipped} too thin to move`:'')+'.\n';};
   const BR='\n';
   const regNote=()=>{const r=job&&job.registration;if(!r||!$('regCross').checked)return '';const x=r.x.toFixed(4).replace(/0+$/,'').replace(/[.]$/,''),y=r.y.toFixed(4).replace(/0+$/,'').replace(/[.]$/,'');return `Registration cross at X${x} Y${y}: after swapping a pen, center its tip on the cross and send G10 L20 P1 X${x} Y${y}.`+BR;};
   const thickNote=()=>{const t=job&&job.thick;if(!t||!t.bands)return '';return `Thick lines: ${t.bands} path(s) drawn as bands, ${t.strokes} strokes in all`+(t.clamped?`; ${t.clamped} closed shape(s) were limited so the inner strokes stay inside the shape`:'')+'.\n';};
@@ -283,13 +378,16 @@
     if(!viewBox)viewBox={...fitBox};applyView();
     const defs=el('defs',{},svg),marker=el('marker',{id:'arrow',viewBox:'0 0 10 10',refX:8,refY:5,markerWidth:5,markerHeight:5,orient:'auto'},defs);
     el('path',{d:'M 0 0 L 10 5 L 0 10 z',fill:'var(--plugin-mark)'},marker);
-    const holderLayer=el('g',{'data-layer':'holder'},svg),fillLayer=el('g',{'data-layer':'fill'},svg),cutLayer=el('g',{'data-layer':'cut'},svg),fillPaths=new Map();
+    const holderLayer=el('g',{'data-layer':'holder'},svg),fillLayer=el('g',{'data-layer':'fill'},svg),cutLayer=el('g',{'data-layer':'cut'},svg),fillPaths=new Map(),cutPaths=new Map(),selectedCuts=[];
     let prev={x:0,y:0};
     // With "Draw preview lines at the pen width" plotter lines use the real pen width in mm.
     // Declutter hides the numbers, start/end points, direction arrows and rapid (pen-up) moves; the drawing and the origin stay.
     const clean=$('declutter').checked;
     const penW=Number($('penWidth').value),toScale=$('penWidthPreview').checked&&$('mode').value==='plotter'&&penW>0;
     const scaled={'stroke-linecap':'round','stroke-linejoin':'round','stroke-opacity':.7};
+    // Large jobs paint much faster as a few compound SVG paths. The selected
+    // outline stays separate so it remains easy to see while zooming.
+    const batchCuts=clean&&job.paths.length>1000;
     job.paths.forEach((p,i)=>{
       if(p.fill){
         // Hatch can be thousands of lines, so each pen's lines share one SVG path.
@@ -299,6 +397,15 @@
         prev=p.points.at(-1);return;
       }
       const first=p.points[0];if(!job.knife&&!clean)el('line',{x1:prev.x,y1:-prev.y,x2:first.x,y2:-first.y,stroke:'var(--plugin-travel)','stroke-width':1,'vector-effect':'non-scaling-stroke','stroke-dasharray':'4 4'},cutLayer);
+      if(batchCuts){
+        if(p.id===$('selected').value)selectedCuts.push(p);
+        else{
+          const style=penStyle(p),w=toScale?widthOf(p.pen):0,key=style.stroke+'|'+style.halo+'|'+w;
+          let entry=cutPaths.get(key);if(!entry){entry={...style,w,d:[]};cutPaths.set(key,entry);}
+          entry.d.push('M'+p.points.map(q=>q.x.toFixed(3)+' '+(-q.y).toFixed(3)).join('L'));
+        }
+        prev=p.points.at(-1);return;
+      }
       if(!toScale)el('polyline',{points:p.points.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:penStyle(p).halo,'stroke-width':p.id===$('selected').value?5:4,'vector-effect':'non-scaling-stroke'},cutLayer);
       el('polyline',{'data-cut-path':p.id,points:p.points.map(q=>q.x+','+(-q.y)).join(' '),fill:'none',stroke:p.id===$('selected').value?'var(--plugin-selected)':penStyle(p).stroke,...(toScale?{'stroke-width':widthOf(p.pen),...scaled}:{'stroke-width':p.id===$('selected').value?3:2,'vector-effect':'non-scaling-stroke'})},cutLayer);
       if(!clean){
@@ -314,6 +421,16 @@
       }
       prev=p.points.at(-1);
     });
+    for(const {stroke,halo,w,d} of cutPaths.values()){
+      const path=d.join('');
+      if(!toScale)el('path',{d:path,fill:'none',stroke:halo,'stroke-width':4,'vector-effect':'non-scaling-stroke'},cutLayer);
+      el('path',{d:path,fill:'none',stroke,...(toScale?{'stroke-width':w,...scaled}:{'stroke-width':2,'vector-effect':'non-scaling-stroke'})},cutLayer);
+    }
+    for(const p of selectedCuts){
+      const points=p.points.map(q=>q.x+','+(-q.y)).join(' ');
+      if(!toScale)el('polyline',{points,fill:'none',stroke:penStyle(p).halo,'stroke-width':5,'vector-effect':'non-scaling-stroke'},cutLayer);
+      el('polyline',{'data-cut-path':p.id,points,fill:'none',stroke:'var(--plugin-selected)',...(toScale?{'stroke-width':widthOf(p.pen),...scaled}:{'stroke-width':3,'vector-effect':'non-scaling-stroke'})},cutLayer);
+    }
     // The registration cross is part of the drawing, so declutter keeps it.
     if(job.registration&&$('regCross').checked){
       const r=job.registration,h=r.size/2,cross=el('path',{d:`M ${r.x-h} ${-r.y} H ${r.x+h} M ${r.x} ${-r.y-h} V ${-r.y+h}`,fill:'none',stroke:'var(--plugin-mark)','stroke-width':2,'vector-effect':'non-scaling-stroke','data-registration':'cross'},cutLayer);
@@ -337,14 +454,29 @@
     }
     el('path',{d:`M ${-pad/3} 0 H ${pad/3} M 0 ${-pad/3} V ${pad/3}`,stroke:'var(--plugin-cross)','stroke-width':2,'vector-effect':'non-scaling-stroke'},svg);
   }
-  // Re-planning is instant for small drawings. When the last plan took a while, edits wait for a short
-  // pause in typing instead of recalculating on every keystroke.
-  let updateTimer=null,lastUpdateMs=0;
-  function update(){clearTimeout(updateTimer);const started=performance.now();updateNow();lastUpdateMs=performance.now()-started;}
+  // Numeric and fill-setting edits wait until the value has been unchanged for
+  // one second. The zero-delay handoff lets the browser paint the calculation
+  // overlay before the synchronous planner occupies the main thread.
+  let lastUpdateMs=0;
+  function update(){
+    clearTimeout(updateTimer);updateTimer=null;
+    if(updateRunTimer){clearTimeout(updateRunTimer);updateRunTimer=null;if(updateResolve){updateResolve(false);updateResolve=null;}}
+    const token=++updateSerial;showRecalc('Calculating preview…');
+    return new Promise(resolve=>{
+      updateResolve=resolve;
+      updateRunTimer=setTimeout(()=>{
+        updateRunTimer=null;updateResolve=null;
+        if(token!==updateSerial){resolve(false);endRecalc();return;}
+        const started=performance.now();
+        try{updateNow();lastUpdateMs=performance.now()-started;resolve(true);}finally{endRecalc();}
+      },0);
+    });
+  }
   function updateSoon(){
-    clearTimeout(updateTimer);
-    if(lastUpdateMs<250){update();return;}
-    $('summary').textContent='Recalculating…';updateTimer=setTimeout(update,350);
+    clearTimeout(updateTimer);updateTimer=null;
+    if(updateRunTimer){clearTimeout(updateRunTimer);updateRunTimer=null;if(updateResolve){updateResolve(false);updateResolve=null;}}
+    showRecalc('Waiting for changes…');
+    updateTimer=setTimeout(()=>{updateTimer=null;update();},REDRAW_DEBOUNCE_MS);
   }
   function updateNow(){
     const transformKey=[$('scale').value,$('rotation').value,$('origin').value,$('originBounds').value].join('|');
@@ -371,8 +503,9 @@
 `:'')+(job.fillOverlaps?`${job.fillOverlaps} pair(s) of filled shapes overlap; each is hatched in full (turn on hidden-line removal to hide covered lines).\n`:'')+(job.knife?'Knife: Surface / Final / Step down control progressive Z passes. Inspect the entry-alignment setting and orange holder movements.\n':'')+documentData.warnings.join('\n')+'\nPreview starts from work X0 Y0 for ordering; actual initial machine position may differ.');draw();
     }catch(e){$('passes').textContent='Check settings';$('summary').textContent='Preview invalid — correct settings before generating.';$('preview').replaceChildren();message(e.message,true);}finally{window.Dropdowns?.refresh();}
   }
-  async function importSvg(){
-    const request=++loadId;importController?.abort();const controller=new AbortController();importController=controller;
+  async function importSvg(auto=false){
+    auto=auto===true;
+    const request=++loadId;cancelQueuedUpdate();importController?.abort();const controller=new AbortController();importController=controller;
     const importKey=[$('scale').value,$('rotation').value,$('origin').value,$('originBounds').value,$('dpi').value].join('|');
     if(freshArtwork||importKey!==lastImportKey){viewBox=null;freshArtwork=false;lastImportKey=importKey;}   // a re-import of the same artwork keeps the view
     const source=svgText,format=fileFormat,options={...Object.fromEntries(importFields.map(k=>[k,Number($(k).value)])),joinEndpoints:$('joinEndpoints').checked,dxfUnits:$('dxfUnits').value},started=performance.now();
@@ -380,16 +513,36 @@
     invalidate();job=null;documentData=null;locks={};directions={};$('generate').disabled=true;$('selected').replaceChildren();renderPens();
     for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=true;
     try{
-      const imported=await (format==='dxf'?DxfImport:SvgImport).parseAsync(source,options,{signal:controller.signal,onProgress:p=>{if(request===loadId)busy(p.stage+(p.total?' · path '+p.path+' / '+p.total:''),p.fraction);}});
+      const candidates=auto&&format==='svg'?AUTO_QUALITY:[{}];let imported,selectedOptions;
+      for(let i=0;i<candidates.length;i++){
+        const candidate={...options,...candidates[i]};
+        try{
+          imported=await (format==='dxf'?DxfImport:SvgImport).parseAsync(source,candidate,{signal:controller.signal,onProgress:p=>{if(request===loadId)busy((auto&&format==='svg'?`Auto quality ${i+1}/${candidates.length}: `:'')+p.stage+(p.total?' · path '+p.path+' / '+p.total:''),p.fraction);}});
+        }catch(e){
+          // A failed sample-budget attempt is expected during AUTO. Other errors, including
+          // the source-segment and path-count guards, need to be shown immediately.
+          if(!(auto&&format==='svg'&&/100,000 sampled points/i.test(e.message||'')))throw e;
+          if(i===candidates.length-1)throw e;
+          continue;
+        }
+        selectedOptions=candidate;
+        if(!auto||format!=='svg'||!(Number(imported.vertices)>AUTO_TARGET)||i===candidates.length-1)break;
+      }
       if(request!==loadId)return;
+      if(auto&&format==='svg'&&selectedOptions){
+        for(const id of ['spacing','tolerance','curveSegments'])$(id).value=String(selectedOptions[id]);
+      }
       documentData=imported;
       importDirty=false;
       {const before=penAssign;assignDefaults(false);for(const c of Object.keys(penAssign))if(Object.hasOwn(before,c))penAssign[c]=before[c];}
       renderPens();
       for(const p of documentData.paths){const op=document.createElement('option');op.value=p.id;op.textContent=`Path ${documentData.paths.indexOf(p)+1} - `+p.name+(p.closed?' (closed)':' (open)');$('selected').append(op);}
       for(const id of ['pickStart','pickOrigin','clearStarts','pathDirection'])$(id).disabled=false;
-      $('pathDirection').value='auto';busy('Building preview…',1);await new Promise(resolve=>setTimeout(resolve,0));if(request!==loadId)return;update();
-      if(job)$('summary').textContent+=' · loaded in '+((performance.now()-started)/1000).toFixed(2)+' s';
+      $('pathDirection').value='auto';busy('Building preview…',1);await new Promise(resolve=>setTimeout(resolve,0));if(request!==loadId)return;await update();
+      if(job){
+        $('summary').textContent+=' · loaded in '+((performance.now()-started)/1000).toFixed(2)+' s';
+        if(auto&&format==='svg')message(`AUTO selected spacing ${selectedOptions.spacing} mm, tolerance ${selectedOptions.tolerance} mm and ${selectedOptions.curveSegments} curve segments (${Number(imported.vertices||0).toLocaleString()} sampled points; target ${AUTO_TARGET.toLocaleString()}).\n`+$('message').textContent);
+      }
     }catch(e){if(request!==loadId||e.name==='AbortError')return;$('preview').replaceChildren();$('summary').textContent='Import failed';message(e.message,true);}
     finally{if(request===loadId){importController=null;endBusy();}}
   }
@@ -397,7 +550,7 @@
     const file=$('file').files[0];if(!file)return;cancelImport();const request=++loadId;busy('Reading '+file.name+'…');
     invalidate();documentData=null;job=null;$('generate').disabled=true;$('reimport').disabled=true;$('preview').replaceChildren();
     if(file.size>5000000){endBusy();message('File exceeds 5 MB.',true);return;}
-    try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('reimport').disabled=false;freshArtwork=true;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
+    try{const text=await file.text();if(request!==loadId)return;fileFormat=/\.dxf$/i.test(file.name)?'dxf':'svg';svgText=text;penView='colors';$('dxfControls').hidden=fileFormat!=='dxf';$('dpi').disabled=fileFormat==='dxf';$('autoQuality').disabled=fileFormat!=='svg';$('reimport').disabled=false;freshArtwork=true;importSvg();}catch(e){if(request===loadId){endBusy();invalidate();message(e.message,true);}}
   });
   const isWhite=hex=>/^#[0-9a-f]{6}$/i.test(hex)&&[1,3,5].every(i=>parseInt(hex.slice(i,i+2),16)>=230);
   $('penSkipWhite').onclick=()=>{
@@ -406,26 +559,39 @@
     renderPens();update();message(count?`Skipped ${count} white color${count===1?'':'s'}. They are left out of the plot; tick the box to bring one back.`:'No white colors to skip.');
   };
   $('penPlotAll').onclick=()=>{for(const [color] of colorList())if(!(penAssign[color]>0))penAssign[color]=penMemory[color]>0?penMemory[color]:1;renderPens();update();};
-  $('penPerColor').onclick=()=>{assignDefaults(false);penColors={};renderPens();update();};
+  $('penPerColor').onclick=()=>{assignDefaults(false);penColors={};penView='colors';renderPens();update();};
   $('penCluster').onclick=()=>{
     try{
-      const wanted=Number($('penCount').value),list=colorList().filter(([c])=>penAssign[c]!==0);
+      const wanted=Number($('penCount').value),all=colorList(),list=all.filter(([c])=>penAssign[c]!==0),parked=new Map();
       if(!list.length)throw Error('Every color is set to skip. Give a color a pen number first.');
-      const result=SvgCam.clusterColors(list.map(([color,paths,fills])=>({color,weight:paths+fills})),wanted);
-      for(const [color,pen] of Object.entries(result.assign)){penAssign[color]=pen;penColors[color]=result.reps[pen-1];}
-      renderPens();update();
-      if(!$('message').classList.contains('error'))message(`Grouped ${list.length} colors onto ${result.reps.length} pen${result.reps.length===1?'':'s'}. Each pen is shown in its most representative color; change a swatch to use another.
+      for(const [color] of all)if(!(penAssign[color]>0)){
+        const remembered=penMemory[color]>0?'pen:'+penMemory[color]:'color:'+color;
+        if(!parked.has(remembered))parked.set(remembered,[]);
+        parked.get(remembered).push(color);
+      }
+      const result=SvgCam.clusterColors(list.map(([color,,,,weight])=>({color,weight})),wanted);
+      const used=new Set();
+      for(const [color,pen] of Object.entries(result.assign)){penAssign[color]=pen;penMemory[color]=pen;penColors[color]=result.reps[pen-1];used.add(pen);}
+      let next=Math.max(0,...used)+1;const parkedPens=[];
+      for(const colors of parked.values()){
+        while(used.has(next))next++;
+        for(const color of colors)penMemory[color]=next;
+        used.add(next);parkedPens.push(next++);
+      }
+      penView='pens';renderPens();update();
+      if(!$('message').classList.contains('error'))message(`Grouped ${list.length} enabled colors onto ${result.reps.length} active pen${result.reps.length===1?'':'s'}${parkedPens.length?`; kept ${parkedPens.length} skipped group${parkedPens.length===1?'':'s'} parked as pen${parkedPens.length===1?'':'s'} ${parkedPens.join(', ')}`:''}. Each active pen is shown in its most representative color; change a swatch to use another.
 `+$('message').textContent);
     }catch(e){message(e.message,true);}
   };
-  $('penAllOne').onclick=()=>{assignDefaults(true);renderPens();update();};
-  $('reimport').onclick=importSvg;
-  $('reimportDxf').onclick=importSvg;
-  function svgExample(){freshArtwork=true;fileFormat='svg';$('dxfControls').hidden=true;$('dpi').disabled=false;}
+  $('penAllOne').onclick=()=>{assignDefaults(true);penView='pens';renderPens();update();};
+  $('autoQuality').onclick=()=>{if(fileFormat!=='svg'||!svgText){message('Import an SVG before using Auto fit quality.',true);return;}importSvg(true);};
+  $('reimport').onclick=()=>importSvg(false);
+  $('reimportDxf').onclick=()=>importSvg(false);
+  function svgExample(){freshArtwork=true;fileFormat='svg';penView='colors';$('dxfControls').hidden=true;$('dpi').disabled=false;$('autoQuality').disabled=false;}
   $('example').onclick=()=>{
     svgExample();loadId++;
     svgText='<svg xmlns="http://www.w3.org/2000/svg" width="80mm" height="60mm" viewBox="0 0 80 60"><rect id="outer" x="5" y="5" width="70" height="50" rx="4"/><circle id="hole" cx="20" cy="20" r="6"/><path id="wave" d="M32 20 C40 5 55 35 65 18 M15 42 Q40 22 65 42"/></svg>';
-    $('file').value='';$('reimport').disabled=false;importSvg();
+    $('file').value='';$('reimport').disabled=false;$('autoQuality').disabled=false;importSvg();
   };
   [...importFields,'dxfUnits','joinEndpoints'].forEach(id=>$(id).addEventListener('input',()=>{if(id==='joinEndpoints')syncEndpointJoinControl();cancelImport();importDirty=true;invalidate();job=null;$('generate').disabled=true;message('Click Reimport to apply import settings.');}));
   [...numeric,...knifeNumeric,...choices,'inner','largest','reverse','knifeAlign','knifeLift','fillFirst','skipUnstroked','hideCovered','regCross','regEvery'].forEach(id=>$(id).addEventListener('input',()=>{
@@ -498,9 +664,12 @@
   $('zoomIn').onclick=()=>zoom(1.4);
   $('zoomOut').onclick=()=>zoom(1/1.4);
   $('zoomFit').onclick=()=>{if(fitBox){viewBox={...fitBox};applyView();}};
+  let wheelFrame=0,wheelFactor=1,wheelAnchor=null;
+  function finishWheel(){wheelFrame=0;const factor=wheelFactor,anchor=wheelAnchor;wheelFactor=1;wheelAnchor=null;zoom(factor,anchor);}
   $('preview').addEventListener('wheel',event=>{
     if(!job)return;event.preventDefault();const matrix=$('preview').getScreenCTM();if(!matrix)return;
-    zoom(Math.exp(-event.deltaY*.002),new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse()));
+    if(!wheelFrame){wheelAnchor=new DOMPoint(event.clientX,event.clientY).matrixTransform(matrix.inverse());wheelFrame=requestAnimationFrame(finishWheel);}
+    wheelFactor*=Math.exp(-event.deltaY*.002);
   },{passive:false});
   let pan=null,pinch=null,suppressClick=false;
   const pointers=new Map();
@@ -508,6 +677,7 @@
   function pointerPair(){return [...pointers.values()].slice(0,2);}
   $('preview').addEventListener('pointerdown',event=>{
     suppressClick=false;if(!job||pick||(event.pointerType==='mouse'&&event.button!==0))return;
+    if(wheelFrame){cancelAnimationFrame(wheelFrame);finishWheel();}
     const matrix=$('preview').getScreenCTM();if(!matrix)return;
     pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
     $('preview').setPointerCapture(event.pointerId);
@@ -532,16 +702,31 @@
       const w=fitBox.w/scale,h=fitBox.h/scale;
       const x=q.x-(q.x-pinch.start.x)*w/pinch.start.w+q.x-now.x;
       const y=q.y-(q.y-pinch.start.y)*h/pinch.start.h+q.y-now.y;
-      viewBox={x,y,w,h};suppressClick=true;applyView();return;
+      viewBox={x,y,w,h};suppressClick=true;scheduleView();return;
     }
     if(!pan||pan.id!==event.pointerId)return;
     const from=new DOMPoint(pan.x,pan.y).matrixTransform(pan.inverse),to=new DOMPoint(event.clientX,event.clientY).matrixTransform(pan.inverse);
     if(Math.hypot(event.clientX-pan.x,event.clientY-pan.y)>3)suppressClick=true;
-    viewBox={...pan.box,x:pan.box.x+from.x-to.x,y:pan.box.y+from.y-to.y};applyView();
+    viewBox={...pan.box,x:pan.box.x+from.x-to.x,y:pan.box.y+from.y-to.y};scheduleView();
   });
   for(const event of ['pointerup','pointercancel','lostpointercapture'])$('preview').addEventListener(event,e=>{
     pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;if(!pointers.size)pan=null;
+    if(!pointers.size&&viewFrame){cancelAnimationFrame(viewFrame);viewFrame=0;applyView();}
   });
+  const settingsDivider=$('settingsDivider'),mainLayout=document.querySelector('main');let settingsResizing=false,settingsWidth=330;
+  function settingsWidthMax(){return Math.max(250,Math.min(720,mainLayout.clientWidth-332));}
+  function setSettingsWidth(value){const max=settingsWidthMax();settingsWidth=Math.max(250,Math.min(max,value));mainLayout.style.setProperty('--settings-width',settingsWidth+'px');settingsDivider.setAttribute('aria-valuemax',Math.round(max));settingsDivider.setAttribute('aria-valuenow',Math.round(settingsWidth));}
+  settingsDivider.addEventListener('pointerdown',event=>{if(event.button!==0)return;settingsResizing=true;settingsDivider.setPointerCapture(event.pointerId);event.preventDefault();});
+  settingsDivider.addEventListener('pointermove',event=>{if(!settingsResizing)return;const r=mainLayout.getBoundingClientRect();setSettingsWidth(event.clientX-r.left);});
+  for(const event of ['pointerup','pointercancel','lostpointercapture'])settingsDivider.addEventListener(event,()=>{settingsResizing=false;});
+  settingsDivider.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight','Home','End'].includes(event.key))return;event.preventDefault();
+    setSettingsWidth(event.key==='Home'?250:event.key==='End'?settingsWidthMax():settingsWidth+(event.key==='ArrowLeft'?-20:20));
+  });
+  settingsDivider.ondblclick=()=>setSettingsWidth(330);
+  window.addEventListener('resize',()=>setSettingsWidth(settingsWidth));
+  setSettingsWidth(330);
+
   const divider=$('divider');let resizing=false,split=55;
   function setSplit(value){split=Math.max(25,Math.min(75,value));$('work').style.setProperty('--split',split+'%');divider.setAttribute('aria-valuenow',Math.round(split));}
   divider.addEventListener('pointerdown',event=>{if(event.button!==0)return;resizing=true;divider.setPointerCapture(event.pointerId);event.preventDefault();});

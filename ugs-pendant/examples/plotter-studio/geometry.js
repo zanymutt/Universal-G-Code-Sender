@@ -181,6 +181,10 @@
         yield (segs.indexOf(s)+1)/segs.length;
       }
       let closed=item.closed,gapClosed=false;
+      // SVG fills implicitly close a subpath even when its author omitted Z.
+      // Inkscape's converted lettering commonly returns exactly to its start
+      // without Z; leaving it open prevents region insets and occlusion.
+      if(!closed&&item.fillColor&&points.length>=3&&dist(points[0],points.at(-1))<=1e-8)closed=true;
       if(!closed&&o.equalDistance>0&&points.length>=3&&dist(points[0],points.at(-1))<=o.equalDistance){closed=true;gapClosed=true;}
       if(closed&&points.length>1&&dist(points[0],points.at(-1))<=Math.max(1e-8,o.equalDistance)){
         points[0].tin=points.at(-1).tin;points.pop();

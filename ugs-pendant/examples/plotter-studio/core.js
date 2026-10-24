@@ -135,10 +135,29 @@
     const binH=Math.max((vmax-vmin)/1000,.25),binCount=Math.max(1,Math.floor((vmax-vmin)/binH)+1),bins=Array.from({length:binCount},()=>[]);
     const binOf=v=>Math.max(0,Math.min(binCount-1,Math.floor((v-vmin)/binH)));
     for(const e of edges)for(let k=binOf(e.lo);k<=binOf(e.hi);k++)bins[k].push(e);
+    // A visible hatch can end at a covering shape's edge, which is not one of
+    // this fill's own contours. Use those edges when assessing border turns.
+    const borderBins=opt.visibleAbove?.length?Array.from({length:binCount},()=>[]):null;
+    if(borderBins)for(const occ of opt.visibleAbove)for(const contour of occ.contours)for(let i=0;i<contour.length;i++){
+      const p=contour[i],q=contour[(i+1)%contour.length],a={u:p.x*c+p.y*s,v:-p.x*s+p.y*c},b={u:q.x*c+q.y*s,v:-q.x*s+q.y*c};
+      const lo=Math.min(a.v,b.v),hi=Math.max(a.v,b.v);
+      if((a.u===b.u&&a.v===b.v)||hi<vmin-5||lo>vmax+5)continue;
+      const e={a,b,lo,hi,ulo:Math.min(a.u,b.u),uhi:Math.max(a.u,b.u)};
+      for(let k=binOf(lo);k<=binOf(hi);k++)borderBins[k].push(e);
+    }
     const insideShape=(u,v)=>{let hit=false;for(const e of bins[binOf(v)])if((e.a.v<=v)!==(e.b.v<=v)&&u<e.a.u+(v-e.a.v)*(e.b.u-e.a.u)/(e.b.v-e.a.v))hit=!hit;return hit;};
     // True when some edge lies closer than r to the point.
     const nearerThan=(u,v,r)=>{
       for(let k=binOf(v-r);k<=binOf(v+r);k++)for(const e of bins[k]){
+        if(v<e.lo-r||v>e.hi+r||u<e.ulo-r||u>e.uhi+r)continue;
+        const dx=e.b.u-e.a.u,dy=e.b.v-e.a.v,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((u-e.a.u)*dx+(v-e.a.v)*dy)/l)):0;
+        if(Math.hypot(u-e.a.u-t*dx,v-e.a.v-t*dy)<r)return true;
+      }
+      return false;
+    };
+    const nearerThanVisibleBorder=(u,v,r)=>{
+      if(!borderBins)return false;
+      for(let k=binOf(v-r);k<=binOf(v+r);k++)for(const e of borderBins[k]){
         if(v<e.lo-r||v>e.hi+r||u<e.ulo-r||u>e.uhi+r)continue;
         const dx=e.b.u-e.a.u,dy=e.b.v-e.a.v,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((u-e.a.u)*dx+(v-e.a.v)*dy)/l)):0;
         if(Math.hypot(u-e.a.u-t*dx,v-e.a.v-t*dy)<r)return true;
@@ -193,10 +212,13 @@
     // True when a straight connector stays within a band along the outline for its whole length.
     const hugsBorder=(P,Q)=>{
       const band=gap+Math.max(.3,spacing*.15)+amp;
-      for(const t of [.1,.3,.5,.7,.9])if(!nearerThan(P.u+(Q.u-P.u)*t,P.v+(Q.v-P.v)*t,band))return false;
+      for(const t of [.1,.3,.5,.7,.9]){
+        const u=P.u+(Q.u-P.u)*t,v=P.v+(Q.v-P.v)*t;
+        if(!nearerThan(u,v,band)&&!nearerThanVisibleBorder(u,v,band))return false;
+      }
       // ... and it must run in the same direction as the outline beside it, not cut across at an angle.
       const mu=(P.u+Q.u)/2,mv=(P.v+Q.v)/2;let edge=null,best=band;
-      for(let k=binOf(mv-band);k<=binOf(mv+band);k++)for(const e of bins[k]){
+      for(let k=binOf(mv-band);k<=binOf(mv+band);k++)for(const e of borderBins?bins[k].concat(borderBins[k]):bins[k]){
         if(mv<e.lo-best||mv>e.hi+best||mu<e.ulo-best||mu>e.uhi+best)continue;
         const dx=e.b.u-e.a.u,dy=e.b.v-e.a.v,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((mu-e.a.u)*dx+(mv-e.a.v)*dy)/l)):0,d=Math.hypot(mu-e.a.u-t*dx,mv-e.a.v-t*dy);
         if(d<best){best=d;edge=e;}
@@ -221,6 +243,7 @@
           // else is visibly off axis, so those ends stay unjoined.
           const squareOn=Math.abs(P.u-Q.u)<=.053*length;
           if(!squareOn&&!hugsBorder(P,Q)){note('diagonal');continue;}
+          if(opt.linkVisible&&!opt.linkVisible(P,Q)){note('coveredOrTooClose');continue;}
           note('ok');candidates.push({length,i,j,end});
         }
       });
@@ -292,6 +315,7 @@
           pieces=row.filter(([p,q])=>q-p>=.1).map(([p,q])=>[{u:p,v},{u:q,v}]);
         }
       }
+      if(opt.clipVisible)pieces=pieces.flatMap(opt.clipVisible);
       if(opt.zigzag){pieces.forEach(pts=>allPieces.push({n,pts}));continue;}
       // Odd lines run the other way, so neighboring lines make a back-and-forth sweep.
       if(n%2){pieces.reverse();pieces.forEach(line=>line.reverse());}
@@ -302,7 +326,7 @@
     return chains.map(line=>line.map(q=>({x:q.u*c-q.v*s,y:q.u*s+q.v*c})));
   }
   const FILL_MODES=['hatch','cross','wavy','wavycross'];
-  function hatchFills(paths,o,penOf){
+  function hatchFills(paths,o,penOf,visibleOccluders=[],hiddenStats=null){
     const groups=new Map(),out=[];
     // Fill source: 'none' draws no fills, 'original' fills shapes that have a fill, 'all' fills every closed path.
     if(o.fillSource==='none')return {paths:[],overlaps:0};
@@ -326,13 +350,31 @@
       if(!FILL_MODES.includes(s.mode))throw Error('Pen '+g.pen+' fill: unknown pattern.');
       if(!Number.isFinite(s.angle)||!(s.spacing>=.05&&s.spacing<=100)||!Number.isFinite(s.gap)||s.gap<0||s.gap>100)throw Error('Pen '+g.pen+' fill: angle must be a number, spacing 0.05-100 mm, gap 0-100 mm.');
       if(wavy&&(!(s.amp>=0&&s.amp<=20)||!(s.wavelength>=.5&&s.wavelength<=500)||!Number.isFinite(s.shift)))throw Error('Pen '+g.pen+' fill: wave height must be 0-20 mm, wavelength 0.5-500 mm, and the shift a number.');
-      const opt={wave:wavy,amp:s.amp,wavelength:s.wavelength,shift:s.shift,zigzag:!!s.zigzag};
-      for(const angle of s.mode==='cross'||s.mode==='wavycross'?[s.angle,s.angle+90]:[s.angle])
+      const box=bounds(g.contours.flat());
+      const above=visibleOccluders.filter(occ=>occ.group>g.group&&occ.box.minX-s.gap<=box.maxX&&occ.box.maxX+s.gap>=box.minX&&occ.box.minY-s.gap<=box.maxY&&occ.box.maxY+s.gap>=box.minY);
+      for(const angle of s.mode==='cross'||s.mode==='wavycross'?[s.angle,s.angle+90]:[s.angle]){
+        const opt={wave:wavy,amp:s.amp,wavelength:s.wavelength,shift:s.shift,zigzag:!!s.zigzag};
+        if(opt.zigzag&&above.length){
+          const radians=angle*Math.PI/180,c=Math.cos(radians),sn=Math.sin(radians),budget={left:100000000};
+          const world=p=>({x:p.u*c-p.v*sn,y:p.u*sn+p.v*c});
+          const local=p=>({u:p.x*c+p.y*sn,v:-p.x*sn+p.y*c});
+          opt.visibleAbove=above;
+          opt.clipVisible=piece=>{
+            const original=piece.map(world),clipped=clipHidden(original,false,above,budget,s.gap);
+            if(!clipped)return [piece];
+            if(hiddenStats){if(clipped.length)hiddenStats.trimmed++;else hiddenStats.removed++;}
+            return clipped.map(line=>line.map(local));
+          };
+          // The same visibility and gap test used for hatch clipping also
+          // checks the entire proposed connector, including tiny occluders.
+          opt.linkVisible=(p,q)=>clipHidden([world(p),world(q)],false,above,budget,s.gap)===null;
+        }
         for(const points of hatchLines(g.contours,angle,s.spacing,s.gap+g.edge,opt)){
           if(out.length>=100000)throw Error('Hatching would create more than 100,000 lines. Increase the fill spacing.');
-          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,gap:s.gap,points});
+          out.push({id:'f'+out.length,name:'Hatch '+g.name,color:g.color,closed:false,fill:true,group:g.group,gap:s.gap,visibleClipped:!!opt.clipVisible,points});
         }
-      boxes.push(bounds(g.contours.flat()));
+      }
+      boxes.push(box);
     }
     // Overlapping filled shapes are each hatched in full; there is no hidden-line removal yet.
     let overlaps=0;
@@ -429,6 +471,7 @@
   function hideCovered(list,occs,stats,budget){
     const out=[];
     for(const p of list){
+      if(p.visibleClipped){out.push(p);continue;}
       const above=p.group===undefined?[]:occs.filter(o=>o.group>p.group);
       const pieces=above.length?clipHidden(p.points,p.closed,above,budget,p.gap||0):null;
       if(!pieces){out.push(p);continue;}
@@ -437,6 +480,104 @@
       pieces.forEach((points,k)=>out.push({...p,id:p.id+'.'+k,closed:false,points}));
     }
     return out;
+  }
+  // ---- Shared boundaries from overlapping fills -------------------------
+  // Some traced SVGs store a small region only as a fill painted over a much
+  // larger region.  In that case the lower region has no source contour at
+  // the visible color boundary, so ordinary duplicate-line handling cannot
+  // give it a border.  Walk the visible side of every filled contour and add
+  // the missing neighboring-region candidate before pen filtering.
+  function sharedBoundaryOutlines(paths,o,penOf,stats,insetOffsets=new Map()){
+    if(o.mode!=='plotter'||!['one','both'].includes(o.borders))return [];
+    const regions=occluders(paths).map(region=>{
+      const source=paths.find(p=>p.group===region.group&&p.fillColor);
+      return source?{...region,color:source.color,fillColor:source.fillColor,noStroke:source.noStroke,source}:null;
+    }).filter(Boolean).sort((a,b)=>a.group-b.group);
+    if(regions.length<2)return [];
+    const edgeDistance=(p,a,b)=>{
+      const dx=b.x-a.x,dy=b.y-a.y,l=dx*dx+dy*dy,t=l?Math.max(0,Math.min(1,((p.x-a.x)*dx+(p.y-a.y)*dy)/l)):0;
+      return Math.hypot(p.x-a.x-t*dx,p.y-a.y-t*dy);
+    };
+    const edgeMatches=(region,a,b,tol)=>{
+      const lo={x:Math.min(a.x,b.x)-tol,y:Math.min(a.y,b.y)-tol},hi={x:Math.max(a.x,b.x)+tol,y:Math.max(a.y,b.y)+tol};
+      for(const e of edgesInRange(region,lo.y,hi.y)){
+        if(e.xhi<lo.x||e.xlo>hi.x)continue;
+        const dx=b.x-a.x,dy=b.y-a.y,ex=e.b.x-e.a.x,ey=e.b.y-e.a.y,ll=Math.hypot(dx,dy)*Math.hypot(ex,ey);
+        if(ll<1e-12||Math.abs(dx*ey-dy*ex)/ll>.08)continue;
+        if([.2,.5,.8].every(t=>edgeDistance({x:a.x+dx*t,y:a.y+dy*t},e.a,e.b)<=tol))return true;
+      }
+      return false;
+    };
+    const topAt=point=>{for(let i=regions.length-1;i>=0;i--)if(coveredBy(regions[i],point))return regions[i];return null;};
+    const candidate=[];
+    const tolerance=Math.max(EDGE_TOLERANCE,Math.min(.1,(o.tolerance||.01)*3));
+    let run=null;
+    const flush=()=>{
+      if(!run)return;
+      const {source,target,side,offset}=run,raw=run.points;
+      const closed=raw.length>2&&dist(raw[0],raw.at(-1))<1e-6;
+      const points=closed?raw.slice(0,-1):raw;
+      const shifted=offset?offsetPath(points,closed,side*offset):points;
+      if(shifted&&shifted.length>=(closed?3:2)){
+        candidate.push({id:'shared-'+source.group+'-'+candidate.length,name:'Shared border '+source.name+' / '+target.source.name,color:target.color,fillColor:target.fillColor,noStroke:target.noStroke,group:undefined,closed,derivedShared:true,points:shifted});
+        stats.count++;
+      }
+      run=null;
+    };
+    const append=(source,target,a,b,side,offset)=>{
+      const pen=penOf(target.color);if(!(pen>0)||!target.fillColor)return false;
+      if(o.skipUnstroked&&target.noStroke)return false;
+      if(offset>0&&edgeMatches(target,a,b,tolerance))return false;
+      if(dist(a,b)<1e-9)return false;
+      if(!run||run.source!==source||run.target!==target||run.side!==side||run.offset!==offset||dist(run.points.at(-1),a)>1e-6){
+        flush();run={source,target,side,offset,points:[a,b]};
+      }else run.points.push(b);
+      return true;
+    };
+    for(const source of paths){
+      if(!source.closed||!source.fillColor||source.group===undefined||source.points.length<3)continue;
+      for(let i=0;i<source.points.length;i++){
+        const a=source.points[i],b=source.points[(i+1)%source.points.length],dx=b.x-a.x,dy=b.y-a.y,L=Math.hypot(dx,dy);if(L<1e-9)continue;
+        const lo={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y)},hi={x:Math.max(a.x,b.x),y:Math.max(a.y,b.y)},ts=[0,1];
+        for(const region of regions){
+          if(region.group===source.group||region.box.maxX<lo.x||region.box.minX>hi.x||region.box.maxY<lo.y||region.box.minY>hi.y)continue;
+          for(const e of edgesInRange(region,lo.y,hi.y)){
+            if(e.xhi<lo.x||e.xlo>hi.x)continue;
+            const t=cutParam(a,b,e.a,e.b);if(t!==null&&t>1e-7&&t<1-1e-7)ts.push(t);
+          }
+        }
+        ts.sort((x,y)=>x-y);const cuts=[];for(const t of ts)if(!cuts.length||t-cuts.at(-1)>1e-7)cuts.push(t);
+        for(let k=0;k+1<cuts.length;k++){
+          const t0=cuts[k],t1=cuts[k+1];if(t1-t0<1e-7)continue;
+           const p0={x:a.x+dx*t0,y:a.y+dy*t0},p1={x:a.x+dx*t1,y:a.y+dy*t1},m={x:a.x+dx*(t0+t1)/2,y:a.y+dy*(t0+t1)/2},nx=-dy/L,ny=dx/L;
+           // A fixed 0.25 mm side probe can jump across a thin letter stroke
+           // and see its yellow background on both sides. Walk the probe in
+           // toward the boundary until one side is this source region.
+           let left=null,right=null,probe=Math.min(.25,Math.max(.04,L*.1));
+           for(let attempt=0;attempt<8;attempt++,probe*=.5){
+             left=topAt({x:m.x+nx*probe,y:m.y+ny*probe});right=topAt({x:m.x-nx*probe,y:m.y-ny*probe});
+             if(left&&right&&left.group!==right.group&&(left.group===source.group||right.group===source.group))break;
+           }
+           if(!left||!right||left.group===right.group||left.color===right.color){flush();continue;}
+           if(left.group!==source.group&&right.group!==source.group){flush();continue;}
+          const target=left.group===source.group?right:left,side=left.group===source.group?-1:1;
+           let offset=0;
+           if(o.borders==='both'){
+             offset=o.borderInset>0?o.borderInset:penWidthOf(o,penOf(target.color))*.5;
+             // If a narrow source needed less inset to keep its own outline,
+             // shift the companion farther into the neighboring region. This
+             // keeps its ink outside the source pen's physical stroke.
+             if(penOf(source.color)>0&&insetOffsets.has(source.id)){
+               const sourceHalf=penWidthOf(o,penOf(source.color))*.5;
+               offset+=Math.max(0,sourceHalf-insetOffsets.get(source.id));
+             }
+           }
+           if(!append(source,target,p0,p1,side,offset))flush();
+        }
+      }
+      flush();
+    }
+    return candidate;
   }
   // ---- Thick lines --------------------------------------------------------
   // A pen with a line thickness larger than its pen width draws each outline as a band of
@@ -528,7 +669,7 @@
   // Neighboring regions share a border. Instead of one pen keeping it, each region's outline can move
   // a little way into its own area (half a pen width by default), so the two pens' lines sit side
   // by side instead of on top of each other.
-  function insetOutlines(list,o,penOf,stats){
+  function insetOutlines(list,o,penOf,stats,insetOffsets=new Map()){
     const signed=pts=>pts.reduce((sum,a,i)=>{const b=pts[(i+1)%pts.length];return sum+a.x*b.y-b.x*a.y;},0)/2;
     const groups=new Map();
     list.forEach((p,i)=>{
@@ -551,10 +692,32 @@
         let d=o.borderInset>0?o.borderInset:penWidthOf(o,penOf(p.color))/2;
         // A thin region cannot move in by more than part of its own width.
         if(inward)d=Math.min(d,.9*Math.abs(area0)/Math.max(perimeter,1e-9));
-        if(!(d>1e-6)){stats.skipped++;return;}
-        const raw=offsetPath(p.points,true,(inward?1:-1)*(area0>0?1:-1)*d),pieces=(raw?removeLoops(raw,area0>0?1:-1,Math.max(d*d,.01)):[]).filter(pc=>pc.length>=3);
-        const area1=pieces.reduce((sum,pc)=>sum+Math.abs(signed(pc)),0);
-        if(!pieces.length||!(inward?area1>0&&area1<Math.abs(area0):area1>Math.abs(area0))){stats.skipped++;return;}
+        if(!(d>1e-6)){stats.skipped++;insetOffsets.set(p.id,0);return;}
+        const shifted=amount=>{
+          const raw=offsetPath(p.points,true,(inward?1:-1)*(area0>0?1:-1)*amount);
+          const pieces=(raw?removeLoops(raw,area0>0?1:-1,Math.max(amount*amount,.01)):[]).filter(pc=>pc.length>=3);
+          const movedArea=pieces.reduce((sum,pc)=>sum+Math.abs(signed(pc)),0);
+          return pieces.length&&(inward?movedArea>0&&movedArea<Math.abs(area0):movedArea>Math.abs(area0))?pieces:[];
+        };
+        let pieces=shifted(d);
+        // A full-width inset can erase a thin letter stem or narrow neck while
+        // leaving the rest of its contour intact. Retry only that contour at
+        // successively smaller insets; the actual 0.5 mm pen still draws it.
+        // Keep normal insets wherever they retain the source contour.
+        const keptLength=pieces.reduce((sum,pc)=>sum+length([...pc,pc[0]]),0);
+        const materialLoss=perimeter-keptLength>Math.max(.5,4*penWidthOf(o,penOf(p.color)));
+        if(inward&&(!pieces.length||(materialLoss&&keptLength<perimeter*.88))){
+          let best=pieces,bestD=d,bestLength=keptLength;
+          for(let k=0;k<3;k++){
+            const trialD=d/Math.pow(2,k+1),trial=shifted(trialD);
+            const trialLength=trial.reduce((sum,pc)=>sum+length([...pc,pc[0]]),0);
+            if(trialLength>bestLength+1e-6){best=trial;bestD=trialD;bestLength=trialLength;}
+            if(bestLength>=perimeter*.97)break;
+          }
+          if(bestD!==d){d=bestD;pieces=best;stats.recovered=(stats.recovered||0)+1;}
+        }
+        if(!pieces.length){stats.skipped++;insetOffsets.set(p.id,0);return;}
+        insetOffsets.set(p.id,d);
         replaced.set(i,pieces.map((points,k)=>({...p,id:k?p.id+'^'+k:p.id,points})));stats.count++;
       });
     }
@@ -642,19 +805,34 @@
     if(transformed.paths.some(p=>p.points.some(q=>![q.x,q.y].every(v=>Number.isFinite(v)&&Math.abs(v)<=1000000))))throw Error('Transformed artwork exceeds the supported coordinate range.');
     // Pens: every color maps to a pen number (0 = skip). Only plotter mode has pens.
     const penMap=o.mode==='plotter'&&o.penMap&&typeof o.penMap==='object'?o.penMap:null;
-    if(penMap)for(const [color,pen] of Object.entries(penMap))if(!Number.isInteger(pen)||pen<0||pen>99)throw Error('Pen numbers must be whole numbers from 0 (skip) to 99 for '+color+'.');
+    if(penMap)for(const [color,pen] of Object.entries(penMap))if(!Number.isSafeInteger(pen)||pen<0)throw Error('Pen numbers must be nonnegative whole numbers (0 = skip) for '+color+'.');
     const penOf=c=>penMap?(Object.hasOwn(penMap,c)?penMap[c]:1):1;
-    const plotter=o.mode==='plotter',filled=plotter?hatchFills(transformed.paths,o,penOf):{paths:[],overlaps:0};
+    const plotter=o.mode==='plotter';
     if(plotter&&o.penThickness)for(const [pen,t] of Object.entries(o.penThickness))if(!Number.isFinite(t)||t<0||t>50)throw Error('Line thickness for pen '+pen+' must be 0-50 mm.');
-    let outlines=transformed.paths;const hiding={trimmed:0,removed:0},thick={bands:0,strokes:0,clamped:0};
-    if(plotter&&o.hideCovered){
-      const occs=occluders(transformed.paths),budget={left:100000000};
-      outlines=hideCovered(outlines,occs,hiding,budget);filled.paths=hideCovered(filled.paths,occs,hiding,budget);
-    }
     if(o.borders!==undefined&&!['one','both'].includes(o.borders))throw Error('Shared borders: choose one pen or both pens.');
     if(o.borderInset!==undefined&&!(Number.isFinite(o.borderInset)&&o.borderInset>=0&&o.borderInset<=5))throw Error('Border inset must be 0-5 mm.');
-    const inset={count:0,skipped:0};
-    if(plotter&&o.borders==='both')outlines=insetOutlines(outlines,o,penOf,inset);
+    const inset={count:0,skipped:0,recovered:0},insetOffsets=new Map(),shared={count:0};
+    let filled={paths:[],overlaps:0};
+    let outlines=transformed.paths;const hiding={trimmed:0,removed:0},thick={bands:0,strokes:0,clamped:0};
+    // Inset before hidden-line removal. Clipping the original outlines first turns covered
+    // contours into open paths, which cannot receive the second (neighboring-pen) outline.
+    // The inset line is already inside its own region, so hidden-line removal can still trim
+    // the visible part without losing the both-pens border treatment.
+    const visibleOccluders=plotter&&o.hideCovered?occluders(transformed.paths):[];
+    if(plotter&&o.borders==='both')outlines=insetOutlines(outlines,o,penOf,inset,insetOffsets);
+    if(plotter&&o.hideCovered){
+      const budget={left:100000000};
+      outlines=hideCovered(outlines,visibleOccluders,hiding,budget);
+    }
+    if(plotter&&o.borders)outlines=outlines.concat(sharedBoundaryOutlines(transformed.paths,o,penOf,shared,insetOffsets));
+    // Build hatches only after visible/shared border geometry is known. They are
+    // still clipped below by the same covering shapes, but their edge clearance
+    // now reflects the final border mode rather than preceding it.
+    if(plotter)filled=hatchFills(transformed.paths,o,penOf,visibleOccluders,hiding);
+    if(plotter&&o.hideCovered){
+      const budget={left:100000000};
+      filled.paths=hideCovered(filled.paths,visibleOccluders,hiding,budget);
+    }
     if(plotter&&o.penThickness)outlines=thicken(outlines,o,penOf,thick);
     // Stage orders outlines against hatch within a pen: lower stages are cut first.
     const initial=outlines.filter(p=>!(plotter&&o.skipUnstroked&&p.noStroke&&p.fillColor)).map(p=>({...p,stage:o.fillFirst?2:1,pen:penOf(p.color),area:p.closed?area(p.points):0}))
@@ -777,7 +955,7 @@
     }
     }
     if(ordered.reduce((n,p)=>n+p.points.length*z.length,0)>1000000)throw Error('Output exceeds one million moves. Reduce passes or increase sampling spacing.');
-    const job={paths:ordered,pens,thick,merged,inset,fills:filled.paths.length,fillOverlaps:o.hideCovered?0:filled.overlaps,hidden:hiding,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
+    const job={paths:ordered,pens,thick,merged,inset,shared,fills:filled.paths.length,fillOverlaps:o.hideCovered?0:filled.overlaps,hidden:hiding,depths:z,bounds:bounds(ordered.flatMap(p=>p.points)),origin:transformed.origin,travel,cut:ordered.reduce((n,p)=>n+length(p.points)*z.length,0)};
     if(plotter&&o.regCross){
       const margin=o.regMargin??8,marginY=o.regMarginY??margin,size=o.regSize??6,corner=o.regCorner||'bl';
       if(!(Number.isFinite(margin)&&margin>=0&&margin<=200&&Number.isFinite(marginY)&&marginY>=0&&marginY<=200))throw Error('Registration cross distance must be 0-200 mm.');
@@ -925,13 +1103,14 @@
     return [116*f(y)-16,500*(f(x)-f(y)),200*(f(y)-f(z))];
   }
   const labDist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]);
-  // k-means with a deterministic start: the heaviest color, then repeatedly the color
-  // farthest from those chosen. Returns each point's cluster and the cluster centers.
+  // Deterministic weighted k-means. After the heaviest color, a candidate's seed score is
+  // its visual use multiplied by squared distance from the nearest existing center. This
+  // keeps a tiny outlier shade from consuming a whole pen ahead of a major artwork color.
   function kmeans(pts,k){
     let centers=[pts.reduce((a,p)=>p.weight>a.weight?p:a).lab];
     while(centers.length<k){
       let best=null,far=-1;
-      for(const p of pts){const d=Math.min(...centers.map(c=>labDist(c,p.lab)));if(d>far){far=d;best=p;}}
+      for(const p of pts){const d=Math.min(...centers.map(c=>labDist(c,p.lab))),score=p.weight*d*d;if(score>far){far=score;best=p;}}
       centers.push(best.lab);
     }
     let owner=new Array(pts.length).fill(-1);
@@ -945,11 +1124,12 @@
       });
       if(!changed)break;
     }
-    return {owner,centers};
+    const error=pts.reduce((sum,p,i)=>sum+p.weight*labDist(p.lab,centers[owner[i]])**2,0);
+    return {owner,centers,error};
   }
-  // Black, grays and white (very low chroma) are grouped first and get their own pens;
-  // only the pens left over are shared out among the chromatic colors.
-  const NEUTRAL_CHROMA=10,NEUTRAL_SPLIT=20;
+  // Low-chroma colors are neutral. Very dark colors also belong to the black family even
+  // when compression or tracing gave them a slight red/blue tint.
+  const NEUTRAL_CHROMA=10,DARK_NEUTRAL_L=20,NEAR_BLACK_L=12,NEAR_WHITE_L=92,EXTREME_MIN_SHARE=.005;
   // colors: [{color:'#rrggbb',weight}] in order of appearance. Returns pen numbers (1..k, by
   // first appearance) and, per pen, the member color closest to the group's center.
   function clusterColors(colors,k){
@@ -957,25 +1137,41 @@
     if(!colors.length)return {assign:{},reps:[]};
     k=Math.min(k,colors.length);
     const pts=colors.map(c=>({color:c.color,weight:Math.max(c.weight||1,1),lab:lab(c.color)}));
-    const neutral=pts.filter(p=>Math.hypot(p.lab[1],p.lab[2])<NEUTRAL_CHROMA),chromatic=pts.filter(p=>Math.hypot(p.lab[1],p.lab[2])>=NEUTRAL_CHROMA);
+    const isNeutral=p=>p.lab[0]<DARK_NEUTRAL_L||Math.hypot(p.lab[1],p.lab[2])<NEUTRAL_CHROMA;
+    const neutral=pts.filter(isNeutral),chromatic=pts.filter(p=>!isNeutral(p));
     let groups; // [{members:[pt], center}]
-    const run=(list,count)=>{const {owner,centers}=kmeans(list,Math.min(count,list.length));return centers.map((center,i)=>({members:list.filter((_,j)=>owner[j]===i),center})).filter(g=>g.members.length);};
+    const run=(list,count)=>{const result=kmeans(list,Math.min(count,list.length));return {groups:result.centers.map((center,i)=>({members:list.filter((_,j)=>result.owner[j]===i),center})).filter(g=>g.members.length),error:result.error};};
     if(k===1||!neutral.length||!chromatic.length){
-      groups=run(pts,k);
+      groups=run(pts,k).groups;
     }else{
-      // How many distinct neutral tones (black, mid gray, white...) there are, farthest-point style.
-      const tones=[neutral.reduce((a,p)=>p.weight>a.weight?p:a)];
-      for(;;){let far=-1,best=null;for(const p of neutral){const d=Math.min(...tones.map(t=>labDist(t.lab,p.lab)));if(d>far){far=d;best=p;}}if(far<=NEUTRAL_SPLIT)break;tones.push(best);}
-      const neutralPens=Math.max(1,Math.min(tones.length,k-1));
-      groups=[...run(neutral,neutralPens),...run(chromatic,k-neutralPens)];
+      // Try every valid neutral/chromatic allocation and keep the one that best represents
+      // the used artwork area. This preserves black/gray/white without automatically giving
+      // insignificant dark shades pens that are needed by yellow, red, peach, etc.
+      let best=null;
+      for(let neutralPens=Math.max(1,k-chromatic.length);neutralPens<=Math.min(neutral.length,k-1);neutralPens++){
+        const n=run(neutral,neutralPens),c=run(chromatic,k-neutralPens),candidate={groups:[...n.groups,...c.groups],error:n.error+c.error,neutralPens};
+        if(!best||candidate.error<best.error-1e-9||(Math.abs(candidate.error-best.error)<=1e-9&&candidate.neutralPens<best.neutralPens))best=candidate;
+      }
+      groups=best.groups;
     }
     // Number pens by the first appearance of any member; reps are real colors from the artwork.
     const first=g=>Math.min(...g.members.map(m=>pts.indexOf(m)));
     groups.sort((x,y)=>first(x)-first(y));
     const assign={},reps=[];
+    const totalWeight=pts.reduce((sum,p)=>sum+p.weight,0),meaningful=p=>p.weight/(totalWeight||1)>=EXTREME_MIN_SHARE;
     groups.forEach((g,index)=>{
       g.members.forEach(m=>{assign[m.color]=index+1;});
-      reps.push(g.members.reduce((a,m)=>labDist(g.center,m.lab)<labDist(g.center,a.lab)?m:a).color);
+      let representative=g.members.reduce((a,m)=>labDist(g.center,m.lab)<labDist(g.center,a.lab)?m:a);
+      // Preserve a real black or paper-white pen when that endpoint occupies a meaningful
+      // part of the artwork. Intermediate grays may have more area and pull the cluster
+      // center toward themselves, but should not replace the endpoint color that gives the
+      // drawing its black outlines or white highlights. If both endpoints share the only
+      // neutral group, keep the ordinary center because one physical pen cannot be both.
+      const dark=g.members.filter(m=>isNeutral(m)&&m.lab[0]<=NEAR_BLACK_L&&meaningful(m));
+      const light=g.members.filter(m=>isNeutral(m)&&m.lab[0]>=NEAR_WHITE_L&&meaningful(m));
+      if(dark.length&&!light.length)representative=dark.reduce((a,m)=>m.lab[0]<a.lab[0]?m:a);
+      else if(light.length&&!dark.length)representative=light.reduce((a,m)=>m.lab[0]>a.lab[0]?m:a);
+      reps.push(representative.color);
     });
     return {assign,reps};
   }

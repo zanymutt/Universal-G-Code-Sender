@@ -111,11 +111,12 @@ assert(/\(Pen 1: red #aa0000\)/.test(core.gcode(core.plan(doc,other),other)));co
   assert.notStrictEqual(r.assign['#ff0000'],r.assign['#208040']);
   // one pen is one pen: neutrals only get their own pen when there is another pen to hold the colors
   r=core.clusterColors(demo,1);assert(Object.values(r.assign).every(v=>v===1));
-  // black, a mid gray and white are three tones: each gets a pen before chromatic colors get a second
+  // Equal-weight neutrals stay separate from chromatic colors, but do not automatically
+  // reserve three pens ahead of major chromatic groups.
   const mixed=[{color:'#ff0000',weight:2},{color:'#00a000',weight:2},{color:'#000000',weight:1},{color:'#808080',weight:1},{color:'#ffffff',weight:1},{color:'#0000ff',weight:2}];
   r=core.clusterColors(mixed,4);
-  assert.strictEqual(new Set([r.assign['#000000'],r.assign['#808080'],r.assign['#ffffff']]).size,3,'black, gray and white each have a pen');
-  assert(!['#ff0000','#00a000','#0000ff'].some(c=>[r.assign['#000000'],r.assign['#808080'],r.assign['#ffffff']].includes(r.assign[c])),'no chromatic color shares a neutral pen');
+  assert.strictEqual(new Set([r.assign['#000000'],r.assign['#808080'],r.assign['#ffffff']]).size,1,'minor neutral tones share a neutral pen');
+  assert(!['#ff0000','#00a000','#0000ff'].some(c=>r.assign[c]===r.assign['#808080']),'no chromatic color shares a neutral pen');
   // fewer pens than neutral tones: leave one pen for the chromatic colors
   r=core.clusterColors(mixed,2);
   assert.strictEqual(r.assign['#ff0000'],r.assign['#0000ff']);assert.notStrictEqual(r.assign['#ff0000'],r.assign['#000000']);
@@ -123,11 +124,37 @@ assert(/\(Pen 1: red #aa0000\)/.test(core.gcode(core.plan(doc,other),other)));co
   // near-duplicates of black share a pen; an off-black with a tint still counts as neutral
   r=core.clusterColors([{color:'#000000',weight:1},{color:'#111111',weight:1},{color:'#ff0000',weight:1},{color:'#0000ff',weight:1}],3);
   assert.strictEqual(r.assign['#000000'],r.assign['#111111']);
+  // A strongly tinted but very dark tracing artifact still belongs to the black family.
+  r=core.clusterColors([{color:'#070707',weight:100},{color:'#3a1113',weight:.01},{color:'#df3b3e',weight:50},{color:'#fbd21f',weight:50}],3);
+  assert.strictEqual(r.assign['#070707'],r.assign['#3a1113']);
   // only neutrals: ordinary grouping still works
   r=core.clusterColors([{color:'#000000',weight:1},{color:'#444444',weight:1},{color:'#bbbbbb',weight:1},{color:'#ffffff',weight:1}],2);
   assert.strictEqual(new Set(Object.values(r.assign)).size,2);
   assert.deepStrictEqual(core.clusterColors(demo,4),core.clusterColors(demo,4));
   console.log('neutral grouping ok');
+}
+
+// ---- area-aware grouping does not spend pens on tiny outlier shades
+{
+  const artwork=[
+    ['#070707',1000],['#6c737b',100],['#b0b6bc',300],['#fefefe',80],
+    ['#df3b3e',400],['#f7a33a',400],['#fbd21f',300],['#fddac1',100],
+    ['#3a3e43',.1],['#3a1113',.1]
+  ].map(([color,weight])=>({color,weight}));
+  const r=core.clusterColors(artwork,8),pen=c=>r.assign[c];
+  assert.strictEqual(new Set(Object.values(r.assign)).size,8,'all eight requested pens are used');
+  assert.strictEqual(pen('#3a1113'),pen('#070707'),'tiny dark red folds into black');
+  assert.strictEqual(pen('#3a3e43'),pen('#6c737b'),'tiny dark gray folds into gray');
+  assert.strictEqual(new Set(['#070707','#6c737b','#b0b6bc','#fefefe'].map(pen)).size,4,'four significant neutral families survive');
+  assert.strictEqual(new Set(['#df3b3e','#f7a33a','#fbd21f','#fddac1'].map(pen)).size,4,'four significant chromatic families survive');
+  // With fewer pens, light gray and white share a group. White is still the physical
+  // representative because it is a meaningful endpoint, while microscopic white noise is not.
+  const six=core.clusterColors(artwork,6),whitePen=six.assign['#fefefe'];
+  assert.strictEqual(six.assign['#b0b6bc'],whitePen,'light gray and white share the reduced neutral group');
+  assert.strictEqual(six.reps[whitePen-1],'#fefefe','meaningful near-white is preserved as the pen color');
+  const speck=core.clusterColors([{color:'#b0b6bc',weight:1000},{color:'#ffffff',weight:.1}],1);
+  assert.strictEqual(speck.reps[0],'#b0b6bc','a microscopic white speck does not replace a major gray');
+  console.log('area-aware cluster ok');
 }
 
 // ---- pen-change messages: a comment above and a (MSG, ...) on the pause line, with a color name
@@ -143,5 +170,15 @@ assert(/\(Pen 1: red #aa0000\)/.test(core.gcode(core.plan(doc,other),other)));co
   // the per-pen files keep a header comment and need no pause
   const o2={...many,penChange:'files'},files=core.gcodeFiles(core.plan(doc2,o2),o2);
   assert(files[0].text.startsWith('(Pen 1: red #ff0000)\n(Pen 1 line width 0.5 mm)\n(Pen 1 also draws green, blue, yellow)\n(This file plots pen 1 only)'));
+}
+
+// Pen numbers are identifiers, not a two-digit machine limit. Large imported palettes can
+// temporarily use one number per color before they are consolidated.
+{
+  const high={...base,penMap:{'#ff0000':159}};
+  assert(core.plan(doc,high).paths.filter(p=>p.color==='#ff0000').every(p=>p.pen===159));
+  assert.throws(()=>core.plan(doc,{...base,penMap:{'#ff0000':-1}}),/nonnegative whole numbers/);
+  assert.throws(()=>core.plan(doc,{...base,penMap:{'#ff0000':1.5}}),/nonnegative whole numbers/);
+  console.log('large pen numbers ok');
 }
 console.log('pen messages ok');

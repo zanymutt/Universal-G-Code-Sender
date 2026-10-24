@@ -167,7 +167,7 @@
     }
     const joined=join(edges,factor);if(joined.length<edges.length)warnings.push(`Joined ${edges.length} connected line/arc entities into ${joined.length} contour(s), within each layer.`);
     paths.push(...joined);paths.sort((a,b)=>a.index-b.index);
-    if(paths.length>500)throw Error('Limit: 500 contours. Split this DXF into smaller jobs.');
+    if(paths.length>1000)throw Error('Limit: 1000 contours. Split this DXF into smaller jobs.');
     if(!paths.length)throw Error('No supported visible 2D geometry found in DXF model space.');
     for(const [type,count]of skipped)warnings.push(`Skipped ${count} ${type}: not cut geometry.`);
     if(widths)warnings.push('DXF polyline widths are ignored; cutting follows centerlines.');

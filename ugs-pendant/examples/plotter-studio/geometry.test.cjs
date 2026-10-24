@@ -4,6 +4,13 @@ const prepared=d=>({items:[{d,closed:/z\s*$/i.test(d),matrix:[1,0,0,1,0,0],heigh
 const base={mode:'knife',tool:'none',feed:1000,plunge:200,safe:5,surface:0,final:-2,step:2,scale:100,rotation:0,overlap:0,origin:'custom',originBounds:'artwork',originX:0,originY:0,order:'svg',start:'original',inner:false,largest:false,knifeOffset:.45,knifeAngle:60,knifeArcAngle:10,knifeFeed:200,knifePasses:1,knifeAlign:false,knifeLift:true,knifeSwivelZ:-.5,outputTolerance:.01,spacing:.5};
 function job(d,o={}){return C.plan(G.run(prepared(d)),{...base,...o});}
 let checks=0;function test(name,fn){fn();checks++;console.log('PASS '+name);}
+test('Filled subpath returning to its start is a region without an explicit Z',()=>{
+  const p=prepared('M0 0 L10 0 L10 10 L0 10 L0 0');
+  p.items[0].fillColor='#000000';
+  assert.equal(G.run(p).paths[0].closed,true);
+  delete p.items[0].fillColor;
+  assert.equal(G.run(p).paths[0].closed,false,'stroke-only paths retain their explicit open status');
+});
 test('Relative commands, smooth reflected cubic/quadratic controls, and close',()=>{const s=G.segments('M10 10 c0 10 10 10 10 0 s10 -10 10 0 q5 10 10 0 t10 0 h5 v5 z');assert.equal(s.length,7);assert.deepEqual(s[1].p1,{x:20,y:0});assert.deepEqual(s[3].p1,{x:45,y:0});assert.deepEqual(G.at(s.at(-1),1),{x:10,y:10});});
 test('Cubic endpoints with zero derivative preserve actual corner directions',()=>{const j=job('M0 0 C0 0 10 0 10 0 C10 0 10 10 10 10');assert.equal(j.knife.swivels,1);const arc=j.knife.runs[0].moves.filter(m=>m.kind==='swivel');assert(arc.length>=18);for(const m of arc)assert(Math.abs(Math.hypot(m.x-10,m.y-100)-.45)<1e-8);});
 test('Arc and lift thresholds are independent',()=>{const d='M0 0 L10 0 L20 -10';const j=job(d);assert.equal(j.knife.swivels,1);assert(!j.knife.runs[0].moves.some(m=>m.kind==='lift'));assert(j.knife.runs[0].moves.filter(m=>m.kind==='swivel').every(m=>m.z===-2));const lifted=job(d,{knifeAngle:30});assert(lifted.knife.runs[0].moves.some(m=>m.kind==='lift'));const noArc=job(d,{knifeArcAngle:50,knifeAngle:30});assert.equal(noArc.knife.swivels,0);assert(!noArc.knife.runs[0].moves.some(m=>m.kind==='lift'));assert(noArc.knife.runs[0].moves.some(m=>m.kind==='transition'));});
